@@ -269,17 +269,93 @@ def build():
       }'''
     text = text.replace(insert_old, insert_new, 1)
 
+    # 12. Hook insertJuktoborno
+    jukto_old = '''    function insertJuktoborno(char, avroCode) {
+      triggerHapticFeedback();
+      pushUndoSnapshot(true, 'word');
+      const cleanChar = char.split(' ')[0];
+      if (composing) {
+        commitWord(parseAvro(composing));
+      }
+      committedText = committedText.slice(0, cursorPos) + cleanChar + committedText.slice(cursorPos);
+      cursorPos += cleanChar.length;
+      syncEditorView();
+      showToast(`যুক্তবর্ণ '${cleanChar}' যুক্ত হয়েছে (Avro: ${avroCode})`);
+    }'''
+    jukto_new = '''    function insertJuktoborno(char, avroCode) {
+      triggerHapticFeedback();
+      pushUndoSnapshot(true, 'word');
+      const cleanChar = char.split(' ')[0];
+      if (composing) {
+        commitWord(parseAvro(composing));
+      }
+      committedText = committedText.slice(0, cursorPos) + cleanChar + committedText.slice(cursorPos);
+      cursorPos += cleanChar.length;
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.commitText(cleanChar);
+      }
+      syncEditorView();
+      showToast(`যুক্তবর্ণ '${cleanChar}' যুক্ত হয়েছে (Avro: ${avroCode})`);
+    }'''
+    text = text.replace(jukto_old, jukto_new, 1)
+
+    # 13. Hook tryPracticeWord
+    practice_old = '''    function tryPracticeWord(word, keys) {
+      triggerHapticFeedback();
+      if (composing) {
+        commitWord(parseAvro(composing));
+      }
+      committedText = committedText.slice(0, cursorPos) + word + ' ' + committedText.slice(cursorPos);
+      cursorPos += word.length + 1;
+      syncEditorView();
+      showToast(`'${word}' টেক্সটে যুক্ত হয়েছে (টাইপ: ${keys})`);
+    }'''
+    practice_new = '''    function tryPracticeWord(word, keys) {
+      triggerHapticFeedback();
+      if (composing) {
+        commitWord(parseAvro(composing));
+      }
+      committedText = committedText.slice(0, cursorPos) + word + ' ' + committedText.slice(cursorPos);
+      cursorPos += word.length + 1;
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.commitText(word + " ");
+      }
+      syncEditorView();
+      showToast(`'${word}' টেক্সটে যুক্ত হয়েছে (টাইপ: ${keys})`);
+    }'''
+    text = text.replace(practice_old, practice_new, 1)
+
+    # 14. Hook moveCursorBy
+    cursor_old = '''    function moveCursorBy(step) {
+      triggerHapticFeedback();
+      cursorPos = Math.max(0, Math.min(committedText.length, cursorPos + step));
+      checkAutoCapCondition();
+      syncEditorView();
+      if (typeof updateCursorPanelLiveInfo === 'function') updateCursorPanelLiveInfo();
+    }'''
+    cursor_new = '''    function moveCursorBy(step) {
+      triggerHapticFeedback();
+      cursorPos = Math.max(0, Math.min(committedText.length, cursorPos + step));
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursor(step < 0 ? -1 : 1);
+      }
+      checkAutoCapCondition();
+      syncEditorView();
+      if (typeof updateCursorPanelLiveInfo === 'function') updateCursorPanelLiveInfo();
+    }'''
+    text = text.replace(cursor_old, cursor_new, 1)
+
     # Write output
     with open('native_android/TechuboardKeyboard/app/src/main/assets/keyboard_ime.html', 'w', encoding='utf-8') as f:
         f.write(text)
 
-    # Untouched copy of mobile.html for MainActivity
+    # Untouched copy of mobile.html for reference
     with open('web_preview/mobile.html', 'r', encoding='utf-8') as f_orig:
         orig = f_orig.read()
     with open('native_android/TechuboardKeyboard/app/src/main/assets/mobile.html', 'w', encoding='utf-8') as f_mob:
         f_mob.write(orig)
 
-    print("Successfully built keyboard_ime.html and synced mobile.html!")
+    print("Successfully built keyboard_ime.html and synced assets!")
 
 if __name__ == '__main__':
     build()

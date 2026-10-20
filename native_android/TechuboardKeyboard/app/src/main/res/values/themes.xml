@@ -1,7 +1,9 @@
 <resources>
     <style name="Theme.Techuboard" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:windowBackground">#0d1117</item>
-        <item name="android:statusBarColor">#0d1117</item>
-        <item name="android:navigationBarColor">#0d1117</item>
+        <item name="android:windowBackground">@color/bg_dark</item>
+        <item name="android:statusBarColor">@color/bg_dark</item>
+        <item name="android:navigationBarColor">@color/bg_dark</item>
+        <item name="colorPrimary">@color/accent_cyan</item>
+        <item name="colorAccent">@color/accent_cyan</item>
     </style>
 </resources>

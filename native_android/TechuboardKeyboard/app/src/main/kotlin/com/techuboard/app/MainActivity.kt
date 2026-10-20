@@ -1,97 +1,91 @@
 package com.techuboard.app
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.provider.Settings
-import android.view.ViewGroup
+import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * MainActivity: Direct Full Techuboard Studio
+ * MainActivity: Modern Native Keyboard Setup & Settings App
  * 
- * Directly displays the 100% exact, untouched 10-hour designed Techuboard mobile studio (mobile.html)
- * with complete header, live text editor, word counter, status bar, and keyboard.
- * Tapping "Settings" or "Install App" triggers the Android Keyboard activation options!
+ * Provides an interactive 3-step setup guide for the user:
+ * 1. Enable Techuboard in Android System Settings
+ * 2. Select Techuboard as default input method
+ * 3. Interactive test typing area directly inside the app!
  */
 class MainActivity : AppCompatActivity() {
 
-    private var webView: WebView? = null
+    private lateinit var btnEnableKeyboard: Button
+    private lateinit var txtStep1Status: TextView
+    private lateinit var btnSelectKeyboard: Button
+    private lateinit var txtStep2Status: TextView
+    private lateinit var editTestTyping: EditText
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-        val wv = WebView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.parseColor("#0d1117"))
+        btnEnableKeyboard = findViewById(R.id.btnEnableKeyboard)
+        txtStep1Status = findViewById(R.id.txtStep1Status)
+        btnSelectKeyboard = findViewById(R.id.btnSelectKeyboard)
+        txtStep2Status = findViewById(R.id.txtStep2Status)
+        editTestTyping = findViewById(R.id.editTestTyping)
 
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                databaseEnabled = true
-                allowFileAccess = true
-                setSupportZoom(false)
-                useWideViewPort = false       // MUST BE FALSE: 1:1 real device width
-                loadWithOverviewMode = false  // MUST BE FALSE: 1:1 mobile scaling
-                cacheMode = WebSettings.LOAD_DEFAULT
+        val openSettingsAction = View.OnClickListener {
+            val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-
-            addJavascriptInterface(MainBridge(this@MainActivity), "AndroidKeyboard")
-            webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    updateSetupPill(view)
-                }
-            }
-            loadUrl("file:///android_asset/mobile.html")
+            startActivity(intent)
         }
 
-        webView = wv
-        setContentView(wv)
+        val selectKeyboardAction = View.OnClickListener {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showInputMethodPicker()
+        }
+
+        btnEnableKeyboard.setOnClickListener(openSettingsAction)
+        findViewById<View>(R.id.cardStep1).setOnClickListener {
+            if (!isKeyboardEnabled()) {
+                openSettingsAction.onClick(it)
+            }
+        }
+
+        btnSelectKeyboard.setOnClickListener(selectKeyboardAction)
+        findViewById<View>(R.id.cardStep2).setOnClickListener {
+            selectKeyboardAction.onClick(it)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        webView?.let { updateSetupPill(it) }
+        updateSetupStatus()
     }
 
-    private fun updateSetupPill(view: WebView?) {
+    private fun updateSetupStatus() {
         val isEnabled = isKeyboardEnabled()
         val isSelected = isKeyboardSelected()
 
-        val pillText: String
-        val jsAction: String
-
-        if (!isEnabled) {
-            pillText = "⚙️ ১. কীবোর্ড সক্রিয় করুন"
-            jsAction = "window.AndroidKeyboard.openInputMethodSettings();"
-        } else if (!isSelected) {
-            pillText = "👆 ২. Techuboard নির্বাচন করুন"
-            jsAction = "window.AndroidKeyboard.showInputMethodPicker();"
+        if (isEnabled) {
+            btnEnableKeyboard.visibility = View.GONE
+            txtStep1Status.visibility = View.VISIBLE
         } else {
-            pillText = "✅ Techuboard সক্রিয় আছে"
-            jsAction = "window.AndroidKeyboard.showInputMethodPicker();"
+            btnEnableKeyboard.visibility = View.VISIBLE
+            txtStep1Status.visibility = View.GONE
         }
 
-        view?.evaluateJavascript("""
-            const pill = document.getElementById('pwaInstallPill');
-            if (pill) {
-                pill.style.display = 'inline-flex';
-                pill.innerHTML = '$pillText';
-                pill.onclick = function() { $jsAction };
-            }
-        """.trimIndent(), null)
+        if (isSelected) {
+            btnSelectKeyboard.visibility = View.GONE
+            txtStep2Status.visibility = View.VISIBLE
+        } else {
+            btnSelectKeyboard.visibility = View.VISIBLE
+            txtStep2Status.visibility = View.GONE
+        }
     }
 
     private fun isKeyboardEnabled(): Boolean {
@@ -111,41 +105,5 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             false
         }
-    }
-
-    override fun onBackPressed() {
-        val wv = webView
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack()
-        } else {
-            super.onBackPressed()
-        }
-    }
-
-    class MainBridge(private val activity: MainActivity) {
-
-        @JavascriptInterface
-        fun isIme(): Boolean = false
-
-        @JavascriptInterface
-        fun openInputMethodSettings() {
-            activity.runOnUiThread {
-                val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                activity.startActivity(intent)
-            }
-        }
-
-        @JavascriptInterface
-        fun showInputMethodPicker() {
-            activity.runOnUiThread {
-                val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                imm?.showInputMethodPicker()
-            }
-        }
-
-        @JavascriptInterface
-        fun triggerHaptic() {}
     }
 }

@@ -6910,6 +6910,9 @@
       }
       committedText = committedText.slice(0, cursorPos) + cleanChar + committedText.slice(cursorPos);
       cursorPos += cleanChar.length;
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.commitText(cleanChar);
+      }
       syncEditorView();
       showToast(`যুক্তবর্ণ '${cleanChar}' যুক্ত হয়েছে (Avro: ${avroCode})`);
     }
@@ -6930,6 +6933,9 @@
       }
       committedText = committedText.slice(0, cursorPos) + word + ' ' + committedText.slice(cursorPos);
       cursorPos += word.length + 1;
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.commitText(word + " ");
+      }
       syncEditorView();
       showToast(`'${word}' টেক্সটে যুক্ত হয়েছে (টাইপ: ${keys})`);
     }
@@ -6987,6 +6993,9 @@
     function moveCursorBy(step) {
       triggerHapticFeedback();
       cursorPos = Math.max(0, Math.min(committedText.length, cursorPos + step));
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursor(step < 0 ? -1 : 1);
+      }
       checkAutoCapCondition();
       syncEditorView();
       if (typeof updateCursorPanelLiveInfo === 'function') updateCursorPanelLiveInfo();

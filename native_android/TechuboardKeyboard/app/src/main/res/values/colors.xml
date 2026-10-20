@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#0d1117</color>
+    <color name="surface_dark">#161b22</color>
+    <color name="card_border">#30363d</color>
+    <color name="accent_cyan">#00e5ff</color>
+    <color name="accent_cyan_dark">#008ba3</color>
+    <color name="text_primary">#f0f6fc</color>
+    <color name="text_secondary">#8b949e</color>
+    <color name="success_green">#238636</color>
+    <color name="success_green_light">#3fb950</color>
+    <color name="badge_bg">#1f242c</color>
+</resources>
