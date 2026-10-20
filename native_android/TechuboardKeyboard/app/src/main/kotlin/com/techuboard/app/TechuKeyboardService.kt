@@ -109,6 +109,13 @@ class TechuKeyboardService : InputMethodService() {
             )
             setBackgroundColor(Color.parseColor("#0D1117"))
 
+            // World-Class Low-Latency Touch & Hardware Rendering Pipeline
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            isHapticFeedbackEnabled = false
+            isSoundEffectsEnabled = false
+            isLongClickable = false
+            setOnLongClickListener { true }
+
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -118,6 +125,9 @@ class TechuKeyboardService : InputMethodService() {
                 useWideViewPort = false
                 loadWithOverviewMode = false
                 cacheMode = WebSettings.LOAD_DEFAULT
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    offscreenPreRaster = true
+                }
             }
 
             isFocusable = true
@@ -206,19 +216,37 @@ class TechuKeyboardService : InputMethodService() {
         webView = null
     }
 
-    fun triggerHapticClick() {
+    fun triggerHapticClick(type: String = "click") {
         if (soundEnabled) {
             try {
-                audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK, 0.4f)
+                val fx = when (type) {
+                    "space" -> AudioManager.FX_KEYPRESS_SPACEBAR
+                    "delete" -> AudioManager.FX_KEYPRESS_DELETE
+                    "action" -> AudioManager.FX_KEYPRESS_RETURN
+                    else -> AudioManager.FX_KEYPRESS_STANDARD
+                }
+                audioManager?.playSoundEffect(fx, 0.45f)
             } catch (_: Exception) {}
         }
         if (hapticEnabled) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createOneShot(14L, VibrationEffect.DEFAULT_AMPLITUDE))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val effectId = when (type) {
+                        "tick" -> VibrationEffect.EFFECT_TICK
+                        "action" -> VibrationEffect.EFFECT_HEAVY_CLICK
+                        else -> VibrationEffect.EFFECT_CLICK
+                    }
+                    vibrator?.vibrate(VibrationEffect.createPredefined(effectId))
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val duration = when (type) {
+                        "tick" -> 5L
+                        "action" -> 16L
+                        else -> 10L
+                    }
+                    vibrator?.vibrate(VibrationEffect.createOneShot(duration, 220))
                 } else {
                     @Suppress("DEPRECATION")
-                    vibrator?.vibrate(14L)
+                    vibrator?.vibrate(10L)
                 }
             } catch (_: Exception) {}
         }
@@ -337,7 +365,12 @@ class TechuKeyboardService : InputMethodService() {
 
         @JavascriptInterface
         fun triggerHaptic() {
-            service.triggerHapticClick()
+            service.triggerHapticClick("click")
+        }
+
+        @JavascriptInterface
+        fun triggerHapticType(type: String) {
+            service.triggerHapticClick(type)
         }
 
         @JavascriptInterface

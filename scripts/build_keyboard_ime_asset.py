@@ -18,8 +18,38 @@ def build():
       background: var(--kbd-bg, #0d1117) !important;
       user-select: none !important;
       -webkit-user-select: none !important;
-      touch-action: manipulation !important;
+      touch-action: none !important;
+      -webkit-touch-callout: none !important;
+      -webkit-tap-highlight-color: transparent !important;
       box-sizing: border-box !important;
+    }
+    * {
+      -webkit-tap-highlight-color: transparent !important;
+      -webkit-touch-callout: none !important;
+    }
+    .k-key {
+      touch-action: none !important;
+    }
+    .k-key.touch-active, .k-key:active {
+      transition: none !important;
+      transform: scale(0.92) !important;
+      background: var(--kbd-key-active, #3b4656) !important;
+    }
+    .k-key.special.touch-active, .k-key.special:active {
+      transition: none !important;
+      transform: scale(0.92) !important;
+      background: var(--kbd-key-active, #28323d) !important;
+    }
+    .k-key.enter-action.touch-active, .k-key.enter-action:active {
+      transition: none !important;
+      transform: scale(0.94) !important;
+      background: #005999 !important;
+    }
+    .suggest-chip.touch-active {
+      transition: none !important;
+      transform: scale(0.95) !important;
+      background: var(--kbd-accent, #00e5ff) !important;
+      color: #000 !important;
     }
     .techu-soft-keyboard {
       width: 100% !important;
@@ -200,10 +230,16 @@ def build():
     text = text.replace('return st.join("");', 'return sanitizeBangla(st.join(""));')
 
     # 5. Hook AndroidKeyboard in triggerHapticFeedback
-    haptic_old = 'function triggerHapticFeedback() {'
-    haptic_new = '''function triggerHapticFeedback() {
-      if (window.AndroidKeyboard && window.AndroidKeyboard.triggerHaptic) {
-        window.AndroidKeyboard.triggerHaptic();
+    haptic_old = "function triggerHapticFeedback(type = 'click') {"
+    haptic_new = '''function triggerHapticFeedback(type) {
+      const fxType = type || 'click';
+      if (window.AndroidKeyboard) {
+        if (window.AndroidKeyboard.triggerHapticType) {
+          window.AndroidKeyboard.triggerHapticType(fxType);
+        } else if (window.AndroidKeyboard.triggerHaptic) {
+          window.AndroidKeyboard.triggerHaptic();
+        }
+        return;
       }'''
     text = text.replace(haptic_old, haptic_new, 1)
 
