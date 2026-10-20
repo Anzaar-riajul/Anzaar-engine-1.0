@@ -3617,12 +3617,31 @@
       box-sizing: border-box !important;
     }
     .kbd-keys-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 2px 3px 3px 3px;
+      box-sizing: border-box;
+    }
+    .kbd-tools-deck {
+      display: none;
       flex: 1 !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      background: var(--kbd-surface);
+      overflow: hidden;
+      flex-direction: column;
+      position: relative;
+    }
+    .kbd-tools-deck.open {
       display: flex !important;
-      flex-direction: column !important;
-      justify-content: space-between !important;
-      padding: 2px 3px 3px 3px !important;
-      box-sizing: border-box !important;
+    }
+    /* When tools deck is open, completely hide keys container */
+    .kbd-tools-deck.open ~ .kbd-keys-container,
+    .kbd-keys-container.hidden,
+    .techu-soft-keyboard.tools-open .kbd-keys-container {
+      display: none !important;
     }
     .kbd-key-row {
       flex: 1 !important;
@@ -8022,7 +8041,11 @@
       if (numRow) numRow.classList.remove('visible');
 
       if (deck) deck.classList.add('open');
-      if (keysContainer) keysContainer.style.display = 'none';
+      if (keysContainer) {
+        keysContainer.style.setProperty('display', 'none', 'important');
+        keysContainer.classList.add('hidden');
+      }
+      document.getElementById('techuKeyboard')?.classList.add('tools-open');
 
       document.querySelectorAll('.kbd-tool-panel').forEach(p => p.classList.remove('active'));
       const targetPanel = document.getElementById('toolPanel_' + toolName);
@@ -8055,7 +8078,11 @@
       const keysContainer = document.getElementById('kbdKeysContainer');
       const numRow = document.getElementById('kbdNumberRow');
       if (deck) deck.classList.remove('open');
-      if (keysContainer) keysContainer.style.display = 'flex';
+      if (keysContainer) {
+        keysContainer.style.removeProperty('display');
+        keysContainer.classList.remove('hidden');
+      }
+      document.getElementById('techuKeyboard')?.classList.remove('tools-open');
       if (numRow && userSettings.showNumberRow) numRow.classList.add('visible');
 
       isToolsOpen = (composing.length === 0);

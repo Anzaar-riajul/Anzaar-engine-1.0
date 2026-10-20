@@ -4,12 +4,10 @@ def build():
     with open('web_preview/mobile.html', 'r', encoding='utf-8') as f:
         text = f.read()
 
-    # 1. Modify CSS for IME Container
-    # We want .techu-soft-keyboard to take 100% of the WebView without overflow
-    # and flex-grow the keys container so keys are comfortably tall and fill the view.
+    # 1. Full 100% Fit CSS for Android IME Container with Inset & Landscape Support
     css_patch = '''
     /* ========================================================================= */
-    /* 100% FULL-FIT ANDROID SOFT KEYBOARD IME CONTAINER                        */
+    /* WORLD-CLASS 100% FULL-FIT ANDROID SOFT KEYBOARD IME CONTAINER            */
     /* ========================================================================= */
     html, body {
       width: 100% !important;
@@ -41,25 +39,48 @@ def build():
       box-sizing: border-box !important;
     }
     .kbd-keys-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 2px 3px 3px 3px;
+      box-sizing: border-box;
+    }
+    .kbd-tools-deck {
+      display: none;
       flex: 1 !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      background: var(--kbd-surface);
+      overflow: hidden;
+      flex-direction: column;
+      position: relative;
+    }
+    .kbd-tools-deck.open {
       display: flex !important;
-      flex-direction: column !important;
-      justify-content: space-between !important;
-      padding: 3px 3px 4px 3px !important;
-      box-sizing: border-box !important;
+    }
+    /* When tools deck is open, completely hide keys container */
+    .kbd-tools-deck.open ~ .kbd-keys-container,
+    .kbd-keys-container.hidden,
+    .techu-soft-keyboard.tools-open .kbd-keys-container {
+      display: none !important;
     }
     .kbd-key-row {
       flex: 1 !important;
       display: flex !important;
       justify-content: center !important;
       gap: 3.5px !important;
-      margin-bottom: 3.5px !important;
+      margin-bottom: 3px !important;
     }
     .kbd-key-row:last-child {
       margin-bottom: 0 !important;
     }
     .k-key {
       height: 100% !important;
+    }
+    .k-key.enter-key {
+      font-weight: 700 !important;
+      font-size: 15px !important;
     }
   </style>
 '''
@@ -97,7 +118,7 @@ def build():
 '''
     text = text[:body_start] + dummy_elements + text[footer_start:]
 
-    # 3. Flawless Bengali Unicode Sanitizer
+    # 3. Flawless Bengali Unicode Sanitizer & Deep Android IME System Controller
     script_top_patch = '''<script>
     // Flawless Unicode Sanitizer (Eliminates broken ligatures & illegal hasantas)
     function sanitizeBangla(txt) {
@@ -111,10 +132,67 @@ def build():
         .replace(/\\u09CD([\\u09BE\\u09BF\\u09C0\\u09C1\\u09C2\\u09C3\\u09C7\\u09C8\\u09CB\\u09CC])/g, '$1'); // clean hasanta before vowel signs
     }
 
+    window.isPasswordField = false;
+    window.currentImeAction = 0;
+    window.activeInternalSearch = null;
+
     window.resetComposingState = function() {
       composing = '';
       if (typeof renderSuggestionChips === 'function') renderSuggestionChips();
     };
+
+    window.onExternalSelectionChanged = function(selStart, selEnd) {
+      if (composing.length > 0) {
+        composing = '';
+        if (typeof renderSuggestionChips === 'function') renderSuggestionChips();
+      }
+    };
+
+    window.onEditorStateChanged = function(state) {
+      window.isPasswordField = !!state.isPassword;
+      window.currentImeAction = state.imeAction || 0;
+
+      // Auto numpad for numeric or phone fields
+      if (state.isNumeric) {
+        if (typeof openKbdTool === 'function' && activeKbdToolName !== 'numpad') {
+          openKbdTool('numpad');
+        }
+      } else if (activeKbdToolName === 'numpad') {
+        if (typeof closeKbdTools === 'function') closeKbdTools();
+      }
+
+      // Dynamic Enter key label/icon matching IME action
+      const enterBtns = document.querySelectorAll('.k-key.enter-key, [onclick*="pressEnterNewline"]');
+      enterBtns.forEach(btn => {
+        if (state.imeAction === 3) { // IME_ACTION_SEARCH
+          btn.innerHTML = '<span style="font-size:18px;">🔍</span>';
+        } else if (state.imeAction === 4) { // IME_ACTION_SEND
+          btn.innerHTML = '<span style="font-size:18px;">➤</span>';
+        } else if (state.imeAction === 2) { // IME_ACTION_GO
+          btn.innerHTML = '<span style="font-size:18px;">➔</span>';
+        } else if (state.imeAction === 6) { // IME_ACTION_DONE
+          btn.innerHTML = '<span style="font-size:18px;">✓</span>';
+        } else if (state.imeAction === 5) { // IME_ACTION_NEXT
+          btn.innerHTML = '<span style="font-size:18px;">➜</span>';
+        } else {
+          btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>';
+        }
+      });
+    };
+
+    // Attach in-keyboard search routing
+    document.addEventListener('DOMContentLoaded', () => {
+      const emSearch = document.getElementById('emojiSearchInput');
+      const lnSearch = document.getElementById('learnSearchInput');
+      if (emSearch) {
+        emSearch.addEventListener('focus', () => { window.activeInternalSearch = emSearch; });
+        emSearch.addEventListener('blur', () => { if (window.activeInternalSearch === emSearch) window.activeInternalSearch = null; });
+      }
+      if (lnSearch) {
+        lnSearch.addEventListener('focus', () => { window.activeInternalSearch = lnSearch; });
+        lnSearch.addEventListener('blur', () => { if (window.activeInternalSearch === lnSearch) window.activeInternalSearch = null; });
+      }
+    });
 '''
     text = text.replace('<script>', script_top_patch, 1)
 
@@ -129,12 +207,26 @@ def build():
       }'''
     text = text.replace(haptic_old, haptic_new, 1)
 
-    # 6. Hook AndroidKeyboard in pressKey
+    # 6. Hook AndroidKeyboard in pressKey with In-Keyboard Search & Password Field Protection
     press_key_old = '''      const isUpper = (shiftState > 0);
       const c = isUpper ? char.toUpperCase() : char;
       composing += c;'''
     press_key_new = '''      const isUpper = (shiftState > 0);
       const c = isUpper ? char.toUpperCase() : char;
+
+      if (window.activeInternalSearch) {
+        window.activeInternalSearch.value += c;
+        window.activeInternalSearch.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (window.isPasswordField) {
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.commitText(c);
+        }
+        return;
+      }
+
       composing += c;
 
       if (window.AndroidKeyboard) {
@@ -148,7 +240,7 @@ def build():
       }'''
     text = text.replace(press_key_old, press_key_new, 1)
 
-    # 7. Hook AndroidKeyboard in pressBackspace
+    # 7. Hook AndroidKeyboard in pressBackspace with Clean Zero-Leak Erase
     backspace_old = '''      // 1. If currently composing a word, delete last character from composing
       if (composing.length > 0) {
         composing = composing.slice(0, -1);
@@ -158,7 +250,13 @@ def build():
         committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
         cursorPos = Math.max(0, cursorPos - 1);
       }'''
-    backspace_new = '''      // 1. If currently composing a word, delete last character from composing
+    backspace_new = '''      if (window.activeInternalSearch) {
+        window.activeInternalSearch.value = window.activeInternalSearch.value.slice(0, -1);
+        window.activeInternalSearch.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      // 1. If currently composing a word, delete last character from composing
       if (composing.length > 0) {
         composing = composing.slice(0, -1);
         if (window.AndroidKeyboard) {
@@ -166,8 +264,7 @@ def build():
             const preview = !isAvroMode ? composing : (getSuggestions()[0] || parseAvro(composing) || composing);
             window.AndroidKeyboard.setComposingText(preview);
           } else {
-            window.AndroidKeyboard.finishComposingText();
-            window.AndroidKeyboard.commitText("");
+            window.AndroidKeyboard.clearComposingText();
           }
         }
       } 
@@ -183,25 +280,97 @@ def build():
       }'''
     text = text.replace(backspace_old, backspace_new, 1)
 
-    # 8. Hook AndroidKeyboard in selectCandidate
-    candidate_old = '''      // Clear composing query
+    # 8. Hook AndroidKeyboard in selectCandidate with Password Safety
+    candidate_old = '''      // Learn word into personal dictionary
+      if (!userLearnedWords.includes(clean) && clean.length > 1) {
+        userLearnedWords.unshift(clean);
+        localStorage.setItem('techu_learned_words', JSON.stringify(userLearnedWords.slice(0, 50)));
+      }
+
+      // Clear composing query
       composing = "";'''
-    candidate_new = '''      if (window.AndroidKeyboard) {
+    candidate_new = '''      // Learn word into personal dictionary (strictly bypassed in password fields!)
+      if (!window.isPasswordField && !userLearnedWords.includes(clean) && clean.length > 1) {
+        userLearnedWords.unshift(clean);
+        localStorage.setItem('techu_learned_words', JSON.stringify(userLearnedWords.slice(0, 50)));
+      }
+
+      if (window.AndroidKeyboard) {
         window.AndroidKeyboard.commitText(clean + " ");
       }
       // Clear composing query
       composing = "";'''
     text = text.replace(candidate_old, candidate_new, 1)
 
-    # 9. Hook AndroidKeyboard in pressSpace
-    space_old = '''      // Otherwise insert space and predict NEXT words
+    # 9. Hook AndroidKeyboard in pressSpace with Double-Space Period / Dari Support
+    space_old = '''    // Spacebar Action
+    function pressSpace() {
+      const now = Date.now();
+      // Double space -> Period / Dāri
+      if (typeof userSettings !== 'undefined' && userSettings.doubleSpacePeriod && (now - lastSpaceTapTime < 450) && composing.length === 0 && cursorPos > 0) {
+        if (committedText[cursorPos - 1] === ' ') {
+          pushUndoSnapshot(true);
+          const punct = isAvroMode ? '। ' : '. ';
+          committedText = committedText.slice(0, cursorPos - 1) + punct + committedText.slice(cursorPos);
+          cursorPos = cursorPos - 1 + punct.length;
+          lastSpaceTapTime = 0;
+          triggerHapticFeedback();
+          checkAutoCapCondition();
+          renderSuggestionChips();
+          return;
+        }
+      }
+      lastSpaceTapTime = now;
+      triggerHapticFeedback();
+      pushUndoSnapshot(true);
+
+      // If currently composing, commit the top candidate (#1) followed by space
+      if (composing.length > 0) {
+        const candidates = getSuggestions();
+        const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
+        selectCandidate(top);
+      } 
+      // Otherwise insert space and predict NEXT words
       else {
         committedText = committedText.slice(0, cursorPos) + " " + committedText.slice(cursorPos);
         cursorPos += 1;
         checkAutoCapCondition();
         renderSuggestionChips();
-      }'''
-    space_new = '''      // Otherwise insert space and predict NEXT words
+      }
+    }'''
+
+    space_new = '''    // Spacebar Action
+    function pressSpace() {
+      const now = Date.now();
+      // Double space -> Period / Dāri
+      if (typeof userSettings !== 'undefined' && userSettings.doubleSpacePeriod && (now - lastSpaceTapTime < 450) && composing.length === 0) {
+        pushUndoSnapshot(true);
+        const punct = isAvroMode ? '। ' : '. ';
+        if (cursorPos > 0 && committedText[cursorPos - 1] === ' ') {
+          committedText = committedText.slice(0, cursorPos - 1) + punct + committedText.slice(cursorPos);
+          cursorPos = cursorPos - 1 + punct.length;
+        }
+        lastSpaceTapTime = 0;
+        triggerHapticFeedback();
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.deleteSurroundingText(1, 0);
+          window.AndroidKeyboard.commitText(punct);
+        }
+        checkAutoCapCondition();
+        renderSuggestionChips();
+        return;
+      }
+      lastSpaceTapTime = now;
+      triggerHapticFeedback();
+      pushUndoSnapshot(true);
+
+      // If currently composing, commit the top candidate (#1) followed by space
+      if (composing.length > 0) {
+        const candidates = getSuggestions();
+        const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
+        selectCandidate(top);
+      } 
+      // Otherwise insert space and predict NEXT words
       else {
         committedText = committedText.slice(0, cursorPos) + " " + committedText.slice(cursorPos);
         cursorPos += 1;
@@ -210,11 +379,18 @@ def build():
         }
         checkAutoCapCondition();
         renderSuggestionChips();
-      }'''
+      }
+    }'''
     text = text.replace(space_old, space_new, 1)
 
-    # 10. Hook AndroidKeyboard in pressEnterNewline
-    enter_old = '''      if (composing.length > 0) {
+    # 10. Hook AndroidKeyboard in pressEnterNewline with Clean Candidate Commit & IME Action
+    enter_old = '''    // Enter Key: INSERTS NEWLINE (\\n) - NEVER SENDS OR CLEARS!
+    function pressEnterNewline() {
+      triggerHapticFeedback();
+      pushUndoSnapshot(true);
+
+      // If composing, commit first
+      if (composing.length > 0) {
         const candidates = getSuggestions();
         const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
         committedText = committedText.slice(0, cursorPos) + top + "\\n" + committedText.slice(cursorPos);
@@ -223,15 +399,27 @@ def build():
       } else {
         committedText = committedText.slice(0, cursorPos) + "\\n" + committedText.slice(cursorPos);
         cursorPos += 1;
-      }'''
-    enter_new = '''      if (composing.length > 0) {
+      }
+
+      checkAutoCapCondition();
+      renderSuggestionChips();
+    }'''
+
+    enter_new = '''    // Enter Key: Intelligent Android Action & Newline Dispatcher
+    function pressEnterNewline() {
+      triggerHapticFeedback();
+      pushUndoSnapshot(true);
+
+      // If composing, commit first then trigger action
+      if (composing.length > 0) {
         const candidates = getSuggestions();
         const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
         committedText = committedText.slice(0, cursorPos) + top + "\\n" + committedText.slice(cursorPos);
         cursorPos += top.length + 1;
         composing = "";
         if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.commitText(top + "\\n");
+          window.AndroidKeyboard.commitText(top);
+          window.AndroidKeyboard.sendEnter();
         }
       } else {
         committedText = committedText.slice(0, cursorPos) + "\\n" + committedText.slice(cursorPos);
@@ -239,7 +427,11 @@ def build():
         if (window.AndroidKeyboard) {
           window.AndroidKeyboard.sendEnter();
         }
-      }'''
+      }
+
+      checkAutoCapCondition();
+      renderSuggestionChips();
+    }'''
     text = text.replace(enter_old, enter_new, 1)
 
     # 11. Hook AndroidKeyboard in insertDirect
@@ -325,7 +517,7 @@ def build():
     }'''
     text = text.replace(practice_old, practice_new, 1)
 
-    # 14. Hook moveCursorBy
+    # 14. Hook moveCursorBy, moveCursorLine, moveCursorTo, jumpWordCursor
     cursor_old = '''    function moveCursorBy(step) {
       triggerHapticFeedback();
       cursorPos = Math.max(0, Math.min(committedText.length, cursorPos + step));
@@ -345,17 +537,191 @@ def build():
     }'''
     text = text.replace(cursor_old, cursor_new, 1)
 
-    # Write output
+    cursor_line_old = '''    function moveCursorLine(dir) {
+      triggerHapticFeedback();'''
+    cursor_line_new = '''    function moveCursorLine(dir) {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursorLine(dir);
+      }'''
+    text = text.replace(cursor_line_old, cursor_line_new, 1)
+
+    cursor_to_old = '''    function moveCursorTo(targetPos) {
+      triggerHapticFeedback();'''
+    cursor_to_new = '''    function moveCursorTo(targetPos) {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursorToBoundary(targetPos <= 0 ? 0 : 1);
+      }'''
+    text = text.replace(cursor_to_old, cursor_to_new, 1)
+
+    cursor_jump_old = '''    function jumpWordCursor(dir) {
+      triggerHapticFeedback();'''
+    cursor_jump_new = '''    function jumpWordCursor(dir) {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursorWord(dir);
+      }'''
+    text = text.replace(cursor_jump_old, cursor_jump_new, 1)
+
+    # 15. Hook Cut, Copy, Paste, Undo, Redo, Clear in Cursor Navigation Panel
+    cut_old = '''    function executeCursorCut() {
+      triggerHapticFeedback();'''
+    cut_new = '''    function executeCursorCut() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performCut();
+        showToast("কাট সম্পন্ন ✂️");
+        return;
+      }'''
+    text = text.replace(cut_old, cut_new, 1)
+
+    copy_old = '''    function executeCursorCopy() {
+      triggerHapticFeedback();'''
+    copy_new = '''    function executeCursorCopy() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performCopy();
+        showToast("কপি সম্পন্ন 📋");
+        return;
+      }'''
+    text = text.replace(copy_old, copy_new, 1)
+
+    paste_old = '''    function executeCursorPaste() {
+      triggerHapticFeedback();'''
+    paste_new = '''    function executeCursorPaste() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performPaste();
+        showToast("পেস্ট সম্পন্ন 📥");
+        return;
+      }'''
+    text = text.replace(paste_old, paste_new, 1)
+
+    clear_old = '''    function clearAllText() {
+      triggerHapticFeedback();'''
+    clear_new = '''    function clearAllText() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performSelectAll();
+        window.AndroidKeyboard.deleteSurroundingText(1, 0);
+      }'''
+    text = text.replace(clear_old, clear_new, 1)
+
+    undo_old = '''    function executeSmartUndo() {
+      triggerHapticFeedback();'''
+    undo_new = '''    function executeSmartUndo() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performUndo();
+      }'''
+    text = text.replace(undo_old, undo_new, 1)
+
+    redo_old = '''    function executeSmartRedo() {
+      triggerHapticFeedback();'''
+    redo_new = '''    function executeSmartRedo() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performRedo();
+      }'''
+    text = text.replace(redo_old, redo_new, 1)
+
+    # 16. Hook Action Key Long-Press (Z, X, C, V)
+    action_key_old = '''            if (actionType === 'undo' || actionType === 'all_undo') executeAllUndo();
+            else if (actionType === 'redo' || actionType === 'all_redo') executeSmartRedo();
+            else if (actionType === 'bold' || actionType === 'all_bold') executeSmartBold();
+            else if (actionType === 'cut' || actionType === 'all_cut') executeAllCut();
+            else if (actionType === 'copy' || actionType === 'all_copy') executeAllCopy();
+            else if (actionType === 'paste' || actionType === 'all_paste') executeAllPaste();'''
+
+    action_key_new = '''            if (window.AndroidKeyboard) {
+              if (actionType === 'undo' || actionType === 'all_undo') window.AndroidKeyboard.performUndo();
+              else if (actionType === 'redo' || actionType === 'all_redo') window.AndroidKeyboard.performRedo();
+              else if (actionType === 'cut' || actionType === 'all_cut') window.AndroidKeyboard.performCut();
+              else if (actionType === 'copy' || actionType === 'all_copy') window.AndroidKeyboard.performCopy();
+              else if (actionType === 'paste' || actionType === 'all_paste') window.AndroidKeyboard.performPaste();
+              return;
+            }
+            if (actionType === 'undo' || actionType === 'all_undo') executeAllUndo();
+            else if (actionType === 'redo' || actionType === 'all_redo') executeSmartRedo();
+            else if (actionType === 'bold' || actionType === 'all_bold') executeSmartBold();
+            else if (actionType === 'cut' || actionType === 'all_cut') executeAllCut();
+            else if (actionType === 'copy' || actionType === 'all_copy') executeAllCopy();
+            else if (actionType === 'paste' || actionType === 'all_paste') executeAllPaste();'''
+    text = text.replace(action_key_old, action_key_new, 1)
+
+    # 17. Real Android System Clipboard Synchronization in renderClipList
+    clip_sync_old = '''    function renderClipList() {
+      const listEl = document.getElementById('clipPanelList');
+      if (!listEl) return;
+
+      const allClips = getStoredClips();'''
+
+    clip_sync_new = '''    function renderClipList() {
+      const listEl = document.getElementById('clipPanelList');
+      if (!listEl) return;
+
+      // Real-time synchronization from Android System Clipboard
+      if (window.AndroidKeyboard && window.AndroidKeyboard.getClipboard) {
+        try {
+          const sysClip = window.AndroidKeyboard.getClipboard();
+          if (sysClip && sysClip.trim().length > 0) {
+            let clips = getStoredClips();
+            if (!clips.some(c => c.text === sysClip)) {
+              clips.unshift({ text: sysClip, pinned: false, time: Date.now() });
+              saveStoredClips(clips.slice(0, 30));
+            }
+          }
+        } catch (_) {}
+      }
+
+      const allClips = getStoredClips();'''
+    text = text.replace(clip_sync_old, clip_sync_new, 1)
+
+    # 18. Settings Haptics/Audio Synchronization with Android Service
+    settings_sync_old = '''    function applyUserSettings() {'''
+    settings_sync_new = '''    function applyUserSettings() {
+      if (window.AndroidKeyboard && window.AndroidKeyboard.setAudioHapticsEnabled && typeof userSettings !== 'undefined') {
+        window.AndroidKeyboard.setAudioHapticsEnabled(!!userSettings.soundEnabled, !!userSettings.hapticsEnabled);
+      }'''
+    text = text.replace(settings_sync_old, settings_sync_new, 1)
+
+    # 19. Ensure Keys Container Is Guaranteed to Hide When Any Tool Is Opened
+    open_tool_old = '''      if (deck) deck.classList.add('open');
+      if (keysContainer) keysContainer.style.display = 'none';'''
+    open_tool_new = '''      if (deck) deck.classList.add('open');
+      if (keysContainer) {
+        keysContainer.style.setProperty('display', 'none', 'important');
+        keysContainer.classList.add('hidden');
+      }
+      document.getElementById('techuKeyboard')?.classList.add('tools-open');'''
+    text = text.replace(open_tool_old, open_tool_new, 1)
+
+    close_tool_old = '''      if (deck) deck.classList.remove('open');
+      if (keysContainer) keysContainer.style.display = 'flex';'''
+    close_tool_new = '''      if (deck) deck.classList.remove('open');
+      if (keysContainer) {
+        keysContainer.style.removeProperty('display');
+        keysContainer.classList.remove('hidden');
+      }
+      document.getElementById('techuKeyboard')?.classList.remove('tools-open');'''
+    text = text.replace(close_tool_old, close_tool_new, 1)
+
+    # 20. Make internal panel search inputs readonly to prevent triggering soft-keyboard loops
+    text = text.replace('id="emojiSearchInput" placeholder=', 'id="emojiSearchInput" readonly placeholder=', 1)
+    text = text.replace('id="learnSearchInput" placeholder=', 'id="learnSearchInput" readonly placeholder=', 1)
+
+    # Write output to keyboard_ime.html
     with open('native_android/TechuboardKeyboard/app/src/main/assets/keyboard_ime.html', 'w', encoding='utf-8') as f:
         f.write(text)
 
-    # Untouched copy of mobile.html for reference
+    # Untouched copy of mobile.html for studio reference
     with open('web_preview/mobile.html', 'r', encoding='utf-8') as f_orig:
         orig = f_orig.read()
     with open('native_android/TechuboardKeyboard/app/src/main/assets/mobile.html', 'w', encoding='utf-8') as f_mob:
         f_mob.write(orig)
 
-    print("Successfully built keyboard_ime.html and synced assets!")
+    print("Successfully built world-class keyboard_ime.html with full Android IME hooks!")
 
 if __name__ == '__main__':
     build()
