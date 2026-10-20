@@ -180,12 +180,16 @@ class TechuAvroEngine {
         "apni" to "আপনি",
         "apnar" to "আপনার",
         "apnara" to "আপনারা",
+        "apnader" to "আপনাদের",
         "tumi" to "তুমি",
         "tomar" to "তোমার",
         "tomra" to "তোমরা",
+        "tomader" to "তোমাদের",
         "kemon" to "কেমন",
         "acho" to "আছো",
         "achen" to "আছেন",
+        "achi" to "আছি",
+        "achhi" to "আছি",
         "bangla" to "বাংলা",
         "bangladesh" to "বাংলাদেশ",
         "dhonnobad" to "ধন্যবাদ",
@@ -203,7 +207,39 @@ class TechuAvroEngine {
         "ache" to "আছে",
         "techuboard" to "টেকুবোর্ড",
         "techu" to "টেকু",
-        "avro" to "অভ্র"
+        "avro" to "অভ্র",
+        "ki" to "কী",
+        "keno" to "কেন",
+        "kore" to "করে",
+        "koro" to "করো",
+        "korbo" to "করব",
+        "korche" to "করছে",
+        "bolte" to "বলতে",
+        "bolo" to "বলো",
+        "bolun" to "বলুন",
+        "somoy" to "সময়",
+        "din" to "দিন",
+        "ajke" to "আজকে",
+        "aaj" to "আজ",
+        "kaal" to "কাল",
+        "kal" to "কাল",
+        "bondhu" to "বন্ধু",
+        "bhai" to "ভাই",
+        "vai" to "ভাই",
+        "ekhon" to "এখন",
+        "ar" to "আর",
+        "aar" to "আর",
+        "shathe" to "সাথে",
+        "sathe" to "সাথে",
+        "gan" to "গান",
+        "gai" to "গাই",
+        "hobe" to "হবে",
+        "hoyeche" to "হয়েছে",
+        "hoise" to "হইছে",
+        "onek" to "অনেক",
+        "sundor" to "সুন্দর",
+        "shundor" to "সুন্দর",
+        "dorkar" to "দরকার"
     )
 
     fun toBangla(engWord: String): String {
@@ -392,7 +428,28 @@ class TechuAvroEngine {
             carry = now
         }
 
-        return st.toString()
+        return sanitizeBangla(st.toString())
+    }
+
+    fun sanitizeBangla(input: String): String {
+        var s = input
+        // 1. Never allow hasanta after anusvara (ং), chandrabindu (ঁ), visarga (ঃ), khanda-ta (ৎ)
+        s = s.replace("\u0982\u09CD", "\u0982") // ং্ -> ং
+        s = s.replace("\u0981\u09CD", "\u0981") // ঁ্ -> ঁ
+        s = s.replace("\u0983\u09CD", "\u0983") // ঃ্ -> ঃ
+        s = s.replace("\u09CE\u09CD", "\u09CE") // ৎ্ -> ৎ
+
+        // 2. Double hasanta cleanup
+        s = s.replace(Regex("\u09CD+"), "\u09CD")
+
+        // 3. Remove hasanta or ZWNJ before vowel signs (kars) so vowels never break
+        s = s.replace(Regex("[\u09CD\u200C]+([\u09BE-\u09CC\u09D7])"), "$1")
+
+        // 4. Common specific ligature fixes
+        s = s.replace("বাং্লা", "বাংলা")
+        s = s.replace("বাং्लादेश", "বাংলাদেশ")
+
+        return s
     }
 
     private fun isVowel(c: Char): Boolean = "AEIOUaeiou".contains(c)

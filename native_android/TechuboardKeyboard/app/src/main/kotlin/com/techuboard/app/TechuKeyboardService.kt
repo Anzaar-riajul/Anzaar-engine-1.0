@@ -30,10 +30,11 @@ import android.widget.TextView
  * Techuboard 100% Pure Native Android System Keyboard (IME).
  * Features:
  * - Exact dark modern styling matching the user's design.
- * - Full Avro phonetic engine (ami -> আমি).
+ * - Full Avro phonetic engine (ami -> আমি, bangla -> বাংলা) with sanitizeBangla Unicode filter.
+ * - Spacebar Swipe to toggle between বাংলা and English!
+ * - Dedicated language toggle key (বাং / ENG) on bottom row.
  * - Secondary superscript characters on all keys (1-0, @#$, hold for symbols/actions).
  * - Top Tools & Suggestions strip with Cyan grid toggle, Numpad, Emoji, Clipboard, Cursor D-Pad, Mic.
- * - Smooth Spacebar cursor swipe glide.
  * - Native 60fps performance across WhatsApp, Facebook, Messenger, Chrome, etc.
  */
 class TechuKeyboardService : InputMethodService() {
@@ -57,6 +58,7 @@ class TechuKeyboardService : InputMethodService() {
     private var toolDeckOverlay: FrameLayout? = null
     private var keyboardRowsContainer: LinearLayout? = null
     private var spacebarText: TextView? = null
+    private var langToggleTv: TextView? = null
 
     private var isSymbolsMode = false
     private var isSecondarySymbols = false
@@ -216,6 +218,23 @@ class TechuKeyboardService : InputMethodService() {
         composing.clear()
         closeToolDeck()
         updateCandidateView()
+        updateLanguageUI()
+    }
+
+    fun toggleLanguageMode() {
+        commitComposing()
+        isAvroMode = !isAvroMode
+        updateLanguageUI()
+        triggerHapticClick()
+        val msg = if (isAvroMode) "বাংলা (TechuAvro) মোড চালু" else "English Keyboard Mode"
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateLanguageUI() {
+        spacebarText?.text = if (isAvroMode) "‹ বাংলা ›" else "‹ English ›"
+        spacebarText?.setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#B0BEC5"))
+        langToggleTv?.text = if (isAvroMode) "বাং" else "ENG"
+        langToggleTv?.setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#80CBC4"))
     }
 
     private fun toggleToolsVsSuggestions() {
@@ -381,7 +400,6 @@ class TechuKeyboardService : InputMethodService() {
                 emojiLayout.addView(rowLayout)
             }
 
-            // Close button at bottom
             val closeBtn = TextView(this@TechuKeyboardService).apply {
                 text = "⌨️ কীবোর্ডে ফিরে যান"
                 textSize = 13f
@@ -784,27 +802,46 @@ class TechuKeyboardService : InputMethodService() {
             ).apply { setMargins(0, dp(2), 0, dp(2)) }
         }
 
-        // ?123 Button
-        val symBtn = createButtonKey("?123", widthDp = 52) {
+        // 1. ?123 Button
+        val symBtn = createButtonKey("?123", widthDp = 48) {
             isSymbolsMode = true
             isSecondarySymbols = false
             renderKeyboardKeys()
         }
         row.addView(symBtn)
 
-        // @ Button
-        val atBtn = createButtonKey("@", widthDp = 36) {
-            currentInputConnection?.commitText("@", 1)
+        // 2. Dedicated Language Toggle Button (বাং / ENG)
+        val langBtn = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                setMargins(dp(2), 0, dp(2), 0)
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1B2A38"))
+                cornerRadius = dp(6).toFloat()
+                setStroke(1, Color.parseColor("#00E5FF"))
+            }
+            val tv = TextView(this@TechuKeyboardService).apply {
+                text = if (isAvroMode) "বাং" else "ENG"
+                textSize = 14f
+                setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#80CBC4"))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+            }
+            langToggleTv = tv
+            addView(tv)
+            setOnClickListener {
+                toggleLanguageMode()
+            }
         }
-        row.addView(atBtn)
+        row.addView(langBtn)
 
-        // , Comma
-        val commaBtn = createButtonKey(",", widthDp = 34) {
-            handleCharacter(",")
+        // 3. Comma
+        val commaBtn = createButtonKey(",", widthDp = 30) {
+            if (isAvroMode) handleCharacter(",") else currentInputConnection?.commitText(",", 1)
         }
         row.addView(commaBtn)
 
-        // Spacebar with "বাংলা" / "English" and Cursor Swipe
+        // 4. Spacebar with "‹ বাংলা ›" / "‹ English ›" and Swipe to switch language
         val spaceBtn = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
                 setMargins(dp(2), 0, dp(2), 0)
@@ -815,9 +852,10 @@ class TechuKeyboardService : InputMethodService() {
                 setStroke(1, Color.parseColor("#2D333B"))
             }
             spacebarText = TextView(this@TechuKeyboardService).apply {
-                text = if (isAvroMode) "বাংলা" else "English"
+                text = if (isAvroMode) "‹ বাংলা ›" else "‹ English ›"
                 textSize = 14f
-                setTextColor(Color.parseColor("#B0BEC5"))
+                setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#B0BEC5"))
+                typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
             }
             addView(spacebarText)
@@ -825,21 +863,20 @@ class TechuKeyboardService : InputMethodService() {
         }
         row.addView(spaceBtn)
 
-        // Dari / Dot
-        val dotBtn = createButtonKey(if (isAvroMode) "।" else ".", widthDp = 34) {
+        // 5. Dari / Dot
+        val dotBtn = createButtonKey(if (isAvroMode) "।" else ".", widthDp = 32) {
             if (isAvroMode) {
                 commitComposing()
                 currentInputConnection?.commitText("। ", 1)
             } else {
-                commitComposing()
                 currentInputConnection?.commitText(". ", 1)
             }
         }
         row.addView(dotBtn)
 
-        // Return / Enter (Vibrant Blue accent)
+        // 6. Return / Enter (Vibrant Blue accent)
         val enterBtn = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(54), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(52), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 setMargins(dp(2), 0, dp(2), 0)
             }
             background = GradientDrawable().apply {
@@ -1009,7 +1046,7 @@ class TechuKeyboardService : InputMethodService() {
             }
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = label
-                textSize = 15f
+                textSize = 14f
                 setTextColor(Color.WHITE)
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
@@ -1026,43 +1063,32 @@ class TechuKeyboardService : InputMethodService() {
     private fun setupSpacebarTouch(spaceView: View) {
         var startX = 0f
         var startY = 0f
-        var isDragging = false
-        val thresholdPx = 18f * resources.displayMetrics.density
-        var lastDispatchedStep = 0
+        var isSwiping = false
+        val swipeThresholdPx = 28f * resources.displayMetrics.density
 
         spaceView.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = event.rawX
                     startY = event.rawY
-                    isDragging = false
-                    lastDispatchedStep = 0
+                    isSwiping = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val deltaX = event.rawX - startX
                     val deltaY = event.rawY - startY
-                    if (!isDragging && Math.abs(deltaX) > thresholdPx && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-                        isDragging = true
-                    }
-                    if (isDragging) {
-                        val currentStep = (deltaX / thresholdPx).toInt()
-                        if (currentStep != lastDispatchedStep) {
-                            val diff = currentStep - lastDispatchedStep
-                            lastDispatchedStep = currentStep
-                            val keyCode = if (diff < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
-                            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-                            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-                            triggerHapticClick()
-                        }
+                    // SWIPE DETECTED: TOGGLE LANGUAGE!
+                    if (!isSwiping && Math.abs(deltaX) > swipeThresholdPx && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+                        isSwiping = true
+                        toggleLanguageMode()
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!isDragging) {
+                    if (!isSwiping) {
                         handleSpace()
                     }
-                    isDragging = false
+                    isSwiping = false
                     true
                 }
                 else -> false
@@ -1073,13 +1099,22 @@ class TechuKeyboardService : InputMethodService() {
     // 6. KEYBOARD ENGINE LOGIC (AVRO, SUGGESTIONS, BACKSPACE)
     private fun handleCharacter(char: String) {
         closeToolDeck()
-        composing.append(char)
-        if (isAvroMode) {
-            val converted = engine.toBangla(composing.toString())
-            currentInputConnection?.setComposingText(converted, 1)
-        } else {
-            currentInputConnection?.setComposingText(composing.toString(), 1)
+        triggerHapticClick()
+
+        if (!isAvroMode) {
+            // ENGLISH MODE: Direct typing without transliteration!
+            currentInputConnection?.commitText(char, 1)
+            if (shiftState == 1) {
+                shiftState = 0
+                renderKeyboardKeys()
+            }
+            return
         }
+
+        // BANGLA AVRO PHONETIC MODE:
+        composing.append(char)
+        val converted = engine.toBangla(composing.toString())
+        currentInputConnection?.setComposingText(converted, 1)
 
         // Auto-unshift if shifted
         if (shiftState == 1) {
@@ -1092,8 +1127,8 @@ class TechuKeyboardService : InputMethodService() {
 
     private fun handleSpace() {
         triggerHapticClick()
-        if (composing.isNotEmpty()) {
-            val topWord = currentSuggestions.firstOrNull() ?: if (isAvroMode) engine.toBangla(composing.toString()) else composing.toString()
+        if (isAvroMode && composing.isNotEmpty()) {
+            val topWord = currentSuggestions.firstOrNull() ?: engine.toBangla(composing.toString())
             currentInputConnection?.commitText("$topWord ", 1)
             suggestionManager.recordWord(topWord)
             composing.clear()
@@ -1105,10 +1140,10 @@ class TechuKeyboardService : InputMethodService() {
 
     private fun handleBackspace() {
         triggerHapticClick()
-        if (composing.isNotEmpty()) {
+        if (isAvroMode && composing.isNotEmpty()) {
             composing.deleteCharAt(composing.length - 1)
             if (composing.isNotEmpty()) {
-                val converted = if (isAvroMode) engine.toBangla(composing.toString()) else composing.toString()
+                val converted = engine.toBangla(composing.toString())
                 currentInputConnection?.setComposingText(converted, 1)
             } else {
                 currentInputConnection?.commitText("", 1)
@@ -1127,8 +1162,8 @@ class TechuKeyboardService : InputMethodService() {
     }
 
     private fun commitComposing() {
-        if (composing.isNotEmpty()) {
-            val topWord = currentSuggestions.firstOrNull() ?: if (isAvroMode) engine.toBangla(composing.toString()) else composing.toString()
+        if (isAvroMode && composing.isNotEmpty()) {
+            val topWord = currentSuggestions.firstOrNull() ?: engine.toBangla(composing.toString())
             currentInputConnection?.commitText(topWord, 1)
             suggestionManager.recordWord(topWord)
             composing.clear()
@@ -1149,7 +1184,7 @@ class TechuKeyboardService : InputMethodService() {
         bar.removeAllViews()
 
         val query = composing.toString()
-        if (query.isEmpty()) {
+        if (query.isEmpty() || !isAvroMode) {
             // Revert back to tools strip when not composing
             suggestionsScroll?.visibility = View.GONE
             toolsBar?.visibility = View.VISIBLE
