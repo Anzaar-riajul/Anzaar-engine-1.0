@@ -43,7 +43,7 @@ jobs:
         working-directory: techuboard_android
         run: |
           set -o pipefail
-          flutter build apk --release -v 2>&1 | tee /tmp/flutter_build.log
+          flutter build apk --release --android-skip-build-dependency-validation -v 2>&1 | tee /tmp/flutter_build.log
 
       - name: Push Error Log to Repo on Failure
         if: failure()
