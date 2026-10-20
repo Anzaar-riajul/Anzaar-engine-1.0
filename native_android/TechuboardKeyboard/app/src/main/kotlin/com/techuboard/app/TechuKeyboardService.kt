@@ -13,10 +13,13 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
@@ -24,19 +27,28 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 
 /**
- * TechuKeyboardService
- * 
- * 100% Exact Direct Implementation of the 10-Hour Designed Techuboard:
- * Directly hosts the custom HTML/CSS/JS keyboard in a hardware-accelerated WebView,
- * connecting every key, theme, emoji, learn guide, numpad, and gesture directly to Android's
- * InputConnection across all apps (WhatsApp, Facebook, Messenger, YouTube, etc.)
+ * Custom WebView declaring InputType.TYPE_NULL so it remains fully focusable
+ * and interactive for touch clicks without triggering Android soft-keyboard loops.
+ */
+class TechuKeyboardWebView(context: Context) : WebView(context) {
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        outAttrs.inputType = InputType.TYPE_NULL
+        return BaseInputConnection(this, false)
+    }
+}
+
+/**
+ * TechuKeyboardService: 100% Faithful System IME
+ * Directly hosts the user's 10-hour designed Techuboard (keyboard_ime.html),
+ * connecting every single key, theme, phonetic Avro transliteration, emoji,
+ * gesture, and clipboard action directly to Android's InputConnection.
  */
 class TechuKeyboardService : InputMethodService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var vibrator: Vibrator? = null
     private var audioManager: AudioManager? = null
-    private var webView: WebView? = null
+    private var webView: TechuKeyboardWebView? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -47,9 +59,10 @@ class TechuKeyboardService : InputMethodService() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
-        val kbdHeightPx = (290 * density).toInt()
+        // 275dp is standard ergonomic keyboard height across modern Android devices
+        val kbdHeightPx = (275 * density).toInt()
 
-        val wv = WebView(this).apply {
+        val wv = TechuKeyboardWebView(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 kbdHeightPx
@@ -62,14 +75,14 @@ class TechuKeyboardService : InputMethodService() {
                 databaseEnabled = true
                 allowFileAccess = true
                 setSupportZoom(false)
-                useWideViewPort = true
-                loadWithOverviewMode = true
+                useWideViewPort = false       // MUST BE FALSE: 1:1 match with real device screen width
+                loadWithOverviewMode = false  // MUST BE FALSE: Prevents desktop zooming/scaling
                 cacheMode = WebSettings.LOAD_DEFAULT
             }
 
-            // CRITICAL: Prevent WebView from stealing window focus from the target app!
-            isFocusable = false
-            isFocusableInTouchMode = false
+            // Must be focusable so Chromium processes touch down/up/move events!
+            isFocusable = true
+            isFocusableInTouchMode = true
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -86,6 +99,12 @@ class TechuKeyboardService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         webView?.evaluateJavascript("if (typeof resetComposingState === 'function') resetComposingState();", null)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        webView?.destroy()
+        webView = null
     }
 
     fun triggerHapticClick() {
@@ -111,28 +130,40 @@ class TechuKeyboardService : InputMethodService() {
         @JavascriptInterface
         fun commitText(text: String) {
             service.mainHandler.post {
-                service.currentInputConnection?.commitText(text, 1)
+                val ic = service.currentInputConnection ?: return@post
+                ic.commitText(text, 1)
             }
         }
 
         @JavascriptInterface
         fun setComposingText(text: String) {
             service.mainHandler.post {
-                service.currentInputConnection?.setComposingText(text, 1)
+                val ic = service.currentInputConnection ?: return@post
+                ic.setComposingText(text, 1)
             }
         }
 
         @JavascriptInterface
         fun finishComposingText() {
             service.mainHandler.post {
-                service.currentInputConnection?.finishComposingText()
+                val ic = service.currentInputConnection ?: return@post
+                ic.finishComposingText()
             }
         }
 
         @JavascriptInterface
         fun deleteSurroundingText(before: Int, after: Int) {
             service.mainHandler.post {
-                service.currentInputConnection?.deleteSurroundingText(before, after)
+                val ic = service.currentInputConnection ?: return@post
+                if (before > 0 && after == 0) {
+                    val ok = ic.deleteSurroundingText(before, after)
+                    if (!ok) {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+                    }
+                } else {
+                    ic.deleteSurroundingText(before, after)
+                }
             }
         }
 
@@ -140,8 +171,13 @@ class TechuKeyboardService : InputMethodService() {
         fun sendEnter() {
             service.mainHandler.post {
                 val ic = service.currentInputConnection ?: return@post
-                ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                val action = service.currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION)
+                if (action != null && action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                    ic.performEditorAction(action)
+                } else {
+                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                }
             }
         }
 

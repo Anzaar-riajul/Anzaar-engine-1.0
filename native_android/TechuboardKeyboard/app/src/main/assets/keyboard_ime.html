@@ -3584,7 +3584,9 @@
       }
     }
   
-    /* Fixed 100% Fill Container for Android Soft Keyboard IME */
+    /* ========================================================================= */
+    /* 100% FULL-FIT ANDROID SOFT KEYBOARD IME CONTAINER                        */
+    /* ========================================================================= */
     html, body {
       width: 100% !important;
       height: 100% !important;
@@ -3595,7 +3597,7 @@
       user-select: none !important;
       -webkit-user-select: none !important;
       touch-action: manipulation !important;
-      display: block !important;
+      box-sizing: border-box !important;
     }
     .techu-soft-keyboard {
       width: 100% !important;
@@ -3609,14 +3611,38 @@
       box-shadow: none !important;
       display: flex !important;
       flex-direction: column !important;
+      justify-content: flex-start !important;
+      padding: 0 0 2px 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+    }
+    .kbd-keys-container {
+      flex: 1 !important;
+      display: flex !important;
+      flex-direction: column !important;
       justify-content: space-between !important;
+      padding: 3px 3px 4px 3px !important;
+      box-sizing: border-box !important;
+    }
+    .kbd-key-row {
+      flex: 1 !important;
+      display: flex !important;
+      justify-content: center !important;
+      gap: 3.5px !important;
+      margin-bottom: 3.5px !important;
+    }
+    .kbd-key-row:last-child {
+      margin-bottom: 0 !important;
+    }
+    .k-key {
+      height: 100% !important;
     }
   </style>
 
 </head>
 <body>
-  <!-- Hidden elements to satisfy all DOM references in syncEditorView and header badges -->
-  <div style="display:none;" id="dummyEditorContainer">
+  <!-- Hidden dummy elements to satisfy all DOM references in syncEditorView and header badges -->
+  <div style="display:none !important;" id="dummyEditorContainer">
     <span id="headerModeBadge"></span>
     <span id="statusLayoutName"></span>
     <span id="wordCountBadge"></span>
@@ -3628,6 +3654,16 @@
     <div id="editorCanvasBox"></div>
     <div id="editorCard"></div>
     <button id="pwaInstallPill"></button>
+    <div id="learnTabChart"></div>
+    <div id="learnTabRules"></div>
+    <div id="learnTabPractice"></div>
+    <div id="learnContentChart"></div>
+    <div id="learnContentRules"></div>
+    <div id="learnContentPractice"></div>
+    <div id="emojiDrawer"></div>
+    <div id="clipDrawer"></div>
+    <div id="cursorDrawer"></div>
+    <div id="learnDrawer"></div>
   </div>
 <footer class="techu-soft-keyboard" id="techuKeyboard">
     <!-- Top Strip: Uniform Tools Bar (Default) with Dynamic Word Suggestions on Typing & Pinned Mic -->
@@ -6273,7 +6309,7 @@
 
       if (window.AndroidKeyboard) {
         if (!isAvroMode) {
-          window.AndroidKeyboard.commitText(c);
+          window.AndroidKeyboard.setComposingText(composing);
         } else {
           const sugs = getSuggestions();
           const preview = sugs[0] || parseAvro(composing) || composing;
@@ -6309,8 +6345,7 @@
         composing = composing.slice(0, -1);
         if (window.AndroidKeyboard) {
           if (composing.length > 0) {
-            const sugs = getSuggestions();
-            const preview = sugs[0] || parseAvro(composing) || composing;
+            const preview = !isAvroMode ? composing : (getSuggestions()[0] || parseAvro(composing) || composing);
             window.AndroidKeyboard.setComposingText(preview);
           } else {
             window.AndroidKeyboard.finishComposingText();
@@ -6318,14 +6353,12 @@
           }
         }
       } 
-      // 2. If not composing, delete one character from committed text at cursor position!
-      else if (cursorPos > 0) {
-        committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
-        cursorPos = Math.max(0, cursorPos - 1);
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.deleteSurroundingText(1, 0);
+      // 2. If not composing, delete one character from committed text in target app!
+      else {
+        if (cursorPos > 0) {
+          committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
+          cursorPos = Math.max(0, cursorPos - 1);
         }
-      } else {
         if (window.AndroidKeyboard) {
           window.AndroidKeyboard.deleteSurroundingText(1, 0);
         }
@@ -6424,12 +6457,15 @@
         committedText = committedText.slice(0, cursorPos) + top + "\n" + committedText.slice(cursorPos);
         cursorPos += top.length + 1;
         composing = "";
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.commitText(top + "\n");
+        }
       } else {
         committedText = committedText.slice(0, cursorPos) + "\n" + committedText.slice(cursorPos);
         cursorPos += 1;
-      }
-      if (window.AndroidKeyboard) {
-        window.AndroidKeyboard.sendEnter();
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.sendEnter();
+        }
       }
 
       checkAutoCapCondition();
@@ -6441,7 +6477,7 @@
       pushUndoSnapshot(true);
 
       if (composing.length > 0) {
-        const top = getSuggestions()[0] || composing;
+        const top = getSuggestions()[0] || (!isAvroMode ? composing : parseAvro(composing));
         committedText = committedText.slice(0, cursorPos) + top + char + committedText.slice(cursorPos);
         cursorPos += top.length + char.length;
         composing = "";

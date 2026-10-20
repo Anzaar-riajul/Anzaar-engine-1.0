@@ -1,13 +1,16 @@
 import re
 
-# Read original mobile.html
-with open('web_preview/mobile.html', 'r', encoding='utf-8') as f:
-    text = f.read()
+def build():
+    with open('web_preview/mobile.html', 'r', encoding='utf-8') as f:
+        text = f.read()
 
-# 1. Modify CSS in <style>
-css_target = '</style>'
-css_replacement = '''
-    /* Fixed 100% Fill Container for Android Soft Keyboard IME */
+    # 1. Modify CSS for IME Container
+    # We want .techu-soft-keyboard to take 100% of the WebView without overflow
+    # and flex-grow the keys container so keys are comfortably tall and fill the view.
+    css_patch = '''
+    /* ========================================================================= */
+    /* 100% FULL-FIT ANDROID SOFT KEYBOARD IME CONTAINER                        */
+    /* ========================================================================= */
     html, body {
       width: 100% !important;
       height: 100% !important;
@@ -18,7 +21,7 @@ css_replacement = '''
       user-select: none !important;
       -webkit-user-select: none !important;
       touch-action: manipulation !important;
-      display: block !important;
+      box-sizing: border-box !important;
     }
     .techu-soft-keyboard {
       width: 100% !important;
@@ -32,19 +35,43 @@ css_replacement = '''
       box-shadow: none !important;
       display: flex !important;
       flex-direction: column !important;
+      justify-content: flex-start !important;
+      padding: 0 0 2px 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+    }
+    .kbd-keys-container {
+      flex: 1 !important;
+      display: flex !important;
+      flex-direction: column !important;
       justify-content: space-between !important;
+      padding: 3px 3px 4px 3px !important;
+      box-sizing: border-box !important;
+    }
+    .kbd-key-row {
+      flex: 1 !important;
+      display: flex !important;
+      justify-content: center !important;
+      gap: 3.5px !important;
+      margin-bottom: 3.5px !important;
+    }
+    .kbd-key-row:last-child {
+      margin-bottom: 0 !important;
+    }
+    .k-key {
+      height: 100% !important;
     }
   </style>
 '''
-text = text.replace(css_target, css_replacement, 1)
+    text = text.replace('</style>', css_patch, 1)
 
-# 2. Replace Header and Main Canvas Area with Dummy Elements for Safe DOM Binding
-body_start = text.find('<body>')
-footer_start = text.find('<footer class="techu-soft-keyboard" id="techuKeyboard">')
+    # 2. Strip Top Header & Live Editor from HTML, Replace with Safe Dummy Elements
+    body_start = text.find('<body>')
+    footer_start = text.find('<footer class="techu-soft-keyboard" id="techuKeyboard">')
 
-dummy_elements = '''<body>
-  <!-- Hidden elements to satisfy all DOM references in syncEditorView and header badges -->
-  <div style="display:none;" id="dummyEditorContainer">
+    dummy_elements = '''<body>
+  <!-- Hidden dummy elements to satisfy all DOM references in syncEditorView and header badges -->
+  <div style="display:none !important;" id="dummyEditorContainer">
     <span id="headerModeBadge"></span>
     <span id="statusLayoutName"></span>
     <span id="wordCountBadge"></span>
@@ -56,13 +83,22 @@ dummy_elements = '''<body>
     <div id="editorCanvasBox"></div>
     <div id="editorCard"></div>
     <button id="pwaInstallPill"></button>
+    <div id="learnTabChart"></div>
+    <div id="learnTabRules"></div>
+    <div id="learnTabPractice"></div>
+    <div id="learnContentChart"></div>
+    <div id="learnContentRules"></div>
+    <div id="learnContentPractice"></div>
+    <div id="emojiDrawer"></div>
+    <div id="clipDrawer"></div>
+    <div id="cursorDrawer"></div>
+    <div id="learnDrawer"></div>
   </div>
 '''
+    text = text[:body_start] + dummy_elements + text[footer_start:]
 
-text = text[:body_start] + dummy_elements + text[footer_start:]
-
-# 3. Add sanitizeBangla and script initialization
-script_top_patch = '''<script>
+    # 3. Flawless Bengali Unicode Sanitizer
+    script_top_patch = '''<script>
     // Flawless Unicode Sanitizer (Eliminates broken ligatures & illegal hasantas)
     function sanitizeBangla(txt) {
       if (!txt) return '';
@@ -80,40 +116,40 @@ script_top_patch = '''<script>
       if (typeof renderSuggestionChips === 'function') renderSuggestionChips();
     };
 '''
-text = text.replace('<script>', script_top_patch, 1)
+    text = text.replace('<script>', script_top_patch, 1)
 
-# 4. Hook sanitizeBangla in parseAvro: replace 'return st.join("");' with 'return sanitizeBangla(st.join(""));'
-text = text.replace('return st.join("");', 'return sanitizeBangla(st.join(""));')
+    # 4. Hook sanitizeBangla in parseAvro
+    text = text.replace('return st.join("");', 'return sanitizeBangla(st.join(""));')
 
-# 5. Hook AndroidKeyboard in triggerHapticFeedback
-haptic_old = 'function triggerHapticFeedback() {'
-haptic_new = '''function triggerHapticFeedback() {
+    # 5. Hook AndroidKeyboard in triggerHapticFeedback
+    haptic_old = 'function triggerHapticFeedback() {'
+    haptic_new = '''function triggerHapticFeedback() {
       if (window.AndroidKeyboard && window.AndroidKeyboard.triggerHaptic) {
         window.AndroidKeyboard.triggerHaptic();
       }'''
-text = text.replace(haptic_old, haptic_new, 1)
+    text = text.replace(haptic_old, haptic_new, 1)
 
-# 6. Hook AndroidKeyboard in pressKey
-press_key_old = '''      const isUpper = (shiftState > 0);
+    # 6. Hook AndroidKeyboard in pressKey
+    press_key_old = '''      const isUpper = (shiftState > 0);
       const c = isUpper ? char.toUpperCase() : char;
       composing += c;'''
-press_key_new = '''      const isUpper = (shiftState > 0);
+    press_key_new = '''      const isUpper = (shiftState > 0);
       const c = isUpper ? char.toUpperCase() : char;
       composing += c;
 
       if (window.AndroidKeyboard) {
         if (!isAvroMode) {
-          window.AndroidKeyboard.commitText(c);
+          window.AndroidKeyboard.setComposingText(composing);
         } else {
           const sugs = getSuggestions();
           const preview = sugs[0] || parseAvro(composing) || composing;
           window.AndroidKeyboard.setComposingText(preview);
         }
       }'''
-text = text.replace(press_key_old, press_key_new, 1)
+    text = text.replace(press_key_old, press_key_new, 1)
 
-# 7. Hook AndroidKeyboard in pressBackspace
-backspace_old = '''      // 1. If currently composing a word, delete last character from composing
+    # 7. Hook AndroidKeyboard in pressBackspace
+    backspace_old = '''      // 1. If currently composing a word, delete last character from composing
       if (composing.length > 0) {
         composing = composing.slice(0, -1);
       } 
@@ -122,13 +158,12 @@ backspace_old = '''      // 1. If currently composing a word, delete last charac
         committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
         cursorPos = Math.max(0, cursorPos - 1);
       }'''
-backspace_new = '''      // 1. If currently composing a word, delete last character from composing
+    backspace_new = '''      // 1. If currently composing a word, delete last character from composing
       if (composing.length > 0) {
         composing = composing.slice(0, -1);
         if (window.AndroidKeyboard) {
           if (composing.length > 0) {
-            const sugs = getSuggestions();
-            const preview = sugs[0] || parseAvro(composing) || composing;
+            const preview = !isAvroMode ? composing : (getSuggestions()[0] || parseAvro(composing) || composing);
             window.AndroidKeyboard.setComposingText(preview);
           } else {
             window.AndroidKeyboard.finishComposingText();
@@ -136,39 +171,37 @@ backspace_new = '''      // 1. If currently composing a word, delete last charac
           }
         }
       } 
-      // 2. If not composing, delete one character from committed text at cursor position!
-      else if (cursorPos > 0) {
-        committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
-        cursorPos = Math.max(0, cursorPos - 1);
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.deleteSurroundingText(1, 0);
+      // 2. If not composing, delete one character from committed text in target app!
+      else {
+        if (cursorPos > 0) {
+          committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
+          cursorPos = Math.max(0, cursorPos - 1);
         }
-      } else {
         if (window.AndroidKeyboard) {
           window.AndroidKeyboard.deleteSurroundingText(1, 0);
         }
       }'''
-text = text.replace(backspace_old, backspace_new, 1)
+    text = text.replace(backspace_old, backspace_new, 1)
 
-# 8. Hook AndroidKeyboard in selectCandidate
-candidate_old = '''      // Clear composing query
+    # 8. Hook AndroidKeyboard in selectCandidate
+    candidate_old = '''      // Clear composing query
       composing = "";'''
-candidate_new = '''      if (window.AndroidKeyboard) {
+    candidate_new = '''      if (window.AndroidKeyboard) {
         window.AndroidKeyboard.commitText(clean + " ");
       }
       // Clear composing query
       composing = "";'''
-text = text.replace(candidate_old, candidate_new, 1)
+    text = text.replace(candidate_old, candidate_new, 1)
 
-# 9. Hook AndroidKeyboard in pressSpace
-space_old = '''      // Otherwise insert space and predict NEXT words
+    # 9. Hook AndroidKeyboard in pressSpace
+    space_old = '''      // Otherwise insert space and predict NEXT words
       else {
         committedText = committedText.slice(0, cursorPos) + " " + committedText.slice(cursorPos);
         cursorPos += 1;
         checkAutoCapCondition();
         renderSuggestionChips();
       }'''
-space_new = '''      // Otherwise insert space and predict NEXT words
+    space_new = '''      // Otherwise insert space and predict NEXT words
       else {
         committedText = committedText.slice(0, cursorPos) + " " + committedText.slice(cursorPos);
         cursorPos += 1;
@@ -178,10 +211,10 @@ space_new = '''      // Otherwise insert space and predict NEXT words
         checkAutoCapCondition();
         renderSuggestionChips();
       }'''
-text = text.replace(space_old, space_new, 1)
+    text = text.replace(space_old, space_new, 1)
 
-# 10. Hook AndroidKeyboard in pressEnterNewline
-enter_old = '''      if (composing.length > 0) {
+    # 10. Hook AndroidKeyboard in pressEnterNewline
+    enter_old = '''      if (composing.length > 0) {
         const candidates = getSuggestions();
         const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
         committedText = committedText.slice(0, cursorPos) + top + "\\n" + committedText.slice(cursorPos);
@@ -191,23 +224,26 @@ enter_old = '''      if (composing.length > 0) {
         committedText = committedText.slice(0, cursorPos) + "\\n" + committedText.slice(cursorPos);
         cursorPos += 1;
       }'''
-enter_new = '''      if (composing.length > 0) {
+    enter_new = '''      if (composing.length > 0) {
         const candidates = getSuggestions();
         const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
         committedText = committedText.slice(0, cursorPos) + top + "\\n" + committedText.slice(cursorPos);
         cursorPos += top.length + 1;
         composing = "";
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.commitText(top + "\\n");
+        }
       } else {
         committedText = committedText.slice(0, cursorPos) + "\\n" + committedText.slice(cursorPos);
         cursorPos += 1;
-      }
-      if (window.AndroidKeyboard) {
-        window.AndroidKeyboard.sendEnter();
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.sendEnter();
+        }
       }'''
-text = text.replace(enter_old, enter_new, 1)
+    text = text.replace(enter_old, enter_new, 1)
 
-# 11. Hook AndroidKeyboard in insertDirect
-insert_old = '''      if (composing.length > 0) {
+    # 11. Hook AndroidKeyboard in insertDirect
+    insert_old = '''      if (composing.length > 0) {
         const top = getSuggestions()[0] || composing;
         committedText = committedText.slice(0, cursorPos) + top + char + committedText.slice(cursorPos);
         cursorPos += top.length + char.length;
@@ -216,8 +252,8 @@ insert_old = '''      if (composing.length > 0) {
         committedText = committedText.slice(0, cursorPos) + char + committedText.slice(cursorPos);
         cursorPos += char.length;
       }'''
-insert_new = '''      if (composing.length > 0) {
-        const top = getSuggestions()[0] || composing;
+    insert_new = '''      if (composing.length > 0) {
+        const top = getSuggestions()[0] || (!isAvroMode ? composing : parseAvro(composing));
         committedText = committedText.slice(0, cursorPos) + top + char + committedText.slice(cursorPos);
         cursorPos += top.length + char.length;
         composing = "";
@@ -231,18 +267,19 @@ insert_new = '''      if (composing.length > 0) {
           window.AndroidKeyboard.commitText(char);
         }
       }'''
-text = text.replace(insert_old, insert_new, 1)
+    text = text.replace(insert_old, insert_new, 1)
 
-# Write keyboard_ime.html
-with open('native_android/TechuboardKeyboard/app/src/main/assets/keyboard_ime.html', 'w', encoding='utf-8') as f:
-    f.write(text)
+    # Write output
+    with open('native_android/TechuboardKeyboard/app/src/main/assets/keyboard_ime.html', 'w', encoding='utf-8') as f:
+        f.write(text)
 
-# Also ensure mobile.html in assets is 100% UNTOUCHED original copy for MainActivity
-with open('web_preview/mobile.html', 'r', encoding='utf-8') as f_orig:
-    orig_content = f_orig.read()
+    # Untouched copy of mobile.html for MainActivity
+    with open('web_preview/mobile.html', 'r', encoding='utf-8') as f_orig:
+        orig = f_orig.read()
+    with open('native_android/TechuboardKeyboard/app/src/main/assets/mobile.html', 'w', encoding='utf-8') as f_mob:
+        f_mob.write(orig)
 
-# In mobile.html, only hook the PWA/Settings click to open Android IME settings if in Android
-with open('native_android/TechuboardKeyboard/app/src/main/assets/mobile.html', 'w', encoding='utf-8') as f_mob:
-    f_mob.write(orig_content)
+    print("Successfully built keyboard_ime.html and synced mobile.html!")
 
-print('SUCCESS: Generated keyboard_ime.html and restored untouched mobile.html!')
+if __name__ == '__main__':
+    build()
