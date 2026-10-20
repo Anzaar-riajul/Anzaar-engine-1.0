@@ -3583,38 +3583,7 @@
         height: 40px;
       }
     }
-  
-    /* ========================================================================= */
-    /* ANDROID SYSTEM IME MODE (Full 100% Native Keyboard Inside WebView)        */
-    /* ========================================================================= */
-    body.ime-mode {
-      height: 100% !important;
-      height: 100vh !important;
-      width: 100vw !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      background: var(--kbd-bg, #0d1117) !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: flex-end !important;
-    }
-    body.ime-mode .app-header {
-      display: none !important;
-    }
-    body.ime-mode .main-canvas-area {
-      display: none !important;
-    }
-    body.ime-mode .techu-soft-keyboard {
-      width: 100% !important;
-      height: 100% !important;
-      border-top: none !important;
-      box-shadow: none !important;
-      position: relative !important;
-      bottom: 0 !important;
-    }
   </style>
-
 </head>
 <body>
 
@@ -4495,38 +4464,11 @@
   <div class="toast-pill" id="toastPill">Switched to TechuAvro</div>
 
   <script>
-    // Environment Detection: Check if loaded as Android System IME
-    const urlParams = new URLSearchParams(window.location.search);
-    const isImeMode = urlParams.get('env') === 'ime' || (typeof window.AndroidKeyboard !== 'undefined');
-    if (isImeMode) {
-      document.body.classList.add('ime-mode');
-    }
-
-    // Flawless Unicode Sanitizer (Eliminates broken ligatures & illegal hasantas)
-    function sanitizeBangla(txt) {
-      if (!txt) return '';
-      return txt
-        .replace(/\u0982\u09CD/g, '\u0982') // ং্ -> ং (fixes বাং্লা -> বাংলা)
-        .replace(/\u0981\u09CD/g, '\u0981') // ঁ্ -> ঁ
-        .replace(/\u0983\u09CD/g, '\u0983') // ঃ্ -> ঃ
-        .replace(/\u09CE\u09CD/g, '\u09CE') // ৎ্ -> ৎ
-        .replace(/\u09CD\u09CD+/g, '\u09CD') // clean double hasantas
-        .replace(/\u09CD([\u09BE\u09BF\u09C0\u09C1\u09C2\u09C3\u09C7\u09C8\u09CB\u09CC])/g, '$1'); // clean hasanta before vowel signs
-    }
-
-    window.resetComposingState = function() {
-      composing = '';
-      if (typeof renderSuggestionChips === 'function') renderSuggestionChips();
-    };
-
     // =========================================================================
     // 1. TACTILE HAPTIC & AUDIO FEEDBACK
     // =========================================================================
     let audioCtx = null;
     function triggerHapticFeedback() {
-      if (window.AndroidKeyboard && window.AndroidKeyboard.triggerHaptic) {
-        window.AndroidKeyboard.triggerHaptic();
-      }
       // 1. Haptic Vibration
       const hLevel = (typeof userSettings !== 'undefined' && userSettings.hapticLevel) ? userSettings.hapticLevel : 'light';
       if (hLevel !== 'off' && navigator.vibrate) {
@@ -4784,7 +4726,7 @@
         secondCarry = carry;
         carry = now;
       }
-      return sanitizeBangla(st.join(""));
+      return st.join("");
     }
 
     // =========================================================================
@@ -6167,7 +6109,7 @@
       }
     }
 
-    // Live View Sync (Safe Null Checked for IME Mode)
+    // Live View Sync
     function syncEditorView() {
       const beforeEl = document.getElementById('committedBefore');
       const afterEl = document.getElementById('committedAfter');
@@ -6178,26 +6120,26 @@
       const modeBadge = document.getElementById('headerModeBadge');
       const statusLayout = document.getElementById('statusLayoutName');
 
-      if (modeBadge) modeBadge.innerText = isAvroMode ? "TechuAvro" : "English";
-      if (statusLayout) statusLayout.innerText = isAvroMode ? "TechuAvro" : "English";
+      modeBadge.innerText = isAvroMode ? "TechuAvro" : "English";
+      statusLayout.innerText = isAvroMode ? "TechuAvro" : "English";
 
       const totalWords = committedText.trim() ? committedText.trim().split(/[\s,\।\.\?\!\n]+/).length : 0;
-      if (wordBadge) wordBadge.innerText = `${totalWords} ${totalWords === 1 ? 'word' : 'words'}`;
+      wordBadge.innerText = `${totalWords} ${totalWords === 1 ? 'word' : 'words'}`;
 
       if (!committedText && !composing) {
-        if (beforeEl) beforeEl.innerHTML = `<span class="placeholder-text">${isAvroMode ? 'TechuAvro: নিচে কীবোর্ডে টাইপ করুন...' : 'English: Type on keyboard below...'}</span>`;
-        if (afterEl) afterEl.innerText = "";
-        if (composingEl) composingEl.innerText = "";
-        if (rawTagEl) rawTagEl.innerText = "";
-        if (posBadgeEl) posBadgeEl.innerText = "Pos: 0";
+        beforeEl.innerHTML = `<span class="placeholder-text">${isAvroMode ? 'TechuAvro: নিচে কীবোর্ডে টাইপ করুন...' : 'English: Type on keyboard below...'}</span>`;
+        afterEl.innerText = "";
+        composingEl.innerText = "";
+        rawTagEl.innerText = "";
+        posBadgeEl.innerText = "Pos: 0";
         return;
       }
 
       // Render committed text before & after cursor
       const textBefore = committedText.slice(0, cursorPos);
       const textAfter = committedText.slice(cursorPos);
-      if (beforeEl) beforeEl.innerText = textBefore;
-      if (afterEl) afterEl.innerText = textAfter;
+      beforeEl.innerText = textBefore;
+      afterEl.innerText = textAfter;
 
       // Render active composing word with underline highlight
       if (composing) {
@@ -6208,18 +6150,18 @@
         } else {
           livePreview = composing;
         }
-        if (composingEl) composingEl.innerText = livePreview;
-        if (rawTagEl) rawTagEl.innerText = `(${composing})`;
+        composingEl.innerText = livePreview;
+        rawTagEl.innerText = `(${composing})`;
       } else {
-        if (composingEl) composingEl.innerText = "";
-        if (rawTagEl) rawTagEl.innerText = "";
+        composingEl.innerText = "";
+        rawTagEl.innerText = "";
       }
 
-      if (posBadgeEl) posBadgeEl.innerText = `Pos: ${cursorPos + (composing ? composing.length : 0)}`;
+      posBadgeEl.innerText = `Pos: ${cursorPos + (composing ? composing.length : 0)}`;
 
       // Scroll editor to bottom if cursor is at the end
       const box = document.getElementById('editorCanvasBox');
-      if (box) box.scrollTop = box.scrollHeight;
+      box.scrollTop = box.scrollHeight;
     }
 
     function renderSuggestionChips() {
@@ -6265,9 +6207,6 @@
         localStorage.setItem('techu_learned_words', JSON.stringify(userLearnedWords.slice(0, 50)));
       }
 
-      if (window.AndroidKeyboard) {
-        window.AndroidKeyboard.commitText(clean + " ");
-      }
       // Clear composing query
       composing = "";
 
@@ -6309,16 +6248,6 @@
       const c = isUpper ? char.toUpperCase() : char;
       composing += c;
 
-      if (window.AndroidKeyboard) {
-        if (!isAvroMode) {
-          window.AndroidKeyboard.commitText(c);
-        } else {
-          const sugs = getSuggestions();
-          const preview = sugs[0] || parseAvro(composing) || composing;
-          window.AndroidKeyboard.setComposingText(preview);
-        }
-      }
-
       // SMART AUTO-UNSHIFT: If shift was single-tapped (state 1), immediately return to lowercase!
       if (shiftState === 1) {
         shiftState = 0;
@@ -6345,28 +6274,11 @@
       // 1. If currently composing a word, delete last character from composing
       if (composing.length > 0) {
         composing = composing.slice(0, -1);
-        if (window.AndroidKeyboard) {
-          if (composing.length > 0) {
-            const sugs = getSuggestions();
-            const preview = sugs[0] || parseAvro(composing) || composing;
-            window.AndroidKeyboard.setComposingText(preview);
-          } else {
-            window.AndroidKeyboard.finishComposingText();
-            window.AndroidKeyboard.commitText("");
-          }
-        }
       } 
       // 2. If not composing, delete one character from committed text at cursor position!
       else if (cursorPos > 0) {
         committedText = committedText.slice(0, cursorPos - 1) + committedText.slice(cursorPos);
         cursorPos = Math.max(0, cursorPos - 1);
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.deleteSurroundingText(1, 0);
-        }
-      } else {
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.deleteSurroundingText(1, 0);
-        }
       }
 
       checkAutoCapCondition();
@@ -6442,9 +6354,6 @@
       else {
         committedText = committedText.slice(0, cursorPos) + " " + committedText.slice(cursorPos);
         cursorPos += 1;
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.commitText(" ");
-        }
         checkAutoCapCondition();
         renderSuggestionChips();
       }
@@ -6466,9 +6375,6 @@
         committedText = committedText.slice(0, cursorPos) + "\n" + committedText.slice(cursorPos);
         cursorPos += 1;
       }
-      if (window.AndroidKeyboard) {
-        window.AndroidKeyboard.sendEnter();
-      }
 
       checkAutoCapCondition();
       renderSuggestionChips();
@@ -6483,15 +6389,9 @@
         committedText = committedText.slice(0, cursorPos) + top + char + committedText.slice(cursorPos);
         cursorPos += top.length + char.length;
         composing = "";
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.commitText(top + char);
-        }
       } else {
         committedText = committedText.slice(0, cursorPos) + char + committedText.slice(cursorPos);
         cursorPos += char.length;
-        if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.commitText(char);
-        }
       }
 
       checkAutoCapCondition();

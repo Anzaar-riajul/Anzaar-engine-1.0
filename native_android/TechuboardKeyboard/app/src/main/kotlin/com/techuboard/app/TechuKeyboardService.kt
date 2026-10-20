@@ -26,7 +26,7 @@ import android.webkit.WebViewClient
 /**
  * TechuKeyboardService
  * 
- * 100% Exact Direct Implementation of the 10-Hour Designed Techuboard (mobile.html):
+ * 100% Exact Direct Implementation of the 10-Hour Designed Techuboard:
  * Directly hosts the custom HTML/CSS/JS keyboard in a hardware-accelerated WebView,
  * connecting every key, theme, emoji, learn guide, numpad, and gesture directly to Android's
  * InputConnection across all apps (WhatsApp, Facebook, Messenger, YouTube, etc.)
@@ -70,10 +70,13 @@ class TechuKeyboardService : InputMethodService() {
             // CRITICAL: Prevent WebView from stealing window focus from the target app!
             isFocusable = false
             isFocusableInTouchMode = false
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
 
             addJavascriptInterface(AndroidKeyboardBridge(this@TechuKeyboardService), "AndroidKeyboard")
             webViewClient = WebViewClient()
-            loadUrl("file:///android_asset/mobile.html?env=ime")
+            loadUrl("file:///android_asset/keyboard_ime.html")
         }
 
         webView = wv
@@ -101,6 +104,9 @@ class TechuKeyboardService : InputMethodService() {
     }
 
     class AndroidKeyboardBridge(private val service: TechuKeyboardService) {
+
+        @JavascriptInterface
+        fun isIme(): Boolean = true
 
         @JavascriptInterface
         fun commitText(text: String) {
