@@ -15,7 +15,7 @@ subprojects {
             "compileSdkVersion" to 34,
             "minSdkVersion" to 21,
             "targetSdkVersion" to 34,
-            "ndkVersion" to "27.0.12077973"
+            "ndkVersion" to "26.1.10909125"
         ))
     }
 }
@@ -42,7 +42,7 @@ subprojects {
                     "compileSdkVersion" to 34,
                     "minSdkVersion" to 21,
                     "targetSdkVersion" to 34,
-                    "ndkVersion" to "27.0.12077973"
+                    "ndkVersion" to "26.1.10909125"
                 ))
             }
 

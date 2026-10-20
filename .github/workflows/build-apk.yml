@@ -41,7 +41,7 @@ jobs:
         working-directory: techuboard_android
         env:
           TECHUBOARD_ALLOW_DEBUG_SIGNING: "1"
-        run: flutter build apk --release
+        run: flutter build apk --release -v
 
       - name: Rename APK for release
         run: cp techuboard_android/build/app/outputs/flutter-apk/app-release.apk Techuboard-Android-v1.0.apk

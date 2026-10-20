@@ -30,7 +30,6 @@ require(signingValues.all { it == null } || hasReleaseSigning) {
 android {
     namespace = "com.techuboard.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -69,8 +68,8 @@ android {
                 // Explicitly opted-in local smoke build; never use for distribution.
                 signingConfig = signingConfigs.getByName("debug")
             }
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
