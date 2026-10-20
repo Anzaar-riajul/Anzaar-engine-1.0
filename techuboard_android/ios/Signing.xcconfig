@@ -1,0 +1,4 @@
+// Shared defaults; host-specific team and App Group overrides stay untracked.
+TECHUBOARD_APP_GROUP = group.com.techuboard.ios
+TECHUBOARD_SHARE_BUNDLE_ID = com.techuboard.ios.ShareExtension
+#include? "Signing.local.xcconfig"

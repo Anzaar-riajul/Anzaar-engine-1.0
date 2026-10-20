@@ -1,0 +1,187 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Boot: restore LAN sync after reboot via BootReceiver → FGS → FlutterEngine. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Foreground service: keeps the Flutter process alive so SyncManager's
+         ServerSocket keeps accepting inbound handshakes while the Activity is
+         backgrounded. Without this, Android freezes the process network IO and
+         peers can no longer discover this device. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14 (API 34) requires declaring the specific FGS type. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- specialUse type: Android 15 enforces a 6h/24h quota on dataSync FGS,
+         which kills always-on LAN sync every few hours. specialUse is exempt
+         from that quota; keep DATA_SYNC for the API 29-33 fallback branch. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Timer widget: exact "time's up" alarm. Denied by default on 31+ when
+         targeting 33+; TimerWidgetProvider falls back to an inexact alarm. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Timer full-screen alert when the countdown finishes (alarm-style). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <application
+        android:label="Techuboard"
+        android:name=".TechuboardApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <service
+            android:name=".TechuboardNotificationListenerService"
+            android:label="Techuboard Notification Sync"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- TechuAvro Phonetic Keyboard with Clipboard Quick-Paste Bar -->
+        <service
+            android:name=".TechuKeyboardService"
+            android:label="TechuAvro Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
+        <!-- Holds process alive; on START_STICKY rebuild calls ensureEngine.
+             specialUse type avoids the Android 15 dataSync 6h/24h quota so the
+             long-lived TCP :5566 listener is not force-stopped every few hours.
+             dataSync is required by the API 29-33 branch of
+             startForegroundCompat: a type not declared here makes
+             startForeground throw IllegalArgumentException. -->
+        <service
+            android:name=".TechuboardSyncForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Persistent LAN peer-to-peer clipboard/notification sync listener (long-lived TCP :5566). The dataSync 6h/24h quota on Android 15 is incompatible with always-on sync." />
+        </service>
+
+        <!-- Boot restore when flutter.syncEnabled is true. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <!-- Restart the sync FGS after an app update, without waiting
+                     for a reboot or a manual launch. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Countdown timer home-screen widget (2x2). Clicks are dispatched
+             back via explicit PendingIntents; the running readout is a
+             launcher-side countdown Chronometer (no periodic updates). -->
+        <receiver
+            android:name=".TimerWidgetProvider"
+            android:exported="true"
+            android:label="@string/timer_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timer_widget_info" />
+        </receiver>
+
+        <!-- Drag-to-set panel opened by tapping the widget readout; plain
+             framework activity (no Flutter) so it opens instantly even after
+             process death. -->
+        <activity
+            android:name=".TimerSetupActivity"
+            android:exported="false"
+            android:theme="@style/TimerPanelTheme"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+
+        <!-- Full-screen alert for a finished countdown; launched by the
+             notification's full-screen intent (shows over the lock screen). -->
+        <activity
+            android:name=".TimerRingingActivity"
+            android:exported="false"
+            android:theme="@style/TimerPanelTheme"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
+        <!-- Overrides WorkManager's own type-less declaration. Its
+             SystemForegroundService hosts the "foreground" SyncGuardWorker; a
+             typed ForegroundInfo must be a subset of the type declared on this
+             element, and Android 16 (targetSdk 36) outright prohibits
+             startForeground with no type:
+             InvalidForegroundServiceTypeException: Starting FGS with type none
+             ... has been prohibited. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Brief foreground elevation for the periodic sync guard worker that re-asserts the LAN sync service (seconds, once per 15 min)." />
+        </service>
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

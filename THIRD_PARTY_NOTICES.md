@@ -1,39 +1,9 @@
 # Third-party provenance and licenses
 
-## macOS application: GNU GPL version 3
+## Ecosystem Licensing: 100% MIT
 
-The macOS application combines Clipy-authored MIT-licensed code with a modified
-port of [sw33tLie/macshot](https://github.com/sw33tLie/macshot). The combined
-macOS application is distributed under GNU GPL version 3; it is **not** an
-MIT-only application. The complete GPLv3 text is in `LICENSE.GPL-3.0`, both in
-this repository and in `ClipyClone.app/Contents/Resources/`. Clipy-authored
-code retains its MIT terms in `LICENSE`. The Android and Windows applications
-do not include this macshot port.
+The Techuboard codebase across all platforms (macOS, Android, Windows, and iOS) is distributed under the permissive **MIT License**. The legacy `macshot` screenshot engine (formerly under GNU GPL version 3) has been fully removed from the codebase. There are no copyleft or GPL obligations attached to Techuboard.
 
-The upstream reference is [macshot revision
-`baae5487e0c3fb46350c38a8052a81f00a8497d2`](https://github.com/sw33tLie/macshot/tree/baae5487e0c3fb46350c38a8052a81f00a8497d2),
-the latest upstream commit before Clipy's import commit
-`736ba8fd51e1703b3d89563404cbb7267a4a89c4`. At import, 77 of 85 files
-with matching relative paths had identical Git blobs; eight were locally
-adapted, and nine integration files were added. The original local checkout's
-Git HEAD was not retained, so this is the identified reference revision, not
-an assertion that every imported file was byte-for-byte identical. Its
-[`LICENSE`](https://github.com/sw33tLie/macshot/blob/baae5487e0c3fb46350c38a8052a81f00a8497d2/LICENSE)
-is GPLv3 and matches the bundled `LICENSE.GPL-3.0` exactly. Upstream authors
-recorded in Git history include sw33tLie, Maciej Chojnacki, anten-ka, fxzer,
-vo1x, Oleksandr Honcharov, PINKIIILQWQ, Ted G. Freitas, Tony Xu and
-lubabs770; their authorship is preserved by the upstream history.
-
-**Modification notice (2026-09-29):** Clipy adapted capture, annotation,
-recording, editing and related services into `clipy_macos/Sources/Screenshot/`.
-Changes include `ScreenshotSessionCoordinator`, app integration shims, Chinese
-localization, clipboard/history integration, the offline build configuration,
-and subsequent fixes recorded in this repository's Git history. Clipy does not
-claim authorship of the imported upstream code.
-
-The corresponding source for a release is this repository at that release's
-`vX.Y.Z` tag, including the screenshot sources, build scripts and notices.
-GitHub's release page provides source ZIP and tar archives at the tag.
 
 ## Other dependencies
 

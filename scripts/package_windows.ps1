@@ -6,13 +6,13 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $buildRoot = Join-Path $root "clipy_android/build/windows"
-$candidates = @(Get-ChildItem $buildRoot -Filter ClipyClone.exe -Recurse -File |
+$candidates = @(Get-ChildItem $buildRoot -Filter Techuboard.exe -Recurse -File |
   Where-Object { $_.Directory.Name -eq "Release" })
 if ($candidates.Count -ne 1) {
   throw "Expected one Windows Release executable; found $($candidates.Count)."
 }
 $bundle = $candidates[0].Directory.FullName
-foreach ($required in @("ClipyClone.exe", "flutter_windows.dll", "data/flutter_assets")) {
+foreach ($required in @("Techuboard.exe", "flutter_windows.dll", "data/flutter_assets")) {
   if (-not (Test-Path (Join-Path $bundle $required))) {
     throw "Missing Windows runtime item: $required"
   }
@@ -21,7 +21,7 @@ foreach ($required in @("ClipyClone.exe", "flutter_windows.dll", "data/flutter_a
 $output = Join-Path $root $OutputDirectory
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 $temporaryRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
-$stage = Join-Path $temporaryRoot "clipy-windows-package"
+$stage = Join-Path $temporaryRoot "techuboard-windows-package"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item (Join-Path $bundle "*") $stage -Recurse -Force
@@ -35,14 +35,14 @@ foreach ($dll in @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")) {
 Copy-Item (Join-Path $root "LICENSE") $stage
 Copy-Item (Join-Path $root "THIRD_PARTY_NOTICES.md") $stage
 
-$archive = Join-Path $output "ClipyClone-Windows-x64-v$Version.zip"
+$archive = Join-Path $output "Techuboard-Windows-x64-v$Version.zip"
 if (Test-Path $archive) { Remove-Item -Force $archive }
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal
 
-$verify = Join-Path $temporaryRoot "clipy-windows-verify"
+$verify = Join-Path $temporaryRoot "techuboard-windows-verify"
 if (Test-Path $verify) { Remove-Item -Recurse -Force $verify }
 Expand-Archive -Path $archive -DestinationPath $verify
-foreach ($required in @("ClipyClone.exe", "flutter_windows.dll", "data/flutter_assets", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "LICENSE", "THIRD_PARTY_NOTICES.md")) {
+foreach ($required in @("Techuboard.exe", "flutter_windows.dll", "data/flutter_assets", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "LICENSE", "THIRD_PARTY_NOTICES.md")) {
   if (-not (Test-Path (Join-Path $verify $required))) {
     throw "Archive verification failed: $required"
   }

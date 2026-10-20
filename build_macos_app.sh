@@ -7,7 +7,7 @@ source "${REPO_ROOT}/scripts/lib/build_common.sh"
 resolve_build_version
 
 MACOS_PROJECT_DIR="${REPO_ROOT}/clipy_macos"
-APP_NAME="ClipyClone"
+APP_NAME="Techuboard"
 APP_BUNDLE="${APP_NAME}.app"
 # Preserve the existing identifier: changing it invalidates existing TCC grants.
 BUNDLE_ID="${BUNDLE_ID:-com.yourdomain.ClipyClone}"
@@ -70,6 +70,8 @@ swiftc "${COMMON_RELAY_LINK_FLAGS[@]}" "${BUILD_DIR}/${APP_NAME}.o" -target "${M
 
 PLIST="${STAGED_APP}/Contents/Info.plist"
 cp "${MACOS_PROJECT_DIR}/Resources/Info.plist" "${PLIST}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleExecutable ${APP_NAME}" "${PLIST}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName ${APP_NAME}" "${PLIST}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "${PLIST}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" "${PLIST}"
@@ -85,7 +87,7 @@ for size in 16 32 128 256 512; do
   sips -z "${retina_size}" "${retina_size}" "${ICON_SOURCE}" --out "${ICONSET}/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "${ICONSET}" -o "${STAGED_APP}/Contents/Resources/AppIcon.icns"
-cp "${REPO_ROOT}/LICENSE" "${REPO_ROOT}/LICENSE.GPL-3.0" \
+cp "${REPO_ROOT}/LICENSE" \
    "${REPO_ROOT}/THIRD_PARTY_NOTICES.md" "${STAGED_APP}/Contents/Resources/"
 cp "${MACOS_PROJECT_DIR}/Resources/token-prices-seed.json" \
    "${MACOS_PROJECT_DIR}/Resources/token-prices-overrides.json" \
