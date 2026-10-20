@@ -4,16 +4,21 @@ import android.annotation.SuppressLint
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
@@ -25,14 +30,15 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
 
 /**
  * TechuKeyboardService
  * 
  * Directly hosts the exact 100% same-to-same Techuboard UI (keyboard_ime.html)
  * with all vector SVG tools, inner panels (Numpad, Emoji, Learn, Clipboard,
- * Themes, Cursor D-Pad, Settings), real-time Avro transliteration, and native
- * Android InputConnection integration.
+ * Themes, Cursor D-Pad, Settings), real-time Avro transliteration, native
+ * Android SpeechRecognizer voice typing, and Android InputConnection integration.
  */
 class TechuKeyboardService : InputMethodService() {
 
@@ -41,10 +47,13 @@ class TechuKeyboardService : InputMethodService() {
     private var audioManager: AudioManager? = null
     private var webView: WebView? = null
     private var rootContainer: FrameLayout? = null
+    private var speechRecognizer: SpeechRecognizer? = null
 
     var soundEnabled: Boolean = true
     var hapticEnabled: Boolean = true
     var currentImeAction: Int = EditorInfo.IME_ACTION_NONE
+    var isListeningVoice: Boolean = false
+    var voiceLanguage: String = "bn-BD"
 
     override fun onCreate() {
         super.onCreate()
@@ -76,7 +85,7 @@ class TechuKeyboardService : InputMethodService() {
             val screenHeightDp = dm.heightPixels / density
             ((screenHeightDp * 0.46f).coerceIn(160f, 190f) * density).toInt()
         } else {
-            (275 * density).toInt()
+            (285 * density).toInt()
         }
     }
 
@@ -189,6 +198,10 @@ class TechuKeyboardService : InputMethodService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {}
+        speechRecognizer = null
         webView?.destroy()
         webView = null
     }
@@ -211,6 +224,112 @@ class TechuKeyboardService : InputMethodService() {
         }
     }
 
+    fun toggleVoiceTyping() {
+        mainHandler.post {
+            if (isListeningVoice) {
+                stopVoiceTyping()
+            } else {
+                startVoiceTyping()
+            }
+        }
+    }
+
+    fun startVoiceTyping() {
+        mainHandler.post {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "ভয়েস টাইপিংয়ের জন্য মাইক্রোফোন পারমিশন দিন", Toast.LENGTH_LONG).show()
+                    val intent = Intent(this, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(intent)
+                    return@post
+                }
+            }
+
+            if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+                Toast.makeText(this, "ভয়েস রিকগনিশন ইঞ্জিন ইনস্টল নেই", Toast.LENGTH_SHORT).show()
+                return@post
+            }
+
+            try {
+                speechRecognizer?.destroy()
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+                    setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) {
+                            isListeningVoice = true
+                            webView?.evaluateJavascript("if (typeof updateVoiceUI === 'function') updateVoiceUI(true);", null)
+                            webView?.evaluateJavascript("if (typeof setVoiceStatus === 'function') setVoiceStatus('শুনছি... পরিষ্কারভাবে বলুন');", null)
+                        }
+
+                        override fun onBeginningOfSpeech() {}
+                        override fun onRmsChanged(rmsdB: Float) {}
+                        override fun onBufferReceived(buffer: ByteArray?) {}
+
+                        override fun onEndOfSpeech() {
+                            isListeningVoice = false
+                            webView?.evaluateJavascript("if (typeof updateVoiceUI === 'function') updateVoiceUI(false);", null)
+                        }
+
+                        override fun onError(error: Int) {
+                            isListeningVoice = false
+                            webView?.evaluateJavascript("if (typeof updateVoiceUI === 'function') updateVoiceUI(false);", null)
+                            val msg = when (error) {
+                                SpeechRecognizer.ERROR_NO_MATCH -> "কোনো কথা শনাক্ত করা যায়নি"
+                                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ইন্টারনেট সংযোগ চেক করুন"
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "মাইক্রোফোন অনুমতি প্রয়োজন"
+                                else -> "ভয়েস টাইপিং সমাপ্ত"
+                            }
+                            webView?.evaluateJavascript("if (typeof showToast === 'function') showToast('$msg');", null)
+                        }
+
+                        override fun onResults(results: Bundle?) {
+                            isListeningVoice = false
+                            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            if (!matches.isNullOrEmpty()) {
+                                val text = matches[0]
+                                currentInputConnection?.commitText("$text ", 1)
+                                webView?.evaluateJavascript("if (typeof showToast === 'function') showToast('✓ $text');", null)
+                            }
+                            webView?.evaluateJavascript("if (typeof updateVoiceUI === 'function') updateVoiceUI(false);", null)
+                        }
+
+                        override fun onPartialResults(partialResults: Bundle?) {
+                            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            if (!matches.isNullOrEmpty()) {
+                                val text = matches[0]
+                                webView?.evaluateJavascript("if (typeof setVoiceStatus === 'function') setVoiceStatus('$text', true);", null)
+                            }
+                        }
+
+                        override fun onEvent(eventType: Int, params: Bundle?) {}
+                    })
+                }
+
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, voiceLanguage)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                }
+                speechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                isListeningVoice = false
+                webView?.evaluateJavascript("if (typeof updateVoiceUI === 'function') updateVoiceUI(false);", null)
+            }
+        }
+    }
+
+    fun stopVoiceTyping() {
+        mainHandler.post {
+            isListeningVoice = false
+            try {
+                speechRecognizer?.stopListening()
+            } catch (_: Exception) {}
+            webView?.evaluateJavascript("if (typeof updateVoiceUI === 'function') updateVoiceUI(false);", null)
+        }
+    }
+
     class AndroidKeyboardBridge(private val service: TechuKeyboardService) {
 
         @JavascriptInterface
@@ -219,6 +338,21 @@ class TechuKeyboardService : InputMethodService() {
         @JavascriptInterface
         fun triggerHaptic() {
             service.triggerHapticClick()
+        }
+
+        @JavascriptInterface
+        fun toggleVoice() {
+            service.toggleVoiceTyping()
+        }
+
+        @JavascriptInterface
+        fun stopVoice() {
+            service.stopVoiceTyping()
+        }
+
+        @JavascriptInterface
+        fun setVoiceLang(lang: String) {
+            service.voiceLanguage = lang
         }
 
         @JavascriptInterface

@@ -2,6 +2,8 @@ package com.techuboard.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
@@ -36,6 +38,12 @@ class MainActivity : AppCompatActivity() {
         btnSelectKeyboard = findViewById(R.id.btnSelectKeyboard)
         txtStep2Status = findViewById(R.id.txtStep2Status)
         editTestTyping = findViewById(R.id.editTestTyping)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 101)
+            }
+        }
 
         val openSettingsAction = View.OnClickListener {
             val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {

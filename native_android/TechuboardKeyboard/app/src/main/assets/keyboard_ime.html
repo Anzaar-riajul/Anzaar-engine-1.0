@@ -7141,6 +7141,11 @@
     let voiceRestartTimer = null;
 
     function toggleVoiceInput() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard && window.AndroidKeyboard.toggleVoice) {
+        window.AndroidKeyboard.toggleVoice();
+        return;
+      }
       if (isVoiceActive) {
         stopVoiceInput();
       } else {
@@ -7151,6 +7156,9 @@
     function toggleVoiceLang() {
       triggerHapticFeedback();
       voiceLanguage = (voiceLanguage === 'bn-BD') ? 'en-US' : 'bn-BD';
+      if (window.AndroidKeyboard && window.AndroidKeyboard.setVoiceLang) {
+        window.AndroidKeyboard.setVoiceLang(voiceLanguage);
+      }
       const lbl = document.getElementById('voiceLangLabel');
       if (lbl) {
         lbl.textContent = (voiceLanguage === 'bn-BD') ? '🇧🇩 বাংলা' : '🇺🇸 English';
@@ -7424,6 +7432,9 @@
     }
 
     function stopVoiceInput() {
+      if (window.AndroidKeyboard && window.AndroidKeyboard.stopVoice) {
+        window.AndroidKeyboard.stopVoice();
+      }
       if (!isVoiceActive && !voiceRecognition) return;
       isVoiceActive = false;
       triggerHapticFeedback();

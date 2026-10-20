@@ -711,6 +711,46 @@ def build():
     text = text.replace('id="emojiSearchInput" placeholder=', 'id="emojiSearchInput" readonly placeholder=', 1)
     text = text.replace('id="learnSearchInput" placeholder=', 'id="learnSearchInput" readonly placeholder=', 1)
 
+    # 21. Real Android System Voice-To-Text Bridge
+    voice_toggle_old = '''    function toggleVoiceInput() {
+      if (isVoiceActive) {
+        stopVoiceInput();
+      } else {
+        startVoiceInput();
+      }
+    }'''
+    voice_toggle_new = '''    function toggleVoiceInput() {
+      triggerHapticFeedback();
+      if (window.AndroidKeyboard && window.AndroidKeyboard.toggleVoice) {
+        window.AndroidKeyboard.toggleVoice();
+        return;
+      }
+      if (isVoiceActive) {
+        stopVoiceInput();
+      } else {
+        startVoiceInput();
+      }
+    }'''
+    text = text.replace(voice_toggle_old, voice_toggle_new, 1)
+
+    voice_lang_old = '''    function toggleVoiceLang() {
+      triggerHapticFeedback();
+      voiceLanguage = (voiceLanguage === 'bn-BD') ? 'en-US' : 'bn-BD';'''
+    voice_lang_new = '''    function toggleVoiceLang() {
+      triggerHapticFeedback();
+      voiceLanguage = (voiceLanguage === 'bn-BD') ? 'en-US' : 'bn-BD';
+      if (window.AndroidKeyboard && window.AndroidKeyboard.setVoiceLang) {
+        window.AndroidKeyboard.setVoiceLang(voiceLanguage);
+      }'''
+    text = text.replace(voice_lang_old, voice_lang_new, 1)
+
+    voice_stop_old = '''    function stopVoiceInput() {'''
+    voice_stop_new = '''    function stopVoiceInput() {
+      if (window.AndroidKeyboard && window.AndroidKeyboard.stopVoice) {
+        window.AndroidKeyboard.stopVoice();
+      }'''
+    text = text.replace(voice_stop_old, voice_stop_new, 1)
+
     # Write output to keyboard_ime.html
     with open('native_android/TechuboardKeyboard/app/src/main/assets/keyboard_ime.html', 'w', encoding='utf-8') as f:
         f.write(text)
