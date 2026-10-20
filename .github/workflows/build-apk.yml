@@ -48,11 +48,11 @@ jobs:
       - name: Push Error Log to Repo on Failure
         if: failure()
         run: |
-          tail -n 120 /tmp/flutter_build.log > error_log.txt
+          tail -n 500 /tmp/flutter_build.log > error_log.txt
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add error_log.txt
-          git commit -m "ci: capture exact build failure log" || true
+          git commit -m "ci: capture exact build failure log (500 lines)" || true
           git push || true
 
       - name: Rename APK for release
