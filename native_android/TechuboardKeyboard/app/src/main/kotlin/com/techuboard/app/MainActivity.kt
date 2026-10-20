@@ -1,5 +1,6 @@
 package com.techuboard.app
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -7,196 +8,121 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
-import android.view.Gravity
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.EditText
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * MainActivity: Techuboard Mobile Studio & Setup
+ * MainActivity: Techuboard Mobile Studio & Onboarding
  * 
- * Provides:
- * - 2-step setup: 1. Enable in Settings, 2. Select Techuboard
- * - Live Interactive Typing Test Box with real Android EditText
- * - Live Theme Picker (All 8 themes instantly selectable and saved)
+ * Top bar provides 2 quick action buttons:
+ * 1. কীবোর্ড সক্রিয় করুন (Enable in Settings)
+ * 2. Techuboard নির্বাচন করুন (Select Input Method)
+ * 
+ * Below the buttons, directly loads the complete 10-hour designed Techuboard Studio (mobile.html)
+ * allowing full access to the interactive editor, theme picker, learn guide, and typing preview!
  */
 class MainActivity : AppCompatActivity() {
 
-    private val allThemes = listOf(
-        Pair("Dark Titanium", "#121417"),
-        Pair("Pure AMOLED", "#000000"),
-        Pair("Cyberpunk Cyan", "#041218"),
-        Pair("Forest Emerald", "#09140E"),
-        Pair("Sunset Rose", "#14090E"),
-        Pair("Pacific Blue", "#08101A"),
-        Pair("Solar Amber", "#141008"),
-        Pair("Midnight Indigo", "#080913")
-    )
-    private val themeIds = listOf("dark", "amoled", "cyber", "emerald", "rose", "ocean", "solar", "midnight")
+    private var webView: WebView? = null
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#121417"))
-            isFillViewport = true
-        }
-
-        val layout = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(36), dp(20), dp(36))
+            setBackgroundColor(Color.parseColor("#121417"))
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         }
 
-        // Title Header
-        val title = TextView(this).apply {
-            text = "Techuboard"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        }
-        val subtitle = TextView(this).apply {
-            text = "বাংলা ও ইংরেজি ফোনেটিক কীবোর্ড স্টুডিও"
-            textSize = 14f
-            setTextColor(Color.parseColor("#00E5FF"))
-            gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(24))
+        // Top Action Bar with 2 Buttons
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(Color.parseColor("#161B22"))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
 
-        // Step 1: Enable
-        val btnEnable = createActionButton("১. কীবোর্ড সক্রিয় করুন (Enable in Settings)", Color.parseColor("#238636")) {
+        val btnEnable = createActionButton("১. কীবোর্ড সক্রিয় করুন", Color.parseColor("#238636")) {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
         }
 
-        // Step 2: Select
-        val btnSelect = createActionButton("২. Techuboard নির্বাচন করুন (Select Input Method)", Color.parseColor("#1F6FEB")) {
+        val btnSelect = createActionButton("২. Techuboard নির্বাচন করুন", Color.parseColor("#1F6FEB")) {
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showInputMethodPicker()
         }
 
-        // Step 3: Live Test Box
-        val testLabel = TextView(this).apply {
-            text = "৩. লাইভ টাইপিং টেস্ট এরিয়া:"
-            textSize = 14f
-            setTextColor(Color.parseColor("#8B949E"))
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(28), 0, dp(8))
-        }
+        topBar.addView(btnEnable)
+        topBar.addView(createSpacer(8))
+        topBar.addView(btnSelect)
+        root.addView(topBar)
 
-        val testInput = EditText(this).apply {
-            hint = "এখানে লিখুন (যেমন: ami bangla bhalobashi)..."
-            setHintTextColor(Color.parseColor("#57606A"))
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setPadding(dp(16), dp(16), dp(16), dp(16))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#181D24"))
-                cornerRadius = dp(10).toFloat()
-                setStroke(1, Color.parseColor("#30363D"))
-            }
-        }
+        // Direct Full Studio WebView
+        val wv = WebView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            setBackgroundColor(Color.parseColor("#0d1117"))
 
-        // Step 4: Theme Picker Header
-        val themeLabel = TextView(this).apply {
-            text = "৪. পছন্দের থিম বেছে নিন (৮টি ইউনিক থিম):"
-            textSize = 14f
-            setTextColor(Color.parseColor("#8B949E"))
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(24), 0, dp(10))
-        }
-
-        val themeScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-        }
-        val themeLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-
-        val prefs = getSharedPreferences("techuboard_prefs", Context.MODE_PRIVATE)
-        val savedThemeId = prefs.getString("theme_id", "dark") ?: "dark"
-
-        for (i in allThemes.indices) {
-            val (name, bgHex) = allThemes[i]
-            val id = themeIds[i]
-            val isSelected = (id == savedThemeId)
-
-            val themeCard = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(14), dp(10), dp(14), dp(10))
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor(bgHex))
-                    cornerRadius = dp(8).toFloat()
-                    setStroke(if (isSelected) 2 else 1, if (isSelected) Color.parseColor("#00E5FF") else Color.parseColor("#30363D"))
-                }
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(0, 0, dp(8), 0) }
-                setOnClickListener {
-                    prefs.edit().putString("theme_id", id).apply()
-                    android.widget.Toast.makeText(this@MainActivity, "$name থিম নির্বাচিত হয়েছে", android.widget.Toast.LENGTH_SHORT).show()
-                    recreate()
-                }
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                allowFileAccess = true
+                setSupportZoom(false)
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                cacheMode = WebSettings.LOAD_DEFAULT
             }
 
-            val cardTitle = TextView(this).apply {
-                text = name
-                textSize = 13f
-                setTextColor(Color.WHITE)
-                typeface = if (isSelected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            }
-            themeCard.addView(cardTitle)
-
-            if (isSelected) {
-                val checkTv = TextView(this).apply {
-                    text = "✓ সক্রিয়"
-                    textSize = 11f
-                    setTextColor(Color.parseColor("#00E5FF"))
-                }
-                themeCard.addView(checkTv)
-            }
-            themeLayout.addView(themeCard)
+            addJavascriptInterface(MainBridge(this@MainActivity), "AndroidKeyboard")
+            webViewClient = WebViewClient()
+            loadUrl("file:///android_asset/mobile.html")
         }
-        themeScroll.addView(themeLayout)
 
-        layout.addView(title)
-        layout.addView(subtitle)
-        layout.addView(btnEnable)
-        layout.addView(createSpacer(12))
-        layout.addView(btnSelect)
-        layout.addView(testLabel)
-        layout.addView(testInput)
-        layout.addView(themeLabel)
-        layout.addView(themeScroll)
+        webView = wv
+        root.addView(wv)
 
-        scroll.addView(layout)
-        setContentView(scroll)
+        setContentView(root)
+    }
+
+    override fun onBackPressed() {
+        val wv = webView
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack()
+        } else {
+            super.onBackPressed()
+        }
     }
 
     private fun createActionButton(label: String, bgColor: Int, onClick: () -> Unit): Button {
         return Button(this).apply {
             text = label
             setTextColor(Color.WHITE)
-            textSize = 14.5f
+            textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             background = GradientDrawable().apply {
                 setColor(bgColor)
-                cornerRadius = dp(10).toFloat()
+                cornerRadius = dp(6).toFloat()
             }
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             setOnClickListener { onClick() }
         }
     }
@@ -204,13 +130,34 @@ class MainActivity : AppCompatActivity() {
     private fun createSpacer(dp: Int): LinearLayout {
         return LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(dp)
+                dp(dp),
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
     }
 
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
+    }
+
+    class MainBridge(private val activity: MainActivity) {
+
+        @JavascriptInterface
+        fun openInputMethodSettings() {
+            activity.runOnUiThread {
+                activity.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+            }
+        }
+
+        @JavascriptInterface
+        fun showInputMethodPicker() {
+            activity.runOnUiThread {
+                val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showInputMethodPicker()
+            }
+        }
+
+        @JavascriptInterface
+        fun triggerHaptic() {}
     }
 }
