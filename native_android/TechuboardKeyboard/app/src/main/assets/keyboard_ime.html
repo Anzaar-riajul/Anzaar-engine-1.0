@@ -3817,7 +3817,7 @@
       <div class="kbd-tool-panel" id="toolPanel_emoji">
         <!-- Optional Search Bar (Toggled with 🔍) -->
         <div class="emoji-search-bar" id="emojiSearchBar" style="display:none;">
-          <input type="text" id="emojiSearchInput" placeholder="ইমোজি বা চিহ্ন খুঁজুন (love, smile, bd)..." oninput="onEmojiSearchInput(this.value)" autocomplete="off">
+          <input type="text" id="emojiSearchInput" readonly placeholder="ইমোজি বা চিহ্ন খুঁজুন (love, smile, bd)..." oninput="onEmojiSearchInput(this.value)" autocomplete="off">
           <button class="emoji-search-clear" onclick="clearEmojiSearch()">✕</button>
         </div>
 
@@ -3878,7 +3878,7 @@
         <div class="learn-deck-search-row">
           <div class="learn-deck-search-box">
             <span class="learn-deck-search-icon">🔍</span>
-            <input type="text" id="learnSearchInput" placeholder="যুক্তবর্ণ বা ইংরেজি বানান খুঁজুন (যেমন kkh, kno, sh)..." oninput="onLearnSearchInput(this.value)" autocomplete="off">
+            <input type="text" id="learnSearchInput" readonly placeholder="যুক্তবর্ণ বা ইংরেজি বানান খুঁজুন (যেমন kkh, kno, sh)..." oninput="onLearnSearchInput(this.value)" autocomplete="off">
             <button id="learnSearchClear" onclick="clearLearnSearch()" class="learn-deck-clear-btn">✕</button>
           </div>
           <span id="learnCountPill" class="learn-deck-count-pill">150 টি</span>
