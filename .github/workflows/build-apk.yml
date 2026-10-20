@@ -10,15 +10,13 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build Techuboard APK
+    name: Build Pure Native Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -26,59 +24,56 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter (Latest Stable)
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Verify Flutter & Dart Version
-        run: flutter --version
-
-      - name: Install dependencies
-        working-directory: techuboard_android
-        run: flutter pub get
-
-      - name: Build Release APK
-        working-directory: techuboard_android
+      - name: Build Native Android APK with Gradle
+        working-directory: native_android/TechuboardKeyboard
         run: |
-          set -o pipefail
-          flutter build apk --release --android-skip-build-dependency-validation -v 2>&1 | tee /tmp/flutter_build.log
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Push Error Log to Repo on Failure
-        if: failure()
+      - name: Locate and Prepare Release APK
         run: |
-          tail -n 500 /tmp/flutter_build.log > error_log.txt
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add error_log.txt
-          git commit -m "ci: capture exact build failure log (500 lines)" || true
-          git push || true
-
-      - name: Rename APK for release
-        run: cp techuboard_android/build/app/outputs/flutter-apk/app-release.apk Techuboard-Android-v1.0.apk
+          mkdir -p dist
+          APK_PATH=$(find native_android/TechuboardKeyboard/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: Release APK not found!"
+            find native_android/TechuboardKeyboard/app/build -maxdepth 5
+            exit 1
+          fi
+          echo "Found APK at: $APK_PATH"
+          cp "$APK_PATH" dist/Techuboard-Android-v1.0.apk
+          ls -lh dist/Techuboard-Android-v1.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Techuboard-Android-v1.0
-          path: Techuboard-Android-v1.0.apk
+          path: dist/Techuboard-Android-v1.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         with:
-          tag_name: v1.0-${{ github.run_number }}
-          name: Techuboard Android v1.0 (Build ${{ github.run_number }})
+          tag_name: native-v1.0-${{ github.run_number }}
+          name: Techuboard Native Android v1.0 (Build ${{ github.run_number }})
           body: |
-            ## Techuboard Android System-Wide Keyboard APK
-            - **TechuAvro Phonetic Keyboard** with instant transliteration
-            - **Native InputMethodService** integration
-            - **Voice-to-Text** and **D-Pad Cursor Console**
-            
-            Download `Techuboard-Android-v1.0.apk` below and install directly onto your Android device!
+            ## 🎉 Techuboard Pure Native Android Keyboard APK
+
+            ### 🚀 Features:
+            - **100% Pure Native Kotlin IME**: Fast, lightweight, zero-bloat.
+            - **TechuAvro Phonetic Engine**: Instant Avro transliteration into Bengali script.
+            - **Instant Toggle**: Seamless 1-tap switch between TechuAvro and English modes.
+            - **Integrated Clipboard Bar**: 1-tap pasting directly from the keyboard candidate bar.
+            - **Spacebar Cursor Control**: Swipe left/right across the spacebar to glide the cursor precisely.
+            - **Modern Dark UI**: Designed for Android 7.0 to Android 14+.
+
+            ### 📲 Quick Install Guide:
+            1. Download `Techuboard-Android-v1.0.apk` below and install it on your Android phone.
+            2. Open the Techuboard app and tap **"১. কীবোর্ড সক্রিয় করুন (Enable in Settings)"**.
+            3. Tap **"২. Techuboard নির্বাচন করুন (Select Input Method)"** and choose Techuboard.
+            4. Type anywhere in WhatsApp, Messenger, Facebook, Chrome, etc.!
           files: |
-            Techuboard-Android-v1.0.apk
+            dist/Techuboard-Android-v1.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
