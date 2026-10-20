@@ -3585,7 +3585,7 @@
     }
   
     /* ========================================================================= */
-    /* 100% FULL-FIT ANDROID SOFT KEYBOARD IME CONTAINER                        */
+    /* WORLD-CLASS 100% FULL-FIT ANDROID SOFT KEYBOARD IME CONTAINER            */
     /* ========================================================================= */
     html, body {
       width: 100% !important;
@@ -3621,7 +3621,7 @@
       display: flex !important;
       flex-direction: column !important;
       justify-content: space-between !important;
-      padding: 3px 3px 4px 3px !important;
+      padding: 2px 3px 3px 3px !important;
       box-sizing: border-box !important;
     }
     .kbd-key-row {
@@ -3629,13 +3629,17 @@
       display: flex !important;
       justify-content: center !important;
       gap: 3.5px !important;
-      margin-bottom: 3.5px !important;
+      margin-bottom: 3px !important;
     }
     .kbd-key-row:last-child {
       margin-bottom: 0 !important;
     }
     .k-key {
       height: 100% !important;
+    }
+    .k-key.enter-key {
+      font-weight: 700 !important;
+      font-size: 15px !important;
     }
   </style>
 
@@ -4512,10 +4516,67 @@
         .replace(/\u09CD([\u09BE\u09BF\u09C0\u09C1\u09C2\u09C3\u09C7\u09C8\u09CB\u09CC])/g, '$1'); // clean hasanta before vowel signs
     }
 
+    window.isPasswordField = false;
+    window.currentImeAction = 0;
+    window.activeInternalSearch = null;
+
     window.resetComposingState = function() {
       composing = '';
       if (typeof renderSuggestionChips === 'function') renderSuggestionChips();
     };
+
+    window.onExternalSelectionChanged = function(selStart, selEnd) {
+      if (composing.length > 0) {
+        composing = '';
+        if (typeof renderSuggestionChips === 'function') renderSuggestionChips();
+      }
+    };
+
+    window.onEditorStateChanged = function(state) {
+      window.isPasswordField = !!state.isPassword;
+      window.currentImeAction = state.imeAction || 0;
+
+      // Auto numpad for numeric or phone fields
+      if (state.isNumeric) {
+        if (typeof openKbdTool === 'function' && activeKbdToolName !== 'numpad') {
+          openKbdTool('numpad');
+        }
+      } else if (activeKbdToolName === 'numpad') {
+        if (typeof closeKbdTools === 'function') closeKbdTools();
+      }
+
+      // Dynamic Enter key label/icon matching IME action
+      const enterBtns = document.querySelectorAll('.k-key.enter-key, [onclick*="pressEnterNewline"]');
+      enterBtns.forEach(btn => {
+        if (state.imeAction === 3) { // IME_ACTION_SEARCH
+          btn.innerHTML = '<span style="font-size:18px;">🔍</span>';
+        } else if (state.imeAction === 4) { // IME_ACTION_SEND
+          btn.innerHTML = '<span style="font-size:18px;">➤</span>';
+        } else if (state.imeAction === 2) { // IME_ACTION_GO
+          btn.innerHTML = '<span style="font-size:18px;">➔</span>';
+        } else if (state.imeAction === 6) { // IME_ACTION_DONE
+          btn.innerHTML = '<span style="font-size:18px;">✓</span>';
+        } else if (state.imeAction === 5) { // IME_ACTION_NEXT
+          btn.innerHTML = '<span style="font-size:18px;">➜</span>';
+        } else {
+          btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>';
+        }
+      });
+    };
+
+    // Attach in-keyboard search routing
+    document.addEventListener('DOMContentLoaded', () => {
+      const emSearch = document.getElementById('emojiSearchInput');
+      const lnSearch = document.getElementById('learnSearchInput');
+      if (emSearch) {
+        emSearch.addEventListener('focus', () => { window.activeInternalSearch = emSearch; });
+        emSearch.addEventListener('blur', () => { if (window.activeInternalSearch === emSearch) window.activeInternalSearch = null; });
+      }
+      if (lnSearch) {
+        lnSearch.addEventListener('focus', () => { window.activeInternalSearch = lnSearch; });
+        lnSearch.addEventListener('blur', () => { if (window.activeInternalSearch === lnSearch) window.activeInternalSearch = null; });
+      }
+    });
 
     // =========================================================================
     // 1. TACTILE HAPTIC & AUDIO FEEDBACK
@@ -5592,6 +5653,9 @@
     // 1. SMART HIERARCHICAL UNDO (WORD & SENTENCE-WISE)
     function executeSmartUndo() {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performUndo();
+      }
 
       // Case A: If currently typing a word (composing query active)
       if (composing.length > 0) {
@@ -5702,6 +5766,9 @@
     // 2. SMART HIERARCHICAL REDO (WORD & SENTENCE-WISE)
     function executeSmartRedo() {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performRedo();
+      }
       if (redoHistory.length === 0) {
         showToast("আর কোনো Redo নেই (No more Redo)");
         return false;
@@ -6257,8 +6324,8 @@
       committedText = committedText.slice(0, cursorPos) + clean + " " + committedText.slice(cursorPos);
       cursorPos += clean.length + 1;
 
-      // Learn word into personal dictionary
-      if (!userLearnedWords.includes(clean) && clean.length > 1) {
+      // Learn word into personal dictionary (strictly bypassed in password fields!)
+      if (!window.isPasswordField && !userLearnedWords.includes(clean) && clean.length > 1) {
         userLearnedWords.unshift(clean);
         localStorage.setItem('techu_learned_words', JSON.stringify(userLearnedWords.slice(0, 50)));
       }
@@ -6305,6 +6372,20 @@
 
       const isUpper = (shiftState > 0);
       const c = isUpper ? char.toUpperCase() : char;
+
+      if (window.activeInternalSearch) {
+        window.activeInternalSearch.value += c;
+        window.activeInternalSearch.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (window.isPasswordField) {
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.commitText(c);
+        }
+        return;
+      }
+
       composing += c;
 
       if (window.AndroidKeyboard) {
@@ -6340,6 +6421,12 @@
 
       pushUndoSnapshot();
 
+      if (window.activeInternalSearch) {
+        window.activeInternalSearch.value = window.activeInternalSearch.value.slice(0, -1);
+        window.activeInternalSearch.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
       // 1. If currently composing a word, delete last character from composing
       if (composing.length > 0) {
         composing = composing.slice(0, -1);
@@ -6348,8 +6435,7 @@
             const preview = !isAvroMode ? composing : (getSuggestions()[0] || parseAvro(composing) || composing);
             window.AndroidKeyboard.setComposingText(preview);
           } else {
-            window.AndroidKeyboard.finishComposingText();
-            window.AndroidKeyboard.commitText("");
+            window.AndroidKeyboard.clearComposingText();
           }
         }
       } 
@@ -6410,18 +6496,22 @@
     function pressSpace() {
       const now = Date.now();
       // Double space -> Period / Dāri
-      if (typeof userSettings !== 'undefined' && userSettings.doubleSpacePeriod && (now - lastSpaceTapTime < 450) && composing.length === 0 && cursorPos > 0) {
-        if (committedText[cursorPos - 1] === ' ') {
-          pushUndoSnapshot(true);
-          const punct = isAvroMode ? '। ' : '. ';
+      if (typeof userSettings !== 'undefined' && userSettings.doubleSpacePeriod && (now - lastSpaceTapTime < 450) && composing.length === 0) {
+        pushUndoSnapshot(true);
+        const punct = isAvroMode ? '। ' : '. ';
+        if (cursorPos > 0 && committedText[cursorPos - 1] === ' ') {
           committedText = committedText.slice(0, cursorPos - 1) + punct + committedText.slice(cursorPos);
           cursorPos = cursorPos - 1 + punct.length;
-          lastSpaceTapTime = 0;
-          triggerHapticFeedback();
-          checkAutoCapCondition();
-          renderSuggestionChips();
-          return;
         }
+        lastSpaceTapTime = 0;
+        triggerHapticFeedback();
+        if (window.AndroidKeyboard) {
+          window.AndroidKeyboard.deleteSurroundingText(1, 0);
+          window.AndroidKeyboard.commitText(punct);
+        }
+        checkAutoCapCondition();
+        renderSuggestionChips();
+        return;
       }
       lastSpaceTapTime = now;
       triggerHapticFeedback();
@@ -6445,12 +6535,12 @@
       }
     }
 
-    // Enter Key: INSERTS NEWLINE (\n) - NEVER SENDS OR CLEARS!
+    // Enter Key: Intelligent Android Action & Newline Dispatcher
     function pressEnterNewline() {
       triggerHapticFeedback();
       pushUndoSnapshot(true);
 
-      // If composing, commit first
+      // If composing, commit first then trigger action
       if (composing.length > 0) {
         const candidates = getSuggestions();
         const top = candidates[0] || (isAvroMode ? parseAvro(composing) : composing);
@@ -6458,7 +6548,8 @@
         cursorPos += top.length + 1;
         composing = "";
         if (window.AndroidKeyboard) {
-          window.AndroidKeyboard.commitText(top + "\n");
+          window.AndroidKeyboard.commitText(top);
+          window.AndroidKeyboard.sendEnter();
         }
       } else {
         committedText = committedText.slice(0, cursorPos) + "\n" + committedText.slice(cursorPos);
@@ -6498,6 +6589,10 @@
 
     function clearAllText() {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performSelectAll();
+        window.AndroidKeyboard.deleteSurroundingText(1, 0);
+      }
       composing = "";
       committedText = "";
       cursorPos = 0;
@@ -7580,6 +7675,14 @@
           setTimeout(() => {
             hide3dKeyPopup();
             btn.classList.remove('long-pressed');
+            if (window.AndroidKeyboard) {
+              if (actionType === 'undo' || actionType === 'all_undo') window.AndroidKeyboard.performUndo();
+              else if (actionType === 'redo' || actionType === 'all_redo') window.AndroidKeyboard.performRedo();
+              else if (actionType === 'cut' || actionType === 'all_cut') window.AndroidKeyboard.performCut();
+              else if (actionType === 'copy' || actionType === 'all_copy') window.AndroidKeyboard.performCopy();
+              else if (actionType === 'paste' || actionType === 'all_paste') window.AndroidKeyboard.performPaste();
+              return;
+            }
             if (actionType === 'undo' || actionType === 'all_undo') executeAllUndo();
             else if (actionType === 'redo' || actionType === 'all_redo') executeSmartRedo();
             else if (actionType === 'bold' || actionType === 'all_bold') executeSmartBold();
@@ -8418,6 +8521,20 @@
       const listEl = document.getElementById('clipPanelList');
       if (!listEl) return;
 
+      // Real-time synchronization from Android System Clipboard
+      if (window.AndroidKeyboard && window.AndroidKeyboard.getClipboard) {
+        try {
+          const sysClip = window.AndroidKeyboard.getClipboard();
+          if (sysClip && sysClip.trim().length > 0) {
+            let clips = getStoredClips();
+            if (!clips.some(c => c.text === sysClip)) {
+              clips.unshift({ text: sysClip, pinned: false, time: Date.now() });
+              saveStoredClips(clips.slice(0, 30));
+            }
+          }
+        } catch (_) {}
+      }
+
       const allClips = getStoredClips();
       let displayedClips = allClips;
       if (currentClipFilter === 'pinned') {
@@ -8611,6 +8728,9 @@
 
     function moveCursorLine(dir) {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursorLine(dir);
+      }
       if (!committedText) return;
       const lines = committedText.split('\n');
       let currentLineIdx = 0;
@@ -8646,6 +8766,9 @@
 
     function jumpWordCursor(dir) {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.moveCursorWord(dir);
+      }
       if (dir === -1) {
         let pos = cursorPos - 1;
         while (pos > 0 && /\s/.test(committedText[pos])) pos--;
@@ -8663,6 +8786,11 @@
 
     function executeCursorCopy() {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performCopy();
+        showToast("কপি সম্পন্ন 📋");
+        return;
+      }
       const txt = committedText;
       if (!txt) {
         showToast("কপি করার মতো টেক্সট নেই");
@@ -8678,6 +8806,11 @@
 
     function executeCursorCut() {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performCut();
+        showToast("কাট সম্পন্ন ✂️");
+        return;
+      }
       const txt = committedText;
       if (!txt) {
         showToast("কাট করার মতো টেক্সট নেই");
@@ -8696,6 +8829,11 @@
 
     function executeCursorPaste() {
       triggerHapticFeedback();
+      if (window.AndroidKeyboard) {
+        window.AndroidKeyboard.performPaste();
+        showToast("পেস্ট সম্পন্ন 📥");
+        return;
+      }
       if (navigator.clipboard && navigator.clipboard.readText) {
         navigator.clipboard.readText().then(text => {
           if (!text) {
@@ -8809,6 +8947,9 @@
 
     // 7. SETTINGS & DYNAMIC CUSTOMIZATION CONTROLLER
     function applyUserSettings() {
+      if (window.AndroidKeyboard && window.AndroidKeyboard.setAudioHapticsEnabled && typeof userSettings !== 'undefined') {
+        window.AndroidKeyboard.setAudioHapticsEnabled(!!userSettings.soundEnabled, !!userSettings.hapticsEnabled);
+      }
       const heights = {
         compact: { key: '36px', deck: '210px', font: '15.5px', sub: '9px' },
         normal:  { key: '42px', deck: '242px', font: '17.5px', sub: '9.5px' },

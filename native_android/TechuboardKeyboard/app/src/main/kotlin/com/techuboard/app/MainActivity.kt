@@ -60,6 +60,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.cardStep2).setOnClickListener {
             selectKeyboardAction.onClick(it)
         }
+
+        editTestTyping.setOnClickListener {
+            editTestTyping.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showSoftInput(editTestTyping, InputMethodManager.SHOW_IMPLICIT)
+        }
     }
 
     override fun onResume() {
