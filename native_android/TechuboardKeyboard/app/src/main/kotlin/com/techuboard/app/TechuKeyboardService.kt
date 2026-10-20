@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -24,18 +25,35 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * Techuboard 100% Pure Native Android System Keyboard (IME).
- * Features:
- * - Exact dark modern styling matching the user's design.
- * - Full Avro phonetic engine (ami -> আমি, bangla -> বাংলা) with sanitizeBangla Unicode filter.
- * - Spacebar Swipe to toggle between বাংলা and English!
- * - Dedicated language toggle key (বাং / ENG) on bottom row.
- * - Secondary superscript characters on all keys (1-0, @#$, hold for symbols/actions).
- * - Top Tools & Suggestions strip with Cyan grid toggle, Numpad, Emoji, Clipboard, Cursor D-Pad, Mic.
- * - Native 60fps performance across WhatsApp, Facebook, Messenger, Chrome, etc.
+ * KbdTheme: Complete Color & Design Palette for Techuboard 8 Distinct Themes
+ */
+data class KbdTheme(
+    val id: String,
+    val name: String,
+    val bgHex: String,
+    val surfaceHex: String,
+    val keyBgHex: String,
+    val keyBorderHex: String,
+    val accentHex: String,
+    val textHex: String,
+    val subTextHex: String
+)
+
+/**
+ * TechuKeyboardService
+ * 
+ * 100% Pure Native Android System Keyboard (IME) faithfully reproducing the complete
+ * 10-hour designed Techuboard mobile experience:
+ * - 8 Themes (Dark Titanium, Pure AMOLED, Cyberpunk Cyan, Forest Emerald, Sunset Rose, Pacific Blue, Solar Amber, Midnight Indigo)
+ * - Complete Tools Deck (Numpad with Bengali digits ১২৩, Emoji with 7 categories, Juktoborno Guide, Clipboard, Precision Cursor D-Pad, Themes, Settings)
+ * - Top Tools Strip with Pinned Mic and Dynamic Suggestion Chips
+ * - Dedicated বাং / ENG Language Toggle & Spacebar Swipe (‹ বাংলা › / ‹ English ›)
+ * - QWERTY Rows with Superscript Numerals and Action Keys (Undo, Cut, Copy, Paste, Bold, Redo)
+ * - Sanitized Avro Phonetic Engine (Unbroken, flawless Bengali ligatures)
  */
 class TechuKeyboardService : InputMethodService() {
 
@@ -43,13 +61,33 @@ class TechuKeyboardService : InputMethodService() {
     private lateinit var suggestionManager: TechuSuggestionManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private var vibrator: Vibrator? = null
+    private var audioManager: AudioManager? = null
 
+    // Keyboard State
     private var isAvroMode = true
     private var shiftState = 0 // 0 = lower, 1 = shifted, 2 = caps lock
     private val composing = StringBuilder()
     private var currentSuggestions = listOf<String>()
+    private var isBanglaNumerals = false
 
-    // UI Containers
+    // Settings
+    private var hapticLevel = "light" // "off", "light", "medium", "strong"
+    private var soundEnabled = true
+
+    // Themes
+    private val allThemes = listOf(
+        KbdTheme("dark", "Dark Titanium", "#121417", "#181D24", "#1E242C", "#2D333B", "#00E5FF", "#FFFFFF", "#8B949E"),
+        KbdTheme("amoled", "Pure AMOLED", "#000000", "#0A0A0A", "#121212", "#222222", "#00E5FF", "#FFFFFF", "#777777"),
+        KbdTheme("cyber", "Cyberpunk Cyan", "#041218", "#071C26", "#0B2836", "#00E5FF", "#00E5FF", "#E0F7FA", "#80DEEA"),
+        KbdTheme("emerald", "Forest Emerald", "#09140E", "#0E1F16", "#142C20", "#3FB950", "#3FB950", "#E8F5E9", "#81C784"),
+        KbdTheme("rose", "Sunset Rose", "#14090E", "#1E0E16", "#29141F", "#FF7B72", "#FF7B72", "#FFEBEE", "#E57373"),
+        KbdTheme("ocean", "Pacific Blue", "#08101A", "#0C1929", "#12243B", "#58A6FF", "#58A6FF", "#E3F2FD", "#64B5F6"),
+        KbdTheme("solar", "Solar Amber", "#141008", "#1E180C", "#292110", "#FFD700", "#FFD700", "#FFFDE7", "#FFD54F"),
+        KbdTheme("midnight", "Midnight Indigo", "#080913", "#0D0E1F", "#14162E", "#818CF8", "#818CF8", "#EDE7F6", "#9FA8DA")
+    )
+    private var currentTheme: KbdTheme = allThemes[0]
+
+    // UI View References
     private var rootLayout: LinearLayout? = null
     private var topStripContainer: FrameLayout? = null
     private var toolsBar: LinearLayout? = null
@@ -60,6 +98,7 @@ class TechuKeyboardService : InputMethodService() {
     private var spacebarText: TextView? = null
     private var langToggleTv: TextView? = null
 
+    // Symbol & Tool Deck State
     private var isSymbolsMode = false
     private var isSecondarySymbols = false
     private var activeToolName: String? = null
@@ -68,24 +107,49 @@ class TechuKeyboardService : InputMethodService() {
         super.onCreate()
         suggestionManager = TechuSuggestionManager(this)
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        loadSavedPreferences()
+    }
+
+    private fun loadSavedPreferences() {
+        val prefs = getSharedPreferences("techuboard_prefs", Context.MODE_PRIVATE)
+        val themeId = prefs.getString("theme_id", "dark") ?: "dark"
+        currentTheme = allThemes.find { it.id == themeId } ?: allThemes[0]
+        hapticLevel = prefs.getString("haptic_level", "light") ?: "light"
+        soundEnabled = prefs.getBoolean("sound_enabled", true)
+        isBanglaNumerals = prefs.getBoolean("bangla_numerals", false)
     }
 
     fun triggerHapticClick() {
+        if (soundEnabled) {
+            try {
+                audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK, 0.4f)
+            } catch (_: Exception) {}
+        }
+        if (hapticLevel == "off") return
+        val durationMs = when (hapticLevel) {
+            "light" -> 10L
+            "medium" -> 22L
+            "strong" -> 38L
+            else -> 10L
+        }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(12, VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator?.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(12)
+                vibrator?.vibrate(durationMs)
             }
         } catch (_: Exception) {}
     }
 
     override fun onCreateInputView(): View {
+        loadSavedPreferences()
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#121417"))
-            setPadding(dp(4), dp(4), dp(4), dp(6))
+            setBackgroundColor(Color.parseColor(currentTheme.bgHex))
+            setPadding(dp(2), dp(2), dp(2), dp(4))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -93,34 +157,33 @@ class TechuKeyboardService : InputMethodService() {
         }
         rootLayout = root
 
-        // 1. TOP STRIP (Height 42dp: Contains Toggle Button, Suggestions Bar / Tools Strip, and Pinned Mic)
+        // 1. TOP STRIP (Grid Toggle Button + Tools Bar OR Candidate Chips + Pinned Mic)
         val topStrip = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(42)
-            ).apply { setMargins(0, 0, 0, dp(4)) }
+            ).apply { setMargins(0, 0, 0, dp(3)) }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#181d24"))
+                setColor(Color.parseColor(currentTheme.surfaceHex))
                 cornerRadius = dp(8).toFloat()
             }
         }
         topStripContainer = topStrip
 
-        // 1A. Left Toggle Button (Cyan 4-grid)
+        // 1A. Left Toggle Button (⊞ Cyan Grid icon)
         val toggleBtn = FrameLayout(this).apply {
             val lp = FrameLayout.LayoutParams(dp(40), dp(36), Gravity.START or Gravity.CENTER_VERTICAL).apply {
                 setMargins(dp(3), 0, 0, 0)
             }
             layoutParams = lp
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1b2a38"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
-                setStroke(1, Color.parseColor("#00e5ff"))
             }
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = "⊞"
                 textSize = 18f
-                setTextColor(Color.parseColor("#00e5ff"))
+                setTextColor(Color.parseColor(currentTheme.accentHex))
                 gravity = Gravity.CENTER
             }
             addView(tv)
@@ -159,14 +222,14 @@ class TechuKeyboardService : InputMethodService() {
             addView(suggestionsBar)
         }
 
-        // 1D. Right Pinned Microphone Button
+        // 1D. Right Pinned Microphone Button (🎙)
         val micBtn = FrameLayout(this).apply {
             val lp = FrameLayout.LayoutParams(dp(38), dp(36), Gravity.END or Gravity.CENTER_VERTICAL).apply {
                 setMargins(0, 0, dp(3), 0)
             }
             layoutParams = lp
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#222832"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
             }
             val tv = TextView(this@TechuKeyboardService).apply {
@@ -178,7 +241,7 @@ class TechuKeyboardService : InputMethodService() {
             addView(tv)
             setOnClickListener {
                 triggerHapticClick()
-                android.widget.Toast.makeText(this@TechuKeyboardService, "ভয়েস টাইপিং চালু হচ্ছে...", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this@TechuKeyboardService, "ভয়েস টাইপিং সক্রিয় করা হচ্ছে...", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -188,14 +251,14 @@ class TechuKeyboardService : InputMethodService() {
         topStrip.addView(micBtn)
         root.addView(topStrip)
 
-        // 2. TOOL DECK OVERLAY (Opens when Numpad, Emoji, Clipboard, Cursor tools are tapped)
+        // 2. TOOL DECK OVERLAY (Opens when Numpad, Emoji, Clipboard, Themes, etc. are clicked)
         toolDeckOverlay = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(210)
+                dp(218)
             )
             visibility = View.GONE
-            setBackgroundColor(Color.parseColor("#161b22"))
+            setBackgroundColor(Color.parseColor(currentTheme.bgHex))
         }
         root.addView(toolDeckOverlay)
 
@@ -232,9 +295,9 @@ class TechuKeyboardService : InputMethodService() {
 
     private fun updateLanguageUI() {
         spacebarText?.text = if (isAvroMode) "‹ বাংলা ›" else "‹ English ›"
-        spacebarText?.setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#B0BEC5"))
+        spacebarText?.setTextColor(if (isAvroMode) Color.parseColor(currentTheme.accentHex) else Color.parseColor("#B0BEC5"))
         langToggleTv?.text = if (isAvroMode) "বাং" else "ENG"
-        langToggleTv?.setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#80CBC4"))
+        langToggleTv?.setTextColor(if (isAvroMode) Color.parseColor(currentTheme.accentHex) else Color.parseColor("#80CBC4"))
     }
 
     private fun toggleToolsVsSuggestions() {
@@ -267,7 +330,7 @@ class TechuKeyboardService : InputMethodService() {
                     setMargins(dp(2), 0, dp(2), 0)
                 }
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#222832"))
+                    setColor(Color.parseColor(currentTheme.keyBgHex))
                     cornerRadius = dp(6).toFloat()
                 }
                 val tv = TextView(this@TechuKeyboardService).apply {
@@ -316,132 +379,696 @@ class TechuKeyboardService : InputMethodService() {
         keyboardRowsContainer?.visibility = View.VISIBLE
     }
 
+    // =========================================================================
+    // 1. NUMPAD DECK (Matching mobile.html with left symbols, 3x4 center, right % & ১২৩ toggle)
+    // =========================================================================
     private fun buildNumpadDeck(deck: FrameLayout) {
-        val layout = LinearLayout(this).apply {
+        val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(16), dp(8), dp(16), dp(8))
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+
+        val mainGrid = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+
+        // Left Column: ', (, ), #
+        val leftCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(dp(46), ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        val leftSymbols = listOf("'", "(", ")", "#")
+        for (sym in leftSymbols) {
+            val btn = createDeckKey(sym, weight = 1f) {
+                currentInputConnection?.commitText(sym, 1)
+            }
+            leftCol.addView(btn)
+        }
+        mainGrid.addView(leftCol)
+
+        // Center 3x4: 1-9, ., 0, Space
+        val centerGrid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        }
+
+        fun getDigit(d: String): String {
+            if (!isBanglaNumerals) return d
+            return when (d) {
+                "1" -> "১"; "2" -> "২"; "3" -> "৩"
+                "4" -> "৪"; "5" -> "৫"; "6" -> "৬"
+                "7" -> "৭"; "8" -> "৮"; "9" -> "৯"
+                "0" -> "০"; else -> d
+            }
         }
 
         val rows = listOf(
             listOf("1", "2", "3"),
             listOf("4", "5", "6"),
             listOf("7", "8", "9"),
-            listOf("⌫", "0", "✓")
+            listOf(".", "0", " ")
         )
 
         for (r in rows) {
-            val rowLayout = LinearLayout(this).apply {
+            val rLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply {
-                    setMargins(0, dp(2), 0, dp(2))
-                }
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
             }
-            for (key in r) {
-                val btn = FrameLayout(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-                        setMargins(dp(4), 0, dp(4), 0)
-                    }
-                    background = GradientDrawable().apply {
-                        setColor(if (key == "✓") Color.parseColor("#007ACC") else Color.parseColor("#1E242C"))
-                        cornerRadius = dp(8).toFloat()
-                    }
-                    val tv = TextView(this@TechuKeyboardService).apply {
-                        text = key
-                        textSize = 20f
-                        setTextColor(Color.WHITE)
-                        typeface = Typeface.DEFAULT_BOLD
-                        gravity = Gravity.CENTER
-                    }
-                    addView(tv)
-                    setOnClickListener {
-                        triggerHapticClick()
-                        when (key) {
-                            "⌫" -> handleBackspace()
-                            "✓" -> closeToolDeck()
-                            else -> currentInputConnection?.commitText(key, 1)
-                        }
-                    }
+            for (k in r) {
+                val label = if (k == " ") "␣" else getDigit(k)
+                val btn = createDeckKey(label, weight = 1f) {
+                    val insertChar = if (k == " ") " " else getDigit(k)
+                    currentInputConnection?.commitText(insertChar, 1)
                 }
-                rowLayout.addView(btn)
+                rLayout.addView(btn)
             }
-            layout.addView(rowLayout)
+            centerGrid.addView(rLayout)
         }
-        deck.addView(layout)
+        mainGrid.addView(centerGrid)
+
+        // Right Column: %, ১২৩ (Toggle), ⌫ (Backspace), ↵ (Enter)
+        val rightCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(dp(52), ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+
+        // %
+        rightCol.addView(createDeckKey("%", weight = 1f) {
+            currentInputConnection?.commitText("%", 1)
+        })
+
+        // ১২৩ / 123 Toggle
+        val numToggleBtn = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                setMargins(dp(2), dp(2), dp(2), dp(2))
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(currentTheme.keyBgHex))
+                cornerRadius = dp(6).toFloat()
+                setStroke(1, Color.parseColor(currentTheme.accentHex))
+            }
+            val tv = TextView(this@TechuKeyboardService).apply {
+                text = if (isBanglaNumerals) "123" else "১২৩"
+                textSize = 15f
+                setTextColor(Color.parseColor(currentTheme.accentHex))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+            }
+            addView(tv)
+            setOnClickListener {
+                triggerHapticClick()
+                isBanglaNumerals = !isBanglaNumerals
+                getSharedPreferences("techuboard_prefs", Context.MODE_PRIVATE)
+                    .edit().putBoolean("bangla_numerals", isBanglaNumerals).apply()
+                // Rebuild numpad deck to refresh digits
+                deck.removeAllViews()
+                buildNumpadDeck(deck)
+            }
+        }
+        rightCol.addView(numToggleBtn)
+
+        // ⌫ Backspace
+        rightCol.addView(createDeckKey("⌫", weight = 1f) {
+            handleBackspace()
+        })
+
+        // ↵ Enter
+        val enterBtn = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                setMargins(dp(2), dp(2), dp(2), dp(2))
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(currentTheme.accentHex))
+                cornerRadius = dp(6).toFloat()
+            }
+            val tv = TextView(this@TechuKeyboardService).apply {
+                text = "↵"
+                textSize = 18f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+            }
+            addView(tv)
+            setOnClickListener {
+                triggerHapticClick()
+                handleEnter()
+            }
+        }
+        rightCol.addView(enterBtn)
+
+        mainGrid.addView(rightCol)
+        rootLayout.addView(mainGrid)
+
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setPadding(dp(4), dp(2), dp(4), 0)
+        }
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
+
+        deck.addView(rootLayout)
     }
 
+    // =========================================================================
+    // 2. EMOJI DECK (7 Categories: Recents, Smileys, Gestures, Animals, Food, Sports, Kaomoji)
+    // =========================================================================
+    private var currentEmojiCatIndex = 1
     private fun buildEmojiDeck(deck: FrameLayout) {
-        val scroll = HorizontalScrollView(this).apply {
-            val emojiLayout = LinearLayout(this@TechuKeyboardService).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(8), dp(8), dp(8), dp(8))
-            }
-            val row1 = listOf("😀", "😂", "🥰", "😍", "🤣", "😊", "🙏", "👍", "❤️", "🔥", "✨")
-            val row2 = listOf("🇧🇩", "🎉", "💯", "😎", "🥺", "😭", "🤲", "👏", "🙌", "💪", "💐")
-            val row3 = listOf("👌", "✌️", "🤔", "😴", "🥳", "😇", "🤩", "💖", "🌟", "🌹", "☕")
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
 
-            for (r in listOf(row1, row2, row3)) {
-                val rowLayout = LinearLayout(this@TechuKeyboardService).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    setPadding(0, dp(4), 0, dp(4))
+        // Top Category Tab Bar
+        val catScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setBackgroundColor(Color.parseColor(currentTheme.surfaceHex))
+        }
+        val catLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), 0, dp(6), 0)
+        }
+
+        val categories = listOf(
+            Pair("🕒", 0),
+            Pair("😀", 1),
+            Pair("👍", 2),
+            Pair("🐻", 3),
+            Pair("🍔", 4),
+            Pair("⚽", 5),
+            Pair("Kaomoji", 6)
+        )
+
+        for ((label, idx) in categories) {
+            val tab = TextView(this).apply {
+                text = label
+                textSize = if (idx == 6) 11f else 15f
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                setTextColor(if (currentEmojiCatIndex == idx) Color.parseColor(currentTheme.accentHex) else Color.parseColor(currentTheme.subTextHex))
+                typeface = if (currentEmojiCatIndex == idx) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setOnClickListener {
+                    triggerHapticClick()
+                    currentEmojiCatIndex = idx
+                    deck.removeAllViews()
+                    buildEmojiDeck(deck)
                 }
-                for (em in r) {
-                    val tv = TextView(this@TechuKeyboardService).apply {
+            }
+            catLayout.addView(tab)
+        }
+        catScroll.addView(catLayout)
+        rootLayout.addView(catScroll)
+
+        // Emoji Grid Container
+        val emojiScroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val emojiListLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+        }
+
+        val activeList: List<String> = when (currentEmojiCatIndex) {
+            0 -> listOf("❤️", "👍", "😂", "🙏", "🔥", "✨", "😊", "🎉", "🇧🇩", "🥰", "😍", "🤣", "💯", "👌", "👏")
+            1 -> listOf(
+                "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍", "🤩",
+                "😘", "😗", "😚", "😙", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔", "🤐", "🤨",
+                "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕",
+                "🤢", "🤮", "🤧", "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "🥳", "😎", "🤓", "🧐", "😕", "😟", "🙁",
+                "☹️", "😮", "😯", "😲", "😳", "🥺", "😦", "😧", "😱", "😖", "😣", "😞", "😓", "😩", "😫", "🥱",
+                "😤", "😡", "😠", "🤬"
+            )
+            2 -> listOf(
+                "👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐",
+                "🖖", "👋", "👏", "🤝", "🙏", "✍️", "💅", "🤳", "💪", "🦵", "🦶", "👂", "👃", "🧠", "🦷", "👀",
+                "👁", "👅", "👄"
+            )
+            3 -> listOf(
+                "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔",
+                "🐧", "🐦", "🦆", "🦅", "🦉", "🦇", "🐺", "🐗", "🐴", "🦄", "🐝", "🐛", "🦋", "🐌", "🐞", "🐜",
+                "🐢", "🐍", "🐙", "🐠", "🐬", "🐳", "🦈", "🐘", "🦒"
+            )
+            4 -> listOf(
+                "🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝", "🍅",
+                "🥑", "🥦", "🌽", "🥕", "🥐", "🍞", "🧀", "🍳", "🥓", "🍔", "🍟", "🍕", "🥪", "🌮", "🍜", "🍣",
+                "🍦", "🍰", "🎂", "🍫", "🍿", "🍩", "☕", "🧃", "🍺"
+            )
+            5 -> listOf(
+                "⚽", "🏀", "🏈", "⚾", "🎾", "🏐", "🏉", "🎱", "🏓", "🏸", "🏏", "⛳", "🥊", "🛹", "🏋️", "🚴",
+                "🏆", "🥇", "🥈", "🥉", "🏅", "🎖", "🎫", "🎨", "🎬", "🎤", "🎧", "🎼", "🎹", "🎸", "🎮", "🎲",
+                "🎯", "🎳", "🧩"
+            )
+            else -> listOf(
+                "(◕‿◕)", "( ͡° ͜ʖ ͡°)", "¯\\_(ツ)_/¯", "(╯°□°)╯", "(づ｡◕‿‿◕｡)づ", "(•‿•)",
+                "(｡♥‿♥｡)", "ಠ_ಠ", "(¬‿¬)", "(ಥ﹏ಥ)", "(ง'̀-'́)ง", "(づ￣ ³￣)づ", "ʕ•ᴥ•ʔ", "(ᵔᴥᵔ)", "＼(＾O＾)／", "(•_•)"
+            )
+        }
+
+        // Layout emojis into 8-item rows (or 2-item for kaomojis)
+        val itemsPerRow = if (currentEmojiCatIndex == 6) 2 else 7
+        for (i in activeList.indices step itemsPerRow) {
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            for (j in 0 until itemsPerRow) {
+                val index = i + j
+                if (index < activeList.size) {
+                    val em = activeList[index]
+                    val btn = TextView(this).apply {
                         text = em
-                        textSize = 24f
-                        setPadding(dp(10), dp(4), dp(10), dp(4))
+                        textSize = if (currentEmojiCatIndex == 6) 13f else 22f
+                        setTextColor(Color.WHITE)
+                        gravity = Gravity.CENTER
+                        setPadding(dp(4), dp(8), dp(4), dp(8))
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                         setOnClickListener {
                             triggerHapticClick()
                             currentInputConnection?.commitText(em, 1)
                         }
                     }
-                    rowLayout.addView(tv)
+                    rowLayout.addView(btn)
+                } else {
+                    val spacer = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    rowLayout.addView(spacer)
                 }
-                emojiLayout.addView(rowLayout)
             }
-
-            val closeBtn = TextView(this@TechuKeyboardService).apply {
-                text = "⌨️ কীবোর্ডে ফিরে যান"
-                textSize = 13f
-                setTextColor(Color.parseColor("#00E5FF"))
-                gravity = Gravity.CENTER
-                setPadding(0, dp(8), 0, 0)
-                setOnClickListener { closeToolDeck() }
-            }
-            emojiLayout.addView(closeBtn)
-            addView(emojiLayout)
+            emojiListLayout.addView(rowLayout)
         }
-        deck.addView(scroll)
+        emojiScroll.addView(emojiListLayout)
+        rootLayout.addView(emojiScroll)
+
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setPadding(dp(6), 0, dp(6), 0)
+        }
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
+
+        deck.addView(rootLayout)
     }
 
-    private fun buildClipboardDeck(deck: FrameLayout) {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-
-        val layout = LinearLayout(this).apply {
+    // =========================================================================
+    // 3. LEARN DECK (Juktoborno Guide: Kar, Fola, K-Group, S-Group, Ng-Group)
+    // =========================================================================
+    private var currentLearnCatIndex = 0
+    private fun buildLearnDeck(deck: FrameLayout) {
+        val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+
+        // Top Category Bar
+        val catScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setBackgroundColor(Color.parseColor(currentTheme.surfaceHex))
+        }
+        val catLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), 0, dp(6), 0)
+        }
+
+        val categories = listOf(
+            Pair("কার (স্বরচিহ্ন)", 0),
+            Pair("ফলা (্য, ্র, ্ব)", 1),
+            Pair("ক-বর্গ (ক্ষ, জ্ঞ)", 2),
+            Pair("স/ষ যুক্তবর্ণ", 3),
+            Pair("ঙ/ঞ/ন যুক্তবর্ণ", 4)
+        )
+
+        for ((label, idx) in categories) {
+            val tab = TextView(this).apply {
+                text = label
+                textSize = 12f
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                setTextColor(if (currentLearnCatIndex == idx) Color.parseColor(currentTheme.accentHex) else Color.parseColor(currentTheme.subTextHex))
+                typeface = if (currentLearnCatIndex == idx) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setOnClickListener {
+                    triggerHapticClick()
+                    currentLearnCatIndex = idx
+                    deck.removeAllViews()
+                    buildLearnDeck(deck)
+                }
+            }
+            catLayout.addView(tab)
+        }
+        catScroll.addView(catLayout)
+        rootLayout.addView(catScroll)
+
+        // Card List
+        val contentScroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val cardList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+
+        val items: List<Pair<String, String>> = when (currentLearnCatIndex) {
+            0 -> listOf(
+                Pair("া", "a"), Pair("ি", "i"), Pair("ী", "ee / I"), Pair("ু", "u"),
+                Pair("ূ", "oo / U"), Pair("ৃ", "r"), Pair("ে", "e"), Pair("ৈ", "oi"),
+                Pair("ো", "o"), Pair("ৌ", "ou")
+            )
+            1 -> listOf(
+                Pair("্য", "y / Z"), Pair("্র", "r"), Pair("্ব", "w / b"), Pair("্ল", "l"),
+                Pair("্ম", "m"), Pair("র্", "rr")
+            )
+            2 -> listOf(
+                Pair("ক্ষ", "kkh / x"), Pair("জ্ঞ", "jng"), Pair("ক্ক", "kk"), Pair("ক্ট", "kT"),
+                Pair("ক্ত", "kt"), Pair("ক্ব", "kw"), Pair("ক্র", "kr"), Pair("ক্ল", "kl"),
+                Pair("ক্স", "ks")
+            )
+            3 -> listOf(
+                Pair("স্ক", "sk"), Pair("স্ত", "st"), Pair("স্থ", "sth"), Pair("স্প", "sp"),
+                Pair("স্ফ", "sph"), Pair("স্ব", "sw"), Pair("স্ম", "sm"), Pair("স্র", "sr"),
+                Pair("স্ল", "sl"), Pair("ষ্ক", "Shk"), Pair("ষ্ট", "ShT"), Pair("ষ্ঠ", "ShTh"),
+                Pair("ষ্ণ", "ShN"), Pair("ষ্প", "Shp")
+            )
+            else -> listOf(
+                Pair("ঙ্ক", "Ngk"), Pair("ঙ্গ", "Ng"), Pair("ঞ্চ", "nc"), Pair("ঞ্ছ", "nch"),
+                Pair("ঞ্জ", "nj"), Pair("ণ্ট", "NT"), Pair("ণ্ঠ", "NTh"), Pair("ণ্ড", "ND"),
+                Pair("ন্ত", "nt"), Pair("ন্থ", "nth"), Pair("ন্দ", "nd"), Pair("ন্ধ", "ndh"),
+                Pair("ন্ন", "nn")
+            )
+        }
+
+        for (i in items.indices step 2) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            for (j in 0..1) {
+                val idx = i + j
+                if (idx < items.size) {
+                    val (char, formula) = items[idx]
+                    val card = FrameLayout(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                            setMargins(dp(3), dp(3), dp(3), dp(3))
+                        }
+                        background = GradientDrawable().apply {
+                            setColor(Color.parseColor(currentTheme.keyBgHex))
+                            cornerRadius = dp(6).toFloat()
+                            setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
+                        }
+                        val tv = TextView(this@TechuKeyboardService).apply {
+                            text = "$char  ($formula)"
+                            textSize = 14f
+                            setTextColor(Color.WHITE)
+                            gravity = Gravity.CENTER
+                        }
+                        addView(tv)
+                        setOnClickListener {
+                            triggerHapticClick()
+                            currentInputConnection?.commitText(char, 1)
+                        }
+                    }
+                    row.addView(card)
+                } else {
+                    val spacer = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
+                    }
+                    row.addView(spacer)
+                }
+            }
+            cardList.addView(row)
+        }
+        contentScroll.addView(cardList)
+        rootLayout.addView(contentScroll)
+
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setPadding(dp(6), 0, dp(6), 0)
+        }
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
+
+        deck.addView(rootLayout)
+    }
+
+    // =========================================================================
+    // 4. THEMES DECK (All 8 Themes matching mobile.html with live preview cards)
+    // =========================================================================
+    private fun buildThemeDeck(deck: FrameLayout) {
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setPadding(dp(8), dp(4), dp(8), dp(4))
         }
 
         val title = TextView(this).apply {
-            text = "📋 সম্প্রতি কপি করা টেক্সট (১-ট্যাপে পেস্ট)"
-            textSize = 14f
-            setTextColor(Color.parseColor("#8B949E"))
-            setPadding(0, 0, 0, dp(12))
+            text = "🎨 থিম নির্বাচন করুন (তাৎক্ষণিক পরিবর্তন)"
+            textSize = 13f
+            setTextColor(Color.parseColor(currentTheme.accentHex))
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(6), dp(4), dp(6), dp(6))
         }
-        layout.addView(title)
+        rootLayout.addView(title)
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val themeList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        for (th in allThemes) {
+            val isSelected = (th.id == currentTheme.id)
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply {
+                    setMargins(0, dp(2), 0, dp(3))
+                }
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor(th.bgHex))
+                    cornerRadius = dp(8).toFloat()
+                    setStroke(if (isSelected) 2 else 1, Color.parseColor(if (isSelected) th.accentHex else th.keyBorderHex))
+                }
+                setPadding(dp(12), 0, dp(12), 0)
+                setOnClickListener {
+                    triggerHapticClick()
+                    currentTheme = th
+                    getSharedPreferences("techuboard_prefs", Context.MODE_PRIVATE)
+                        .edit().putString("theme_id", th.id).apply()
+                    applyTheme()
+                    closeToolDeck()
+                }
+            }
+
+            // Color Swatch Circle
+            val swatch = FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+                    setMargins(0, 0, dp(10), 0)
+                }
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor(th.accentHex))
+                    cornerRadius = dp(11).toFloat()
+                }
+            }
+            card.addView(swatch)
+
+            val nameTv = TextView(this).apply {
+                text = th.name
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                typeface = if (isSelected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            card.addView(nameTv)
+
+            if (isSelected) {
+                val checkTv = TextView(this).apply {
+                    text = "✓ সক্রিয়"
+                    textSize = 12f
+                    setTextColor(Color.parseColor(th.accentHex))
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                card.addView(checkTv)
+            }
+
+            themeList.addView(card)
+        }
+        scroll.addView(themeList)
+        rootLayout.addView(scroll)
+
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setPadding(dp(6), 0, dp(6), 0)
+        }
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
+
+        deck.addView(rootLayout)
+    }
+
+    private fun applyTheme() {
+        rootLayout?.setBackgroundColor(Color.parseColor(currentTheme.bgHex))
+        topStripContainer?.background = GradientDrawable().apply {
+            setColor(Color.parseColor(currentTheme.surfaceHex))
+            cornerRadius = dp(8).toFloat()
+        }
+        toolsBar?.let { buildToolsBar(it) }
+        renderKeyboardKeys()
+        updateLanguageUI()
+    }
+
+    // =========================================================================
+    // 5. PRECISION CURSOR D-PAD DECK (Matching mobile.html with navigation & edit controls)
+    // =========================================================================
+    private fun buildCursorDeck(deck: FrameLayout) {
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+        }
+
+        val title = TextView(this).apply {
+            text = "🎯 প্রিসিশন কার্সর নেভিগেশন ও এডিটিং"
+            textSize = 13f
+            setTextColor(Color.parseColor(currentTheme.accentHex))
+            setPadding(dp(4), dp(2), dp(4), dp(6))
+        }
+        rootLayout.addView(title)
+
+        // Row 1: Arrows (▲ উপরে, ▼ নিচে, ◀ বামে, ডানে ▶)
+        val row1 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
+                setMargins(0, 0, 0, dp(4))
+            }
+        }
+        val arrowActions = listOf(
+            Pair("◀ বামে", KeyEvent.KEYCODE_DPAD_LEFT),
+            Pair("ডানে ▶", KeyEvent.KEYCODE_DPAD_RIGHT),
+            Pair("▲ উপরে", KeyEvent.KEYCODE_DPAD_UP),
+            Pair("নিচে ▼", KeyEvent.KEYCODE_DPAD_DOWN)
+        )
+        for ((label, code) in arrowActions) {
+            val btn = createDeckKey(label, weight = 1f) {
+                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            }
+            row1.addView(btn)
+        }
+        rootLayout.addView(row1)
+
+        // Row 2: Text Boundary Jumps (⇤ শুরুতে, শেষে ⇥, ⌫ ডিলিট)
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
+                setMargins(0, 0, 0, dp(4))
+            }
+        }
+        row2.addView(createDeckKey("⇤ শুরুতে", weight = 1f) {
+            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_HOME))
+            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MOVE_HOME))
+        })
+        row2.addView(createDeckKey("শেষে ⇥", weight = 1f) {
+            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END))
+            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MOVE_END))
+        })
+        row2.addView(createDeckKey("⌫ ডিলিট", weight = 1f) {
+            handleBackspace()
+        })
+        rootLayout.addView(row2)
+
+        // Row 3: Editing Controls (✂ কাট, 📋 কপি, 📥 পেস্ট, ✓ নির্বাচন)
+        val row3 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
+                setMargins(0, 0, 0, dp(4))
+            }
+        }
+        row3.addView(createDeckKey("✂ কাট", weight = 1f) {
+            currentInputConnection?.performContextMenuAction(android.R.id.cut)
+        })
+        row3.addView(createDeckKey("📋 কপি", weight = 1f) {
+            currentInputConnection?.performContextMenuAction(android.R.id.copy)
+        })
+        row3.addView(createDeckKey("📥 পেস্ট", weight = 1f) {
+            currentInputConnection?.performContextMenuAction(android.R.id.paste)
+        })
+        row3.addView(createDeckKey("✓ সব নির্বাচন", weight = 1f) {
+            currentInputConnection?.performContextMenuAction(android.R.id.selectAll)
+        })
+        rootLayout.addView(row3)
+
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
+
+        deck.addView(rootLayout)
+    }
+
+    // =========================================================================
+    // 6. CLIPBOARD & QUICK PHRASES DECK
+    // =========================================================================
+    private fun buildClipboardDeck(deck: FrameLayout) {
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+        }
+
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+
+        val title = TextView(this).apply {
+            text = "📋 সম্প্রতি কপি করা টেক্সট ও দ্রুত বাক্য"
+            textSize = 13f
+            setTextColor(Color.parseColor(currentTheme.accentHex))
+            setPadding(dp(4), dp(2), dp(4), dp(6))
+        }
+        rootLayout.addView(title)
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
 
         if (clip.isNotEmpty()) {
             val clipCard = TextView(this).apply {
-                text = clip
-                textSize = 15f
+                text = "📌 $clip"
+                textSize = 14f
                 setTextColor(Color.WHITE)
-                maxLines = 3
-                setPadding(dp(16), dp(12), dp(16), dp(12))
+                maxLines = 2
+                setPadding(dp(12), dp(10), dp(12), dp(10))
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#1E242C"))
-                    cornerRadius = dp(8).toFloat()
-                    setStroke(1, Color.parseColor("#00E5FF"))
+                    setColor(Color.parseColor(currentTheme.keyBgHex))
+                    cornerRadius = dp(6).toFloat()
+                    setStroke(1, Color.parseColor(currentTheme.accentHex))
                 }
                 setOnClickListener {
                     triggerHapticClick()
@@ -449,153 +1076,131 @@ class TechuKeyboardService : InputMethodService() {
                     closeToolDeck()
                 }
             }
-            layout.addView(clipCard)
-        } else {
-            val emptyTv = TextView(this).apply {
-                text = "ক্লিপবোর্ডে কোনো লেখা নেই।"
-                textSize = 14f
-                setTextColor(Color.GRAY)
-            }
-            layout.addView(emptyTv)
+            content.addView(clipCard)
         }
 
-        val backBtn = TextView(this).apply {
-            text = "✕ কীবোর্ড বন্ধ করুন"
-            textSize = 13f
-            setTextColor(Color.parseColor("#00E5FF"))
-            gravity = Gravity.CENTER
-            setPadding(0, dp(20), 0, 0)
-            setOnClickListener { closeToolDeck() }
-        }
-        layout.addView(backBtn)
-
-        deck.addView(layout)
-    }
-
-    private fun buildCursorDeck(deck: FrameLayout) {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(20), dp(12), dp(20), dp(12))
-        }
-
-        val title = TextView(this).apply {
-            text = "🎯 প্রিসিশন কার্সর নেভিগেশন (D-Pad)"
-            textSize = 13f
-            setTextColor(Color.parseColor("#8B949E"))
-            setPadding(0, 0, 0, dp(14))
-        }
-        layout.addView(title)
-
-        val row1 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-
-        val actions = listOf(
-            Pair("◀ বামে", -1),
-            Pair("ডানে ▶", 1),
-            Pair("⌫ ডিলিট", 0),
-            Pair("✕ সম্পন্ন", 99)
+        val phrases = listOf(
+            "ধন্যবাদ", "কেমন আছেন?", "আমি ভালো আছি", "শুভ সকাল", "শুভ রাত্রি",
+            "ইনশাআল্লাহ", "পরে কথা বলছি", "আজকে দেখা হবে"
         )
-
-        for ((label, code) in actions) {
-            val btn = TextView(this).apply {
-                text = label
-                textSize = 14f
+        for (phrase in phrases) {
+            val pTv = TextView(this).apply {
+                text = "💬 $phrase"
+                textSize = 13.5f
                 setTextColor(Color.WHITE)
-                setPadding(dp(16), dp(12), dp(16), dp(12))
+                setPadding(dp(12), dp(8), dp(12), dp(8))
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#1E242C"))
-                    cornerRadius = dp(8).toFloat()
-                    setStroke(1, Color.parseColor("#30363D"))
+                    setColor(Color.parseColor(currentTheme.keyBgHex))
+                    cornerRadius = dp(6).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, dp(4), 0, 0)
                 }
                 setOnClickListener {
                     triggerHapticClick()
-                    when (code) {
-                        -1 -> currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
-                        1 -> currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
-                        0 -> handleBackspace()
-                        99 -> closeToolDeck()
-                    }
-                }
-            }
-            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(dp(6), 0, dp(6), 0)
-            }
-            row1.addView(btn, lp)
-        }
-        layout.addView(row1)
-        deck.addView(layout)
-    }
-
-    private fun buildThemeDeck(deck: FrameLayout) {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(16))
-        }
-        val title = TextView(this).apply {
-            text = "🎨 থিম নির্বাচন"
-            textSize = 15f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dp(12))
-        }
-        layout.addView(title)
-
-        val themes = listOf(
-            Pair("Midnight Dark (ডিফল্ট)", "#121417"),
-            Pair("Slate Black", "#0B0E14"),
-            Pair("Deep Navy", "#0D1B2A")
-        )
-
-        for ((name, colorHex) in themes) {
-            val card = TextView(this).apply {
-                text = "✓ $name"
-                textSize = 14f
-                setTextColor(Color.WHITE)
-                setPadding(dp(16), dp(10), dp(16), dp(10))
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor(colorHex))
-                    cornerRadius = dp(8).toFloat()
-                    setStroke(1, Color.parseColor("#00E5FF"))
-                }
-                setOnClickListener {
-                    triggerHapticClick()
-                    rootLayout?.setBackgroundColor(Color.parseColor(colorHex))
+                    currentInputConnection?.commitText(phrase, 1)
                     closeToolDeck()
                 }
             }
-            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, dp(8))
-            }
-            layout.addView(card, lp)
+            content.addView(pTv)
         }
-        deck.addView(layout)
+
+        scroll.addView(content)
+        rootLayout.addView(scroll)
+
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
+
+        deck.addView(rootLayout)
     }
 
+    // =========================================================================
+    // 7. SETTINGS DECK
+    // =========================================================================
     private fun buildSettingsDeck(deck: FrameLayout) {
-        val layout = LinearLayout(this).apply {
+        val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(16))
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
         }
+
         val title = TextView(this).apply {
-            text = "⚙️ কীবোর্ড সেটিংস"
-            textSize = 16f
+            text = "⚙️ কীবোর্ড দ্রুত সেটিংস"
+            textSize = 15f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dp(14))
+            setPadding(0, dp(2), 0, dp(10))
         }
-        layout.addView(title)
+        rootLayout.addView(title)
 
-        val btnSettings = TextView(this).apply {
-            text = "Android ইনপুট মেথড সেটিংস ওপেন করুন"
+        // Sound Toggle
+        val soundBtn = TextView(this).apply {
+            text = "ক্লিক সাউন্ড: " + (if (soundEnabled) "চালু ✓" else "বন্ধ ✕")
             textSize = 14f
             setTextColor(Color.WHITE)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#238636"))
-                cornerRadius = dp(8).toFloat()
+                setColor(Color.parseColor(currentTheme.keyBgHex))
+                cornerRadius = dp(6).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dp(6))
+            }
+            setOnClickListener {
+                triggerHapticClick()
+                soundEnabled = !soundEnabled
+                getSharedPreferences("techuboard_prefs", Context.MODE_PRIVATE)
+                    .edit().putBoolean("sound_enabled", soundEnabled).apply()
+                text = "ক্লিক সাউন্ড: " + (if (soundEnabled) "চালু ✓" else "বন্ধ ✕")
+            }
+        }
+        rootLayout.addView(soundBtn)
+
+        // Haptic Feedback Slider/Toggle
+        val hapticBtn = TextView(this).apply {
+            text = "হ্যাপটিক ভাইব্রেশন: ${hapticLevel.uppercase()}"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(currentTheme.keyBgHex))
+                cornerRadius = dp(6).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dp(6))
+            }
+            setOnClickListener {
+                triggerHapticClick()
+                hapticLevel = when (hapticLevel) {
+                    "light" -> "medium"
+                    "medium" -> "strong"
+                    "strong" -> "off"
+                    else -> "light"
+                }
+                getSharedPreferences("techuboard_prefs", Context.MODE_PRIVATE)
+                    .edit().putString("haptic_level", hapticLevel).apply()
+                text = "হ্যাপটিক ভাইব্রেশন: ${hapticLevel.uppercase()}"
+            }
+        }
+        rootLayout.addView(hapticBtn)
+
+        // Open Android System IME Settings
+        val btnSysSettings = TextView(this).apply {
+            text = "Android সিস্টেম ইনপুট সেটিংস"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1F6FEB"))
+                cornerRadius = dp(6).toFloat()
             }
             setOnClickListener {
                 triggerHapticClick()
@@ -605,69 +1210,30 @@ class TechuKeyboardService : InputMethodService() {
                 startActivity(intent)
             }
         }
-        layout.addView(btnSettings)
+        rootLayout.addView(btnSysSettings)
 
-        val btnClose = TextView(this).apply {
-            text = "✕ কীবোর্ডে ফিরে যান"
-            textSize = 13f
-            setTextColor(Color.parseColor("#00E5FF"))
-            gravity = Gravity.CENTER
-            setPadding(0, dp(20), 0, 0)
-            setOnClickListener { closeToolDeck() }
+        // Bottom ABC Return Bar
+        val bottomBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            setPadding(0, dp(10), 0, 0)
         }
-        layout.addView(btnClose)
+        val abcBtn = createDeckKey("ABC", widthDp = 80) { closeToolDeck() }
+        bottomBar.addView(abcBtn)
+        rootLayout.addView(bottomBar)
 
-        deck.addView(layout)
+        deck.addView(rootLayout)
     }
 
-    private fun buildLearnDeck(deck: FrameLayout) {
-        val scroll = HorizontalScrollView(this).apply {
-            val layout = LinearLayout(this@TechuKeyboardService).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-            }
-            val title = TextView(this@TechuKeyboardService).apply {
-                text = "🎓 জনপ্রিয় যুক্তবর্ণ টাইপিং গাইড"
-                textSize = 14f
-                setTextColor(Color.parseColor("#00E5FF"))
-                setPadding(0, 0, 0, dp(8))
-            }
-            layout.addView(title)
-
-            val guides = listOf(
-                "ক্ষ = kkh", "জ্ঞ = jng", "ঞ্চ = nc", "ঞ্জ = nj",
-                "ত্র = tr", "শ্র = shr", "ঙ্গ = Ng", "দ্ধ = ddh"
-            )
-            for (g in guides) {
-                val tv = TextView(this@TechuKeyboardService).apply {
-                    text = g
-                    textSize = 15f
-                    setTextColor(Color.WHITE)
-                    setPadding(0, dp(4), 0, dp(4))
-                }
-                layout.addView(tv)
-            }
-
-            val closeTv = TextView(this@TechuKeyboardService).apply {
-                text = "✕ বন্ধ করুন"
-                textSize = 13f
-                setTextColor(Color.parseColor("#00E5FF"))
-                setPadding(0, dp(12), 0, 0)
-                setOnClickListener { closeToolDeck() }
-            }
-            layout.addView(closeTv)
-            addView(layout)
-        }
-        deck.addView(scroll)
-    }
-
-    // 4. RENDERING MAIN KEYBOARD ROWS
+    // =========================================================================
+    // 8. RENDERING MAIN KEYBOARD ROWS
+    // =========================================================================
     private fun renderKeyboardKeys() {
         val container = keyboardRowsContainer ?: return
         container.removeAllViews()
 
         if (!isSymbolsMode) {
-            // QWERTY ALPHABET LAYOUT
             val isUpper = (shiftState > 0)
             val r1 = listOf(
                 Pair("q", "1"), Pair("w", "2"), Pair("e", "3"), Pair("r", "4"), Pair("t", "5"),
@@ -687,7 +1253,6 @@ class TechuKeyboardService : InputMethodService() {
             container.addView(buildSpecialRow3(r3, isUpper))
             container.addView(buildBottomRow())
         } else {
-            // SYMBOLS LAYOUT (?123)
             buildSymbolsPage(container)
         }
     }
@@ -704,7 +1269,7 @@ class TechuKeyboardService : InputMethodService() {
 
         for ((primary, sub) in keys) {
             val mainChar = if (isUpper) primary.uppercase() else primary
-            val keyView = createNativeKeyView(mainChar, sub, isSpecial = false) { tappedChar ->
+            val keyView = createNativeKeyView(mainChar, sub) { tappedChar ->
                 handleCharacter(tappedChar)
             }
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
@@ -724,13 +1289,13 @@ class TechuKeyboardService : InputMethodService() {
             ).apply { setMargins(0, dp(2), 0, dp(2)) }
         }
 
-        // Shift Key
+        // Shift Key (⇧)
         val shiftKey = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 setMargins(dp(2), 0, dp(2), 0)
             }
-            val borderColor = if (shiftState > 0) Color.parseColor("#00E5FF") else Color.parseColor("#2D333B")
-            val bgColor = if (shiftState > 0) Color.parseColor("#1B2A38") else Color.parseColor("#1E242C")
+            val borderColor = if (shiftState > 0) Color.parseColor(currentTheme.accentHex) else Color.parseColor(currentTheme.keyBorderHex)
+            val bgColor = if (shiftState > 0) Color.parseColor(currentTheme.surfaceHex) else Color.parseColor(currentTheme.keyBgHex)
             background = GradientDrawable().apply {
                 setColor(bgColor)
                 cornerRadius = dp(6).toFloat()
@@ -739,7 +1304,7 @@ class TechuKeyboardService : InputMethodService() {
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = if (shiftState == 2) "⇪" else "⇧"
                 textSize = 18f
-                setTextColor(if (shiftState > 0) Color.parseColor("#00E5FF") else Color.WHITE)
+                setTextColor(if (shiftState > 0) Color.parseColor(currentTheme.accentHex) else Color.WHITE)
                 gravity = Gravity.CENTER
             }
             addView(tv)
@@ -759,7 +1324,7 @@ class TechuKeyboardService : InputMethodService() {
         }
         for ((primary, sub) in keys) {
             val mainChar = if (isUpper) primary.uppercase() else primary
-            val keyView = createNativeKeyView(mainChar, sub, isSpecial = false) { tappedChar ->
+            val keyView = createNativeKeyView(mainChar, sub) { tappedChar ->
                 handleCharacter(tappedChar)
             }
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
@@ -769,15 +1334,15 @@ class TechuKeyboardService : InputMethodService() {
         }
         row.addView(keysLayout)
 
-        // Backspace Key
+        // Backspace Key (⌫)
         val backspaceKey = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 setMargins(dp(2), 0, dp(2), 0)
             }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E242C"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
-                setStroke(1, Color.parseColor("#2D333B"))
+                setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
             }
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = "⌫"
@@ -816,45 +1381,43 @@ class TechuKeyboardService : InputMethodService() {
                 setMargins(dp(2), 0, dp(2), 0)
             }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1B2A38"))
+                setColor(Color.parseColor(currentTheme.surfaceHex))
                 cornerRadius = dp(6).toFloat()
-                setStroke(1, Color.parseColor("#00E5FF"))
+                setStroke(1, Color.parseColor(currentTheme.accentHex))
             }
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = if (isAvroMode) "বাং" else "ENG"
                 textSize = 14f
-                setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#80CBC4"))
+                setTextColor(if (isAvroMode) Color.parseColor(currentTheme.accentHex) else Color.parseColor("#80CBC4"))
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
             }
             langToggleTv = tv
             addView(tv)
-            setOnClickListener {
-                toggleLanguageMode()
-            }
+            setOnClickListener { toggleLanguageMode() }
         }
         row.addView(langBtn)
 
-        // 3. Comma
+        // 3. Comma (,)
         val commaBtn = createButtonKey(",", widthDp = 30) {
             if (isAvroMode) handleCharacter(",") else currentInputConnection?.commitText(",", 1)
         }
         row.addView(commaBtn)
 
-        // 4. Spacebar with "‹ বাংলা ›" / "‹ English ›" and Swipe to switch language
+        // 4. Spacebar with "‹ বাংলা ›" / "‹ English ›" and Swipe Gesture Support
         val spaceBtn = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
                 setMargins(dp(2), 0, dp(2), 0)
             }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E242C"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
-                setStroke(1, Color.parseColor("#2D333B"))
+                setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
             }
             spacebarText = TextView(this@TechuKeyboardService).apply {
                 text = if (isAvroMode) "‹ বাংলা ›" else "‹ English ›"
                 textSize = 14f
-                setTextColor(if (isAvroMode) Color.parseColor("#00E5FF") else Color.parseColor("#B0BEC5"))
+                setTextColor(if (isAvroMode) Color.parseColor(currentTheme.accentHex) else Color.parseColor("#B0BEC5"))
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
             }
@@ -863,7 +1426,7 @@ class TechuKeyboardService : InputMethodService() {
         }
         row.addView(spaceBtn)
 
-        // 5. Dari / Dot
+        // 5. Dari / Dot (। / .)
         val dotBtn = createButtonKey(if (isAvroMode) "।" else ".", widthDp = 32) {
             if (isAvroMode) {
                 commitComposing()
@@ -874,13 +1437,13 @@ class TechuKeyboardService : InputMethodService() {
         }
         row.addView(dotBtn)
 
-        // 6. Return / Enter (Vibrant Blue accent)
+        // 6. Return / Enter with Theme Accent Color
         val enterBtn = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(52), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 setMargins(dp(2), 0, dp(2), 0)
             }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#007ACC"))
+                setColor(Color.parseColor(currentTheme.accentHex))
                 cornerRadius = dp(6).toFloat()
             }
             val tv = TextView(this@TechuKeyboardService).apply {
@@ -906,7 +1469,6 @@ class TechuKeyboardService : InputMethodService() {
         container.addView(buildSymbolKeyRow(row2))
         container.addView(buildSymbolKeyRow(row3))
 
-        // Symbols bottom row
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
@@ -923,8 +1485,9 @@ class TechuKeyboardService : InputMethodService() {
                 setMargins(dp(2), 0, dp(2), 0)
             }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E242C"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
+                setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
             }
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = "Space"
@@ -962,26 +1525,24 @@ class TechuKeyboardService : InputMethodService() {
         return row
     }
 
-    // 5. HELPER VIEW BUILDERS
+    // Helper View Builders
     private fun createNativeKeyView(
         mainChar: String,
         subChar: String,
-        isSpecial: Boolean,
         onTap: (String) -> Unit
     ): FrameLayout {
         return FrameLayout(this).apply {
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E242C"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
-                setStroke(1, Color.parseColor("#2D333B"))
+                setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
             }
 
-            // Top-right secondary superscript
             if (subChar.isNotEmpty()) {
                 val subTv = TextView(this@TechuKeyboardService).apply {
                     text = subChar
                     textSize = 9.5f
-                    setTextColor(Color.parseColor("#8B949E"))
+                    setTextColor(Color.parseColor(currentTheme.subTextHex))
                     gravity = Gravity.END or Gravity.TOP
                     setPadding(0, dp(2), dp(5), 0)
                     layoutParams = FrameLayout.LayoutParams(
@@ -992,11 +1553,10 @@ class TechuKeyboardService : InputMethodService() {
                 addView(subTv)
             }
 
-            // Center primary main character
             val mainTv = TextView(this@TechuKeyboardService).apply {
                 text = mainChar
                 textSize = 17f
-                setTextColor(Color.WHITE)
+                setTextColor(Color.parseColor(currentTheme.textHex))
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 layoutParams = FrameLayout.LayoutParams(
@@ -1018,8 +1578,9 @@ class TechuKeyboardService : InputMethodService() {
                         "↶" -> android.widget.Toast.makeText(this@TechuKeyboardService, "Undo", android.widget.Toast.LENGTH_SHORT).show()
                         "↷" -> android.widget.Toast.makeText(this@TechuKeyboardService, "Redo", android.widget.Toast.LENGTH_SHORT).show()
                         "𝐁" -> android.widget.Toast.makeText(this@TechuKeyboardService, "Bold", android.widget.Toast.LENGTH_SHORT).show()
-                        "✂" -> android.widget.Toast.makeText(this@TechuKeyboardService, "Cut", android.widget.Toast.LENGTH_SHORT).show()
+                        "✂" -> currentInputConnection?.performContextMenuAction(android.R.id.cut)
                         "📋" -> openToolDeck("clip")
+                        "📥" -> currentInputConnection?.performContextMenuAction(android.R.id.paste)
                         else -> currentInputConnection?.commitText(subChar, 1)
                     }
                 }
@@ -1040,13 +1601,44 @@ class TechuKeyboardService : InputMethodService() {
                 }
             }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E242C"))
+                setColor(Color.parseColor(currentTheme.keyBgHex))
                 cornerRadius = dp(6).toFloat()
-                setStroke(1, Color.parseColor("#2D333B"))
+                setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
             }
             val tv = TextView(this@TechuKeyboardService).apply {
                 text = label
                 textSize = 14f
+                setTextColor(Color.WHITE)
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+            }
+            addView(tv)
+            setOnClickListener {
+                triggerHapticClick()
+                onClick()
+            }
+        }
+    }
+
+    private fun createDeckKey(label: String, widthDp: Int = 0, weight: Float = 0f, onClick: () -> Unit): FrameLayout {
+        return FrameLayout(this).apply {
+            layoutParams = if (weight > 0f) {
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
+                    setMargins(dp(2), dp(2), dp(2), dp(2))
+                }
+            } else {
+                LinearLayout.LayoutParams(dp(widthDp), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                    setMargins(dp(2), dp(2), dp(2), dp(2))
+                }
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(currentTheme.keyBgHex))
+                cornerRadius = dp(6).toFloat()
+                setStroke(1, Color.parseColor(currentTheme.keyBorderHex))
+            }
+            val tv = TextView(this@TechuKeyboardService).apply {
+                text = label
+                textSize = 15f
                 setTextColor(Color.WHITE)
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
@@ -1077,7 +1669,6 @@ class TechuKeyboardService : InputMethodService() {
                 MotionEvent.ACTION_MOVE -> {
                     val deltaX = event.rawX - startX
                     val deltaY = event.rawY - startY
-                    // SWIPE DETECTED: TOGGLE LANGUAGE!
                     if (!isSwiping && Math.abs(deltaX) > swipeThresholdPx && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
                         isSwiping = true
                         toggleLanguageMode()
@@ -1096,13 +1687,14 @@ class TechuKeyboardService : InputMethodService() {
         }
     }
 
-    // 6. KEYBOARD ENGINE LOGIC (AVRO, SUGGESTIONS, BACKSPACE)
+    // =========================================================================
+    // 9. ENGINE LOGIC (AVRO, SUGGESTIONS, BACKSPACE)
+    // =========================================================================
     private fun handleCharacter(char: String) {
         closeToolDeck()
         triggerHapticClick()
 
         if (!isAvroMode) {
-            // ENGLISH MODE: Direct typing without transliteration!
             currentInputConnection?.commitText(char, 1)
             if (shiftState == 1) {
                 shiftState = 0
@@ -1111,12 +1703,10 @@ class TechuKeyboardService : InputMethodService() {
             return
         }
 
-        // BANGLA AVRO PHONETIC MODE:
         composing.append(char)
         val converted = engine.toBangla(composing.toString())
         currentInputConnection?.setComposingText(converted, 1)
 
-        // Auto-unshift if shifted
         if (shiftState == 1) {
             shiftState = 0
             renderKeyboardKeys()
@@ -1125,22 +1715,9 @@ class TechuKeyboardService : InputMethodService() {
         updateCandidateView()
     }
 
-    private fun handleSpace() {
-        triggerHapticClick()
-        if (isAvroMode && composing.isNotEmpty()) {
-            val topWord = currentSuggestions.firstOrNull() ?: engine.toBangla(composing.toString())
-            currentInputConnection?.commitText("$topWord ", 1)
-            suggestionManager.recordWord(topWord)
-            composing.clear()
-            updateCandidateView()
-        } else {
-            currentInputConnection?.commitText(" ", 1)
-        }
-    }
-
     private fun handleBackspace() {
         triggerHapticClick()
-        if (isAvroMode && composing.isNotEmpty()) {
+        if (composing.isNotEmpty()) {
             composing.deleteCharAt(composing.length - 1)
             if (composing.isNotEmpty()) {
                 val converted = engine.toBangla(composing.toString())
@@ -1154,6 +1731,22 @@ class TechuKeyboardService : InputMethodService() {
         }
     }
 
+    private fun handleSpace() {
+        triggerHapticClick()
+        if (composing.isNotEmpty()) {
+            val finalWord = if (currentSuggestions.isNotEmpty()) {
+                currentSuggestions[0]
+            } else {
+                engine.toBangla(composing.toString())
+            }
+            currentInputConnection?.commitText(finalWord, 1)
+            suggestionManager.recordWord(finalWord)
+            composing.clear()
+            updateCandidateView()
+        }
+        currentInputConnection?.commitText(" ", 1)
+    }
+
     private fun handleEnter() {
         triggerHapticClick()
         commitComposing()
@@ -1162,63 +1755,72 @@ class TechuKeyboardService : InputMethodService() {
     }
 
     private fun commitComposing() {
-        if (isAvroMode && composing.isNotEmpty()) {
-            val topWord = currentSuggestions.firstOrNull() ?: engine.toBangla(composing.toString())
-            currentInputConnection?.commitText(topWord, 1)
-            suggestionManager.recordWord(topWord)
+        if (composing.isNotEmpty()) {
+            val finalWord = engine.toBangla(composing.toString())
+            currentInputConnection?.commitText(finalWord, 1)
+            suggestionManager.recordWord(finalWord)
             composing.clear()
             updateCandidateView()
         }
     }
 
-    private fun selectSuggestion(word: String) {
-        triggerHapticClick()
-        currentInputConnection?.commitText("$word ", 1)
-        suggestionManager.recordWord(word)
-        composing.clear()
-        updateCandidateView()
-    }
-
     private fun updateCandidateView() {
-        val bar = suggestionsBar ?: return
-        bar.removeAllViews()
+        val sBar = suggestionsBar ?: return
+        val sScroll = suggestionsScroll ?: return
+        val tBar = toolsBar ?: return
 
-        val query = composing.toString()
-        if (query.isEmpty() || !isAvroMode) {
-            // Revert back to tools strip when not composing
-            suggestionsScroll?.visibility = View.GONE
-            toolsBar?.visibility = View.VISIBLE
+        sBar.removeAllViews()
+
+        if (composing.isEmpty()) {
+            sScroll.visibility = View.GONE
+            tBar.visibility = View.VISIBLE
+            currentSuggestions = emptyList()
             return
         }
 
-        // Show suggestions strip when typing
-        toolsBar?.visibility = View.GONE
-        suggestionsScroll?.visibility = View.VISIBLE
+        tBar.visibility = View.GONE
+        sScroll.visibility = View.VISIBLE
 
-        currentSuggestions = suggestionManager.getSuggestions(query, isAvroMode)
+        currentSuggestions = suggestionManager.getSuggestions(composing.toString(), isAvroMode)
 
-        for ((index, word) in currentSuggestions.withIndex()) {
+        for ((index, candidate) in currentSuggestions.withIndex()) {
             val isHero = (index == 0)
-            val chip = TextView(this).apply {
-                text = if (isHero) "$word ★" else word
-                textSize = if (isHero) 15f else 14f
-                setTypeface(null, if (isHero) Typeface.BOLD else Typeface.NORMAL)
-                setTextColor(if (isHero) Color.parseColor("#00E5FF") else Color.WHITE)
-                gravity = Gravity.CENTER
-                setPadding(dp(12), dp(4), dp(12), dp(4))
+            val chip = FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    dp(34)
+                ).apply { setMargins(dp(3), 0, dp(3), 0) }
 
                 background = GradientDrawable().apply {
-                    setColor(if (isHero) Color.parseColor("#1B2A38") else Color.parseColor("#222832"))
+                    if (isHero) {
+                        setColor(Color.parseColor(currentTheme.surfaceHex))
+                        setStroke(1, Color.parseColor(currentTheme.accentHex))
+                    } else {
+                        setColor(Color.parseColor(currentTheme.keyBgHex))
+                    }
                     cornerRadius = dp(6).toFloat()
-                    if (isHero) setStroke(1, Color.parseColor("#00E5FF"))
                 }
 
-                setOnClickListener { selectSuggestion(word) }
+                val tv = TextView(this@TechuKeyboardService).apply {
+                    text = candidate
+                    textSize = 15f
+                    setTextColor(if (isHero) Color.parseColor(currentTheme.accentHex) else Color.WHITE)
+                    typeface = if (isHero) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                    setPadding(dp(12), 0, dp(12), 0)
+                    gravity = Gravity.CENTER
+                }
+                addView(tv)
+
+                setOnClickListener {
+                    triggerHapticClick()
+                    currentInputConnection?.commitText(candidate, 1)
+                    currentInputConnection?.commitText(" ", 1)
+                    suggestionManager.recordWord(candidate)
+                    composing.clear()
+                    updateCandidateView()
+                }
             }
-            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(32)).apply {
-                setMargins(dp(3), 0, dp(3), 0)
-            }
-            bar.addView(chip, lp)
+            sBar.addView(chip)
         }
     }
 
