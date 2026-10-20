@@ -43,11 +43,14 @@ jobs:
           TECHUBOARD_ALLOW_DEBUG_SIGNING: "1"
         run: flutter build apk --release
 
+      - name: Rename APK for release
+        run: cp techuboard_android/build/app/outputs/flutter-apk/app-release.apk Techuboard-Android-v1.0.apk
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Techuboard-Android-v1.0
-          path: techuboard_android/build/app/outputs/flutter-apk/app-release.apk
+          path: Techuboard-Android-v1.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -64,6 +67,6 @@ jobs:
             
             Download `Techuboard-Android-v1.0.apk` below and install directly onto your Android device!
           files: |
-            techuboard_android/build/app/outputs/flutter-apk/app-release.apk
+            Techuboard-Android-v1.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
