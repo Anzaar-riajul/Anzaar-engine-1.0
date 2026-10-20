@@ -39,9 +39,16 @@ jobs:
 
       - name: Build Release APK
         working-directory: techuboard_android
-        env:
-          TECHUBOARD_ALLOW_DEBUG_SIGNING: "1"
-        run: flutter build apk --release -v
+        run: |
+          set -o pipefail
+          flutter build apk --release -v 2>&1 | tee /tmp/flutter_build.log
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-build-failure-log
+          path: /tmp/flutter_build.log
 
       - name: Rename APK for release
         run: cp techuboard_android/build/app/outputs/flutter-apk/app-release.apk Techuboard-Android-v1.0.apk
