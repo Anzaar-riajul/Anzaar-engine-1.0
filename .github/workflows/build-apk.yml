@@ -43,12 +43,13 @@ jobs:
           set -o pipefail
           flutter build apk --release -v 2>&1 | tee /tmp/flutter_build.log
 
-      - name: Upload Build Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-failure-log
-          path: /tmp/flutter_build.log
+      - name: Print Failure Summary to Step Summary
+        if: always()
+        run: |
+          echo "### Flutter Build Log (Tail 150 lines)" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 150 /tmp/flutter_build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Rename APK for release
         run: cp techuboard_android/build/app/outputs/flutter-apk/app-release.apk Techuboard-Android-v1.0.apk
