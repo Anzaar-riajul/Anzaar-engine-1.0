@@ -259,7 +259,7 @@ func runTokenUsageSnapshot() -> Never {
     let root = TokenUsageView(manager: manager).environmentObject(AppLanguageObserver.shared)
     let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 860, height: 700),
                           styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-    window.title = "Clipy Token Usage · Fictional Preview"
+    window.title = "Techuboard Token Usage · Fictional Preview"
     let closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
                                                                object: window, queue: .main) { _ in
         try? FileManager.default.removeItem(at: temporary)

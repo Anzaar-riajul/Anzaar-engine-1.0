@@ -7,7 +7,6 @@ import '../../app_localizations.dart';
 import '../../ui/app_components.dart';
 import '../../ui/app_theme.dart';
 import '../devices/devices_page.dart';
-import '../keyboard/techu_avro_page.dart';
 
 class MobileSettingsContent extends StatefulWidget {
   final VoidCallback onOpenLogs;
@@ -25,6 +24,9 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
     with WidgetsBindingObserver {
   static const _widgetChannel = MethodChannel(
     'com.techuboard.app/widget',
+  );
+  static const _permissionsChannel = MethodChannel(
+    'com.techuboard.app/permissions',
   );
   late final Future<String> _version = _readVersion();
 
@@ -44,6 +46,10 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
 
   bool _timerWidgetPinned = false;
   bool _pinning = false;
+  bool _floatingHubEnabled = false;
+  bool _hasOverlayPermission = false;
+  bool _hasAccessibilityPermission = false;
+  bool _autoImageSync = true;
   late final TextEditingController _excludedAppsController;
 
   @override
@@ -55,7 +61,21 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
     );
     if (Platform.isAndroid) {
       _refreshPinned();
+      _refreshFloatingHubStatus();
     }
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) {
+        setState(() {
+          _autoImageSync = prefs.getBool('autoImageSync') ?? true;
+        });
+      }
+    });
+  }
+
+  Future<void> _toggleAutoImageSync(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('autoImageSync', value);
+    if (mounted) setState(() => _autoImageSync = value);
   }
 
   @override
@@ -69,7 +89,56 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (Platform.isAndroid && state == AppLifecycleState.resumed) {
       _refreshPinned();
+      _refreshFloatingHubStatus();
     }
+  }
+
+  Future<void> _refreshFloatingHubStatus() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final running =
+          await _permissionsChannel.invokeMethod<bool>('isFloatingHubRunning') ??
+              false;
+      final overlay =
+          await _permissionsChannel.invokeMethod<bool>('canDrawOverlays') ??
+              false;
+      final access =
+          await _permissionsChannel.invokeMethod<bool>(
+                  'isAccessibilityGranted') ??
+              false;
+      if (mounted) {
+        setState(() {
+          _floatingHubEnabled = running;
+          _hasOverlayPermission = overlay;
+          _hasAccessibilityPermission = access;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFloatingHub(bool enable) async {
+    if (!Platform.isAndroid) return;
+    if (enable) {
+      final canDraw =
+          await _permissionsChannel.invokeMethod<bool>('canDrawOverlays') ??
+              false;
+      if (!canDraw) {
+        await _permissionsChannel.invokeMethod<void>(
+          'requestOverlayPermission',
+        );
+        if (mounted) {
+          showTechuMessage(
+            context,
+            'Please grant "Display over other apps" permission',
+          );
+        }
+        return;
+      }
+      await _permissionsChannel.invokeMethod<void>('startFloatingHub');
+    } else {
+      await _permissionsChannel.invokeMethod<void>('stopFloatingHub');
+    }
+    await _refreshFloatingHubStatus();
   }
 
   Future<void> _refreshPinned() async {
@@ -262,21 +331,61 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                 ),
               ),
             ),
+          if (Platform.isAndroid)
+            TechuSection(
+              title: 'Floating Paste Hub',
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    secondary:
+                        const TechuIcon(Icons.dashboard_customize_rounded),
+                    title: const Text('Floating Paste Pill'),
+                    subtitle: const Text(
+                      'Floating capsule on top of any app for 1-tap pasting',
+                    ),
+                    value: _floatingHubEnabled,
+                    onChanged: (val) => _toggleFloatingHub(val),
+                  ),
+                  ListTile(
+                    leading: const TechuIcon(Icons.accessibility_new_rounded),
+                    title: const Text('1-Tap Direct Paste'),
+                    subtitle: Text(
+                      _hasAccessibilityPermission
+                          ? 'Accessibility active (Auto direct-paste ready)'
+                          : 'Tap to enable Accessibility for direct field paste',
+                    ),
+                    trailing: Icon(
+                      _hasAccessibilityPermission
+                          ? Icons.check_circle_rounded
+                          : Icons.arrow_forward_ios_rounded,
+                      color: _hasAccessibilityPermission
+                          ? Colors.green
+                          : Theme.of(context).colorScheme.primary,
+                      size: 20,
+                    ),
+                    onTap: () async {
+                      await _permissionsChannel.invokeMethod<void>(
+                        'openAccessibilitySettings',
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
           TechuSection(
-            title: 'TechuAvro Keyboard',
+            title: 'Image & File Sync',
             child: Column(
               children: [
-                ListTile(
-                  leading: const TechuIcon(Icons.keyboard_rounded),
-                  title: const Text('TechuAvro Keyboard Settings'),
-                  subtitle: const Text('Phonetic Bengali typing & 1-tap clipboard bar'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const TechuAvroPage(),
-                    ),
+                SwitchListTile(
+                  secondary: const TechuIcon(Icons.image_outlined),
+                  title: const Text('Auto Image & File Sync'),
+                  subtitle: Text(
+                    _autoImageSync
+                        ? 'Automatically syncs copied images & files across all connected devices'
+                        : 'Manual only (Use "Send to Device" to share images)',
                   ),
+                  value: _autoImageSync,
+                  onChanged: (val) => _toggleAutoImageSync(val),
                 ),
               ],
             ),

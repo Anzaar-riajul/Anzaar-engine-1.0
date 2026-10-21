@@ -214,6 +214,33 @@ final class HistoryRepository {
         }
     }
 
+    func togglePin(contentHash: String?, date: Date) -> Bool {
+        queue.sync {
+            guard let db else { return false }
+            let sql: String
+            var stmt: OpaquePointer?
+            if let contentHash, !contentHash.isEmpty {
+                sql = "UPDATE history_entries SET is_pinned = CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END WHERE content_hash = ?"
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    sqliteLogFailure(db, "togglePin prepare by hash")
+                    return false
+                }
+                defer { sqlite3_finalize(stmt) }
+                bindText(stmt, 1, contentHash)
+                return sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db) > 0
+            } else {
+                sql = "UPDATE history_entries SET is_pinned = CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END WHERE abs(date - ?) < 0.005"
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    sqliteLogFailure(db, "togglePin prepare by date")
+                    return false
+                }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_double(stmt, 1, date.timeIntervalSince1970)
+                return sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db) > 0
+            }
+        }
+    }
+
     func deleteAll() -> Bool {
         queue.sync {
             guard let db else { return false }
@@ -260,6 +287,50 @@ final class HistoryRepository {
                 }
                 break
             }
+        }
+    }
+
+    /// Trims unpinned image entries if total images exceed `maxImages`. Returns number of deleted rows.
+    @discardableResult
+    func trimImageEntriesToLimit(_ maxImages: Int) -> Int {
+        queue.sync {
+            guard maxImages > 0, let db else { return 0 }
+            let countSql = "SELECT COUNT(*) FROM history_entries WHERE item_type = 'image'"
+            var countStmt: OpaquePointer?
+            var totalImages = 0
+            if sqlite3_prepare_v2(db, countSql, -1, &countStmt, nil) == SQLITE_OK {
+                if sqlite3_step(countStmt) == SQLITE_ROW {
+                    totalImages = Int(sqlite3_column_int(countStmt, 0))
+                }
+            }
+            sqlite3_finalize(countStmt)
+
+            guard totalImages > maxImages else { return 0 }
+            let overflow = totalImages - maxImages
+
+            let deleteUnpinnedImages = """
+            DELETE FROM history_entries
+            WHERE rowid IN (
+                SELECT rowid FROM history_entries
+                WHERE item_type = 'image' AND is_pinned = 0
+                ORDER BY date ASC
+                LIMIT ?
+            )
+            """
+            var deleteStmt: OpaquePointer?
+            var deletedCount = 0
+            if sqlite3_prepare_v2(db, deleteUnpinnedImages, -1, &deleteStmt, nil) == SQLITE_OK {
+                sqlite3_bind_int(deleteStmt, 1, Int32(overflow))
+                if sqlite3_step(deleteStmt) == SQLITE_DONE {
+                    deletedCount = Int(sqlite3_changes(db))
+                } else {
+                    sqliteLogFailure(db, "image trim")
+                }
+            } else {
+                sqliteLogFailure(db, "image trim prepare")
+            }
+            sqlite3_finalize(deleteStmt)
+            return deletedCount
         }
     }
 

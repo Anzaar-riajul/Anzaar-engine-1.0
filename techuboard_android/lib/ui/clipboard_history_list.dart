@@ -170,6 +170,61 @@ class _PaginatedClipboardHistoryListState
     }
   }
 
+  Future<void> _sendFile(File file) async {
+    final l10n = context.l10n;
+    final peers = SyncManager.instance.availablePeers;
+    if (peers.isEmpty) {
+      showTechuMessage(context, l10n.noDevicesFound);
+      return;
+    }
+    final peer = await showModalBottomSheet<DiscoveredPeer>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * .65,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Send File to Device',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              ...peers.map(
+                (p) => ListTile(
+                  leading: const TechuIcon(Icons.devices_rounded),
+                  title: Text(p.displayName),
+                  subtitle: Text(p.host),
+                  onTap: () => Navigator.pop(sheetContext, p),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (peer == null || !mounted) return;
+    try {
+      final success = await SyncManager.instance.sendFileToPeer(
+        file,
+        peerId: peer.peerId,
+      );
+      if (mounted) {
+        showTechuMessage(
+          context,
+          success ? 'Sending to ${peer.displayName}...' : l10n.sendFailed,
+        );
+      }
+    } catch (_) {
+      if (mounted) showTechuMessage(context, l10n.sendFailed);
+    }
+  }
+
   Future<void> _preview(HistoryEntry entry) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -202,11 +257,11 @@ class _PaginatedClipboardHistoryListState
                 ),
               ),
               const SizedBox(height: 20),
-              if (entry.item.type == 'text' || Platform.isWindows)
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  if (entry.item.type == 'text' || Platform.isWindows)
                     FilledButton.icon(
                       onPressed: () {
                         Navigator.pop(sheetContext);
@@ -215,17 +270,26 @@ class _PaginatedClipboardHistoryListState
                       icon: const Icon(Icons.copy_rounded),
                       label: Text(context.l10n.copyContent),
                     ),
-                    if (entry.item.type == 'text')
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(sheetContext);
-                          _send(entry.item.value.toString());
-                        },
-                        icon: const Icon(Icons.send_outlined),
-                        label: Text(context.l10n.send),
-                      ),
-                  ],
-                ),
+                  if (entry.item.type == 'text')
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _send(entry.item.value.toString());
+                      },
+                      icon: const Icon(Icons.send_outlined),
+                      label: Text(context.l10n.send),
+                    ),
+                  if (entry.item.type == 'image' || entry.item.type == 'fileURL')
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _sendFile(File(entry.item.value.toString()));
+                      },
+                      icon: const Icon(Icons.send_outlined),
+                      label: const Text('Send to Device'),
+                    ),
+                ],
+              ),
             ],
           ),
         ),

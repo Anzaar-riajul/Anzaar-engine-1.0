@@ -18,7 +18,7 @@ final class TransferNotifier {
         // The final path (post-dedupe rename), not the original file name.
         content.userInfo = ["filePath": destination.path]
         let request = UNNotificationRequest(
-            identifier: "clipy.file.\(UUID().uuidString)",
+            identifier: "techuboard.file.\(UUID().uuidString)",
             content: content,
             trigger: nil
         )

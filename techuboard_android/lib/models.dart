@@ -248,3 +248,131 @@ class NotificationListenerStatus {
     );
   }
 }
+
+class SnippetItem {
+  final String id;
+  final String folderId;
+  final String title;
+  final String content;
+  final int updatedAt;
+  final int sortOrder;
+
+  const SnippetItem({
+    required this.id,
+    required this.folderId,
+    required this.title,
+    required this.content,
+    required this.updatedAt,
+    this.sortOrder = 0,
+  });
+
+  SnippetItem copyWith({
+    String? id,
+    String? folderId,
+    String? title,
+    String? content,
+    int? updatedAt,
+    int? sortOrder,
+  }) {
+    return SnippetItem(
+      id: id ?? this.id,
+      folderId: folderId ?? this.folderId,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      updatedAt: updatedAt ?? this.updatedAt,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'folderId': folderId,
+    'title': title,
+    'content': content,
+    'updatedAt': updatedAt,
+    'sortOrder': sortOrder,
+  };
+
+  factory SnippetItem.fromJson(
+    Map<String, dynamic> json, {
+    String? defaultFolderId,
+  }) {
+    return SnippetItem(
+      id: json['id'] as String? ?? json['id']?.toString() ?? '',
+      folderId: json['folderId'] as String? ?? defaultFolderId ?? '',
+      title: json['title'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      updatedAt:
+          (json['updatedAt'] as num?)?.toInt() ??
+          DateTime.now().millisecondsSinceEpoch,
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class SnippetFolderItem {
+  final String id;
+  final String title;
+  final bool isEnabled;
+  final int updatedAt;
+  final int sortOrder;
+  final List<SnippetItem> snippets;
+
+  const SnippetFolderItem({
+    required this.id,
+    required this.title,
+    this.isEnabled = true,
+    required this.updatedAt,
+    this.sortOrder = 0,
+    this.snippets = const [],
+  });
+
+  SnippetFolderItem copyWith({
+    String? id,
+    String? title,
+    bool? isEnabled,
+    int? updatedAt,
+    int? sortOrder,
+    List<SnippetItem>? snippets,
+  }) {
+    return SnippetFolderItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      isEnabled: isEnabled ?? this.isEnabled,
+      updatedAt: updatedAt ?? this.updatedAt,
+      sortOrder: sortOrder ?? this.sortOrder,
+      snippets: snippets ?? this.snippets,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'isEnabled': isEnabled,
+    'updatedAt': updatedAt,
+    'sortOrder': sortOrder,
+    'snippets': snippets.map((s) => s.toJson()).toList(),
+  };
+
+  factory SnippetFolderItem.fromJson(Map<String, dynamic> json) {
+    final folderId = json['id'] as String? ?? json['id']?.toString() ?? '';
+    final rawSnippets = json['snippets'] as List<dynamic>? ?? [];
+    return SnippetFolderItem(
+      id: folderId,
+      title: json['title'] as String? ?? '',
+      isEnabled: json['isEnabled'] as bool? ?? (json['isEnabled'] == 1),
+      updatedAt:
+          (json['updatedAt'] as num?)?.toInt() ??
+          DateTime.now().millisecondsSinceEpoch,
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      snippets: rawSnippets
+          .map(
+            (s) => SnippetItem.fromJson(
+              s as Map<String, dynamic>,
+              defaultFolderId: folderId,
+            ),
+          )
+          .toList(),
+    );
+  }
+}

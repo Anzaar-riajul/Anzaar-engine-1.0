@@ -9,13 +9,13 @@ import Vision
 /// the lifetime of the calling process and offers no API to release them. The
 /// main app is a permanently-resident menu bar agent, so loading Vision there
 /// raised its idle footprint floor permanently. Instead the parent spawns this
-/// same executable with `--clipy-ocr-child`, streams a JSON request batch
+/// same executable with `--techuboard-ocr-child`, streams a JSON request batch
 /// through stdin and reads JSON results from stdout; when the child exits,
 /// every byte of Vision memory goes back to the system. If the child cannot be
 /// spawned or the protocol fails, callers fall back to in-process Vision so
 /// recognition never breaks — at the cost of the residency this exists to avoid.
 enum OCRSubprocess {
-    static let childModeArgument = "--clipy-ocr-child"
+    static let childModeArgument = "--techuboard-ocr-child"
     /// Generous: accurate-level recognition of a 2048px image takes well under
     /// a second on Apple Silicon; the timeout only guards a hung child.
     private static let timeout: TimeInterval = 30
@@ -78,7 +78,7 @@ enum OCRSubprocess {
     /// the child, falling back to in-process Vision when that is unavailable.
     static func recognize(cgImage: CGImage, languages: ScreenshotOCRLanguage) -> String? {
         let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("clipy-ocr-\(UUID().uuidString).png")
+            .appendingPathComponent("techuboard-ocr-\(UUID().uuidString).png")
         guard let destination = CGImageDestinationCreateWithURL(
             tempURL as CFURL, "public.png" as CFString, 1, nil) else {
             return ImageOCRService.recognizeInProcess(cgImage: cgImage, languages: languages)
@@ -99,7 +99,7 @@ enum OCRSubprocess {
 
     // MARK: - Child side (runs before any AppKit initialization)
 
-    /// Entry for `--clipy-ocr-child`, branched at the very top of main.swift.
+    /// Entry for `--techuboard-ocr-child`, branched at the very top of main.swift.
     /// Reads `[Request]` JSON from stdin, writes `[Result]` JSON to stdout.
     /// Must stay free of AppKit singletons — it runs instead of
     /// `NSApplication.shared`, and its whole process is discarded afterwards.

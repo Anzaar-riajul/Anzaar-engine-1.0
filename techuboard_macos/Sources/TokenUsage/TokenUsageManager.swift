@@ -73,7 +73,7 @@ final class TokenUsageManager: ObservableObject {
     @Published private(set) var priceUpdatedAt: Date?
     @Published private(set) var errorMessage: String?
 
-    private let worker = DispatchQueue(label: "clipy.token-usage", qos: .utility)
+    private let worker = DispatchQueue(label: "techuboard.token-usage", qos: .utility)
     private let databaseURL: URL
     private let catalog: TokenPriceCatalog
     private var store: TokenUsageStore?
@@ -85,7 +85,7 @@ final class TokenUsageManager: ObservableObject {
          overridesURL: URL? = Bundle.main.url(forResource: "token-prices-overrides", withExtension: "json")) {
         self.paths = paths
         let support = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone", isDirectory: true)
+            .appendingPathComponent("Techuboard", isDirectory: true)
         databaseURL = support.appendingPathComponent("token-usage.db")
         catalog = TokenPriceCatalog(seedURL: seedURL, overridesURL: overridesURL,
                                     cacheURL: support.appendingPathComponent("token-prices.json"))
@@ -146,7 +146,7 @@ final class TokenUsageManager: ObservableObject {
                 do {
                     if let error { throw error }
                     guard let response = response as? HTTPURLResponse, response.statusCode == 200,
-                          let data else { throw NSError(domain: "ClipyTokenPrice", code: 2,
+                          let data else { throw NSError(domain: "TechuTokenPrice", code: 2,
                                                          userInfo: [NSLocalizedDescriptionKey: "Price download failed"]) }
                     try self.catalog.installDownloadedPrices(data)
                     let report = try self.currentReport(store: self.ensureStore())
@@ -188,7 +188,7 @@ final class TokenUsageManager: ObservableObject {
         }
     }
 
-    #if CLIPY_CORE_TESTS
+    #if TECHUBOARD_CORE_TESTS
     func setPreview(report: TokenUsageReport, statuses: [TokenAgent: TokenSourceStatus]) {
         self.report = report
         self.statuses = statuses

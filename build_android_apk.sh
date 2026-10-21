@@ -8,10 +8,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/build_common.sh
 source "${REPO_ROOT}/scripts/lib/build_common.sh"
 resolve_build_version
-ANDROID_DIR="${REPO_ROOT}/clipy_android"
+ANDROID_DIR="${REPO_ROOT}/techuboard_android"
 DIST_DIR="${REPO_ROOT}/dist"
 
-APP_NAME="ClipyClone"
+APP_NAME="Techuboard"
 TARGET_PLATFORM="${TARGET_PLATFORM:-android-arm,android-arm64}"
 SPLIT_PER_ABI="${SPLIT_PER_ABI:-1}"
 validate_boolean SPLIT_PER_ABI "${SPLIT_PER_ABI}"

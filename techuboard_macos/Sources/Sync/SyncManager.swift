@@ -11,8 +11,8 @@ final class SyncManager: NSObject {
     var onDevicesChanged: (([String]) -> Void)?
     var onPeersChanged: (([DiscoveredPeer]) -> Void)?
 
-    let syncQueue = DispatchQueue(label: "com.clipy.sync.v2")
-    let scanQueue = DispatchQueue(label: "com.clipy.scan.v2", attributes: .concurrent)
+    let syncQueue = DispatchQueue(label: "com.techuboard.sync.v2")
+    let scanQueue = DispatchQueue(label: "com.techuboard.scan.v2", attributes: .concurrent)
     let dialDedupLock = NSLock()
     /// Allocated on first recv — a 64KB buffer used to live here even when
     /// sync was disabled entirely.
@@ -29,7 +29,7 @@ final class SyncManager: NSObject {
     static let pendingQueueMax = 500
     static let pendingQueueTTL: TimeInterval = 24 * 60 * 60
     static let pendingAckRetryAge: TimeInterval = 120
-    static let endpointCacheKey = "clipy.peerEndpoints.v2"
+    static let endpointCacheKey = "techuboard.peerEndpoints.v2"
     static let endpointCacheTTL: TimeInterval = 86400
     static let maxReconnectBackoff: TimeInterval = 30
     static let minReconnectInterval: TimeInterval = 2
@@ -46,7 +46,7 @@ final class SyncManager: NSObject {
 
     let diagnostics = SyncDiagnostics()
     var relayConfigurationGeneration = 0
-    static let defaultEncryptionKey = SymmetricKey(data: SHA256.hash(data: Data("ClipySyncSecret2026".utf8)))
+    static let defaultEncryptionKey = SymmetricKey(data: SHA256.hash(data: Data("TechuboardSyncSecret2026".utf8)))
 
 
     var discoveredPeers: [String: DiscoveredPeer] = [:]
@@ -135,11 +135,11 @@ final class SyncManager: NSObject {
     }
     var incomingFiles: [String: IncomingFileState] = [:]
     var fileAckWaiters: [String: (Bool) -> Void] = [:]
-    let fileTransferQueue = DispatchQueue(label: "com.clipy.sync.filetransfer")
+    let fileTransferQueue = DispatchQueue(label: "com.techuboard.sync.filetransfer")
     // A send waits for the remote ACK. Receiving must remain independent so
     // two Macs sending at the same time can still finish each other's files.
-    let fileReceiveQueue = DispatchQueue(label: "com.clipy.sync.filereceive")
-    #if CLIPY_CORE_TESTS
+    let fileReceiveQueue = DispatchQueue(label: "com.techuboard.sync.filereceive")
+    #if TECHUBOARD_CORE_TESTS
     var fileReceiveDirectoryForTesting: URL?
     #endif
 

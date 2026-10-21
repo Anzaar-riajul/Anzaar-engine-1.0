@@ -147,7 +147,7 @@ class NotificationManager: NSObject {
             let decodedExtras = try container.decodeIfPresent([String: String].self, forKey: .extras)
             extras = decodedExtras
             let flag = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
-            let extrasFlag = decodedExtras?["clipyArchived"] == "true"
+            let extrasFlag = decodedExtras?["techuArchived"] == "true"
             isArchived = flag || extrasFlag
         }
     }

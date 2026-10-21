@@ -6,9 +6,12 @@ struct MenuBarPanelView: View {
     @ObservedObject var overflow: MenuBarOverflowManager
     @ObservedObject private var keepAwake = KeepAwakeManager.shared
     @ObservedObject private var notificationPopups = NotificationPopupPreference.shared
+    @ObservedObject private var tokenManager = TokenUsageManager.shared
     @EnvironmentObject private var language: AppLanguageObserver
     @State private var showingLastIcon = false
     @State private var refreshingDevices = false
+    @State private var imageAutoDelete = PreferencesManager.shared.isImageAutoDeleteEnabled
+    @State private var imageDeleteLimit = PreferencesManager.shared.imageAutoDeleteThreshold
     var activateIcon: (MenuBarOverflowItem) -> Void
 
     var body: some View {
@@ -19,7 +22,7 @@ struct MenuBarPanelView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 if model.page == .home {
-                    topBar.padding(.bottom, 10)
+                    topBar.padding(.bottom, 8)
                     tabs.padding(.bottom, 10)
                 } else {
                     detailHeader.padding(.bottom, 10)
@@ -29,35 +32,11 @@ struct MenuBarPanelView: View {
                 VStack(spacing: 0) {
                     content
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                if model.page == .home {
-                    Rectangle()
-                        .fill(Color.primary.opacity(0.06))
-                        .frame(height: 0.5)
-                        .padding(.top, 6)
-                    footer.padding(.top, 8).padding(.bottom, 3)
-                    Text("v" + AppVersion.displayString)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.bottom, 4)
-                        .accessibilityLabel(L10n.t(.settingsVersion) + " " + AppVersion.displayString)
-                }
             }
         }
         .padding(.horizontal, 16).padding(.top, 14)
-        .padding(.bottom, model.page == .home ? 0 : 10)
-        .background(
-            ZStack {
-                Color(nsColor: .windowBackgroundColor).opacity(0.97)
-                Color.primary.opacity(0.012)
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.75)
-        )
+        .padding(.bottom, 12)
+        .macGlassSurface(cornerRadius: 16)
         .overlay(alignment: .bottom) {
             if let notice = model.notice {
                 Text(notice)
@@ -342,20 +321,38 @@ struct MenuBarPanelView: View {
                     }
                     .padding(.vertical, 2)
                 }
-            }.onChange(of: model.selectedID) { id in if let id { proxy.scrollTo(id) } }
+            }
+            .onHover { hovering in
+                if !hovering && !model.isPreviewHovered {
+                    model.schedulePreviewDismiss(delay: 0.15)
+                }
+            }
+            .onChange(of: model.selectedID) { id in if let id { proxy.scrollTo(id) } }
         }
     }
     private func historyRow(_ entry: HistoryEntry) -> some View {
         MenuBarPanelHistoryRow(entry: entry, selected: model.selectedID == "h:" + entry.id,
                               use: { model.onHistory?(entry, .use) },
                               copy: { model.onHistory?(entry, .copy) },
-                              saveSnippet: { model.savingSnippetEntry = entry })
+                              saveSnippet: { model.savingSnippetEntry = entry },
+                              togglePin: { model.togglePin(entry) },
+                              onDownload: { downloadImage(entry) })
             .id("h:" + entry.id)
-            .onHover { if $0 { model.selectedID = "h:" + entry.id } }
+            .onHover { isHovered in
+                if isHovered {
+                    model.hoverRow(entry)
+                } else {
+                    model.unhoverRow(entry)
+                }
+            }
             .contextMenu {
+                Button(entry.isPinned ? "Unpin from Top" : "Pin to Top") { model.togglePin(entry) }
                 Button(L10n.t(.panelUse)) { model.onHistory?(entry, .use) }
                 Button(L10n.t(.copyContent)) { model.onHistory?(entry, .copy) }
                 Button(L10n.t(.saveAsSnippet)) { model.savingSnippetEntry = entry }
+                if case .image = entry.item {
+                    Button("Download High-Res JPG") { downloadImage(entry) }
+                }
                 if entry.item.isFile {
                     Button(L10n.t(.pasteFileName)) { model.onHistory?(entry, .fileNames) }
                     Button(L10n.t(.showInFinder)) { model.onHistory?(entry, .reveal) }
@@ -366,6 +363,21 @@ struct MenuBarPanelView: View {
                     }
                 }
             }
+    }
+    private func downloadImage(_ entry: HistoryEntry) {
+        guard case .image(let path) = entry.item else { return }
+        exportHistoryImageAsJPG(path: path) { filename in
+            if let filename {
+                model.notice = "Saved to Downloads: \(filename)"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    if model.notice?.contains(filename) == true {
+                        model.notice = nil
+                    }
+                }
+            } else {
+                model.notice = "Failed to export JPG"
+            }
+        }
     }
     private var snippetsContent: some View {
         MenuBarPanelSnippetsTab(model: model)
@@ -490,16 +502,167 @@ struct MenuBarPanelView: View {
     }
     private var settingsContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Toggle(L10n.t(.overflowEnabled), isOn: Binding(get: { overflow.enabled }, set: { overflow.setEnabled($0) }))
-                Text(L10n.t(.overflowHint)).font(AppFont.caption).foregroundStyle(.secondary)
-                Divider()
-                Toggle(L10n.t(.panelPin), isOn: $model.pinned)
-                Text(L10n.t(.panelPinHint)).font(AppFont.caption).foregroundStyle(.secondary)
-                Divider()
-                actionLink(.overflowGrant) { model.onAction?(.permission) }
-                actionLink(.panelSettingsHint) { model.onAction?(.preferences) }
-            }.toggleStyle(.switch).padding(.vertical, 10)
+            VStack(spacing: 10) {
+                // Card 1: Panel & Display
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppColor.accent)
+                            .frame(width: 26, height: 26)
+                            .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Keep Panel Open")
+                                .font(.system(size: 12.5, weight: .medium))
+                            Text("Stay open when clicking outside")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $model.pinned)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .controlSize(.small)
+                    }
+                    .padding(10)
+
+                    Divider().padding(.horizontal, 10)
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "menubar.arrow.down.rectangle")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppColor.accent)
+                            .frame(width: 26, height: 26)
+                            .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 5) {
+                                Text("Hidden Menu Bar Icons")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                if PreferencesManager.hasHardwareNotch {
+                                    Text("Auto-Detected")
+                                        .font(.system(size: 8.5, weight: .bold))
+                                        .foregroundStyle(Color.green)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+                                }
+                            }
+                            Text(PreferencesManager.hasHardwareNotch ? "Active for your MacBook camera notch" : "Show icons hidden behind menu bar notch")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(get: { overflow.enabled }, set: { overflow.setEnabled($0) }))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .controlSize(.small)
+                    }
+                    .padding(10)
+                }
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+
+                // Card 2: Image Storage Auto-Cleanup
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "photo.stack")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.orange)
+                            .frame(width: 26, height: 26)
+                            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Auto-Delete Old Images")
+                                .font(.system(size: 12.5, weight: .medium))
+                            Text(imageAutoDelete ? "Keeps newest \(imageDeleteLimit) screenshots" : "Keep all screenshots forever")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $imageAutoDelete)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .onChange(of: imageAutoDelete) { enabled in
+                                PreferencesManager.shared.isImageAutoDeleteEnabled = enabled
+                                if enabled {
+                                    ClipboardManager.shared.applyImageAutoDeleteLimit()
+                                }
+                            }
+                    }
+                    .padding(10)
+
+                    if imageAutoDelete {
+                        Divider().padding(.horizontal, 10)
+                        HStack {
+                            Text("Storage limit:")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Picker("", selection: $imageDeleteLimit) {
+                                Text("10").tag(10)
+                                Text("20").tag(20)
+                                Text("30").tag(30)
+                                Text("40").tag(40)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 150)
+                            .onChange(of: imageDeleteLimit) { limit in
+                                PreferencesManager.shared.imageAutoDeleteThreshold = limit
+                                ClipboardManager.shared.applyImageAutoDeleteLimit()
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                    }
+                }
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+
+                // Card 3: System Permissions & Preferences
+                VStack(spacing: 0) {
+                    Button { model.onAction?(.permission) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "hand.raised.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.secondary)
+                                .frame(width: 20)
+                            Text("Accessibility Permissions")
+                                .font(.system(size: 12, weight: .medium))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().padding(.horizontal, 10)
+
+                    Button { model.onAction?(.preferences) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(AppColor.accent)
+                                .frame(width: 20)
+                            Text("More settings and permissions")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppColor.accent)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(AppColor.accent)
+                        }
+                        .padding(10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+            }
+            .padding(.vertical, 8)
         }
     }
     private var footer: some View {
@@ -659,7 +822,45 @@ struct MenuBarPanelView: View {
             Image(systemName: symbol).font(.system(size: 28, weight: .ultraLight)).foregroundStyle(.tertiary)
             Text(L10n.t(title)).font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
             if let hint { Text(L10n.t(hint)).font(.system(size: 11)).foregroundStyle(.tertiary).multilineTextAlignment(.center) }
-        }.padding(22).frame(maxWidth: .infinity, minHeight: 125)
+            if title == .noHistory {
+                VStack(spacing: 6) {
+                    Text("Quick Sample Clips (Click to Copy):")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 4)
+                    HStack(spacing: 6) {
+                        sampleChip("TechuAvro", text: "আমি বাংলায় গান গাই", color: .green)
+                        sampleChip("URL", text: "https://github.com/techuboard/app", color: .purple)
+                        sampleChip("Code", text: "TECHUBOARD_KEY", color: .orange)
+                    }
+                }
+            }
+        }.padding(title == .noHistory ? 16 : 22).frame(maxWidth: .infinity, minHeight: 125)
+    }
+
+    private func sampleChip(_ label: String, text: String, color: Color) -> some View {
+        Button {
+            ClipboardManager.shared.copyToPasteboard(.text(text), simulatePaste: false)
+        } label: {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(color)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
+                Text(text)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .help("Click to copy sample to clipboard")
     }
 }
 
@@ -669,6 +870,8 @@ private struct MenuBarPanelHistoryRow: View {
     let use: () -> Void
     let copy: () -> Void
     let saveSnippet: () -> Void
+    let togglePin: () -> Void
+    var onDownload: (() -> Void)? = nil
     @StateObject private var thumbnail = MenuBarPanelThumbnail()
     private var symbol: String {
         switch entry.item {
@@ -689,96 +892,163 @@ private struct MenuBarPanelHistoryRow: View {
     private var fullText: String {
         entry.resolvedText ?? ClipboardManager.shared.plainText(for: entry.item) ?? entry.item.fileURLs?.map(\.path).joined(separator: "\n") ?? entry.listDisplayTitle
     }
+    private var badgeInfo: (label: String, color: Color)? {
+        let title = entry.listDisplayTitle
+        for scalar in title.unicodeScalars {
+            if scalar.value >= 0x0980 && scalar.value <= 0x09FF {
+                return ("TechuAvro", Color.green)
+            }
+        }
+        if title.hasPrefix("http://") || title.hasPrefix("https://") {
+            return ("URL", Color.purple)
+        }
+        if title.contains("=") || title.contains("function ") || title.contains("var ") || title.contains("let ") || title.contains("const ") || title.contains("{") {
+            return ("Code", Color.orange)
+        }
+        return nil
+    }
     var body: some View {
         HStack(spacing: 6) {
-            Button(action: use) {
-                HStack(spacing: 10) {
-                    if let image = thumbnail.image {
-                        Image(nsImage: image).resizable().scaledToFit().frame(width: 42, height: 30)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    } else if !isPlainText {
-                        Image(systemName: symbol)
-                            .font(.system(size: 15, weight: .light))
-                            .foregroundStyle(AppColor.accent)
-                            .frame(width: 20)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.listDisplayTitle)
-                            .font(.system(size: 12.5, weight: selected ? .medium : .regular))
-                            .lineLimit(selected ? nil : 1)
-                            .truncationMode(.tail)
-                            .foregroundStyle(Color.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if selected && fullText != entry.listDisplayTitle {
-                            Text(fullText)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(5)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+            if case .image = entry.item {
+                ZStack(alignment: .bottomTrailing) {
+                    Button(action: use) {
+                        if let image = thumbnail.image {
+                            Image(nsImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 38, height: 26)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.system(size: 13, weight: .light))
+                                .foregroundStyle(AppColor.accent)
+                                .frame(width: 26, height: 26)
                         }
-                    }
-                    VStack(alignment: .trailing, spacing: 2) {
-                        if let source = entry.sourceApp {
-                            Text(source)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(selected ? AppColor.accent : Color.secondary)
-                                .lineLimit(1)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(selected ? AppColor.accent.opacity(0.1) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 3))
-                        }
-                        Text(RelativeTimeFormatter.string(from: entry.date))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }.frame(maxWidth: 72, alignment: .trailing)
-                }.frame(maxWidth: .infinity, minHeight: 38).contentShape(Rectangle())
-            }.buttonStyle(.plain).help(fullText)
-            if selected {
-                HStack(spacing: 4) {
-                    Button(action: saveSnippet) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "square.and.pencil").font(.system(size: 10))
-                            Text("Snippet").font(.system(size: 11, weight: .medium))
-                        }
-                        .padding(.horizontal, 7).padding(.vertical, 3.5)
-                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-                        .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(AppColor.accent)
-                    .help(L10n.t(.saveAsSnippet))
+
+                    if let onDownload {
+                        Button(action: onDownload) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .background(Color.black.opacity(0.7), in: Circle())
+                                .shadow(color: Color.black.opacity(0.35), radius: 1)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(2)
+                        .help("Download high-res JPG")
+                    }
+                }
+                .frame(width: 38, height: 26)
+            } else if !isPlainText {
+                Button(action: use) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 14, weight: .light))
+                        .foregroundStyle(AppColor.accent)
+                        .frame(width: 20)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button(action: use) {
+                HStack(spacing: 5) {
+                    if entry.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppColor.accent)
+                    }
+                    if let badge = badgeInfo {
+                        Text(badge.label)
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundStyle(badge.color)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(badge.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+                    }
+                    Text(entry.listDisplayTitle)
+                        .font(.system(size: 12.5, weight: selected ? .medium : .regular))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(Color.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if selected {
+                HStack(spacing: 3) {
+                    Button(action: togglePin) {
+                        Image(systemName: entry.isPinned ? "pin.slash.fill" : "pin.fill")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(entry.isPinned ? AppColor.accent : Color.primary.opacity(0.8))
+                            .frame(width: 22, height: 22)
+                            .background(entry.isPinned ? AppColor.accent.opacity(0.15) : Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help(entry.isPinned ? "Unpin from Top" : "Pin to Top")
+
+                    Button(action: saveSnippet) {
+                        Image(systemName: "doc.badge.plus")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.primary.opacity(0.8))
+                            .frame(width: 22, height: 22)
+                            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Save as Note")
 
                     Button(action: copy) {
-                        Text(L10n.t(.panelCopy))
-                            .font(.system(size: 11, weight: .medium))
-                            .padding(.horizontal, 8).padding(.vertical, 3.5)
-                            .background(AppColor.accent, in: RoundedRectangle(cornerRadius: 6))
-                            .foregroundStyle(Color.white)
-                            .shadow(color: AppColor.accent.opacity(0.25), radius: 2, y: 1)
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(Color.primary.opacity(0.8))
+                            .frame(width: 22, height: 22)
+                            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .help("Copy to Clipboard")
                 }
-            }
-        }.padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(
-                selected ? AppColor.accent.opacity(0.09) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .overlay(alignment: .leading) {
-                if selected {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(AppColor.accent)
-                        .frame(width: 3, height: 18)
-                        .padding(.leading, 2)
+                .transition(.opacity)
+            } else {
+                HStack(spacing: 4) {
+                    if let source = entry.sourceApp {
+                        Text(source)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 3))
+                    }
+                    Text(RelativeTimeFormatter.string(from: entry.date))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 }
+                .frame(maxWidth: 80, alignment: .trailing)
             }
-            .onAppear {
-                if case .image(let path) = entry.item { thumbnail.load(path) }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 32)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 1)
+        .background(
+            selected ? AppColor.accent.opacity(0.09) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+        )
+        .overlay(alignment: .leading) {
+            if selected {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(AppColor.accent)
+                    .frame(width: 3, height: 16)
+                    .padding(.leading, 2)
             }
-            .onDisappear { thumbnail.cancel() }
+        }
+        .onAppear {
+            if case .image(let path) = entry.item { thumbnail.load(path) }
+        }
+        .onDisappear { thumbnail.cancel() }
     }
 }
 
@@ -1865,3 +2135,78 @@ private struct SnippetClipboardPickerSheet: View {
     }
 }
 
+func exportHistoryImageAsJPG(path: String, completion: ((String?) -> Void)? = nil) {
+    DispatchQueue.global(qos: .userInitiated).async {
+        guard let data = HistoryMediaStore.shared.data(at: path) ?? (try? Data(contentsOf: URL(fileURLWithPath: path))),
+              let nsImage = NSImage(data: data) else {
+            DispatchQueue.main.async { completion?(nil) }
+            return
+        }
+
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.95]) else {
+            DispatchQueue.main.async { completion?(nil) }
+            return
+        }
+
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd_HHmmss"
+        let filename = "Techuboard_\(df.string(from: Date())).jpg"
+        let destination = downloads.appendingPathComponent(filename)
+
+        do {
+            try jpgData.write(to: destination)
+            DispatchQueue.main.async {
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
+                completion?(filename)
+            }
+        } catch {
+            DispatchQueue.main.async { completion?(nil) }
+        }
+    }
+}
+
+struct MenuBarSidePreviewView: View {
+    let entry: HistoryEntry
+    var onHoverChanged: ((Bool) -> Void)? = nil
+    @State private var downloadedName: String?
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            HistoryPreviewView(entry: entry)
+
+            if case .image(let path) = entry.item {
+                Button {
+                    exportHistoryImageAsJPG(path: path) { name in
+                        downloadedName = name
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            downloadedName = nil
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: downloadedName != nil ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(downloadedName != nil ? "Saved to Downloads" : "Download JPG")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+                    .foregroundStyle(AppColor.accent)
+                    .shadow(color: Color.black.opacity(0.12), radius: 6, y: 2)
+                }
+                .buttonStyle(.plain)
+                .padding(12)
+                .help("Download high-resolution JPG to Downloads folder")
+            }
+        }
+        .macGlassSurface(cornerRadius: 16)
+        .onHover { isHovered in
+            onHoverChanged?(isHovered)
+        }
+    }
+}

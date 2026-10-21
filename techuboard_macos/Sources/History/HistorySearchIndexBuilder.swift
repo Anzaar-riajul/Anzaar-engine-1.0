@@ -5,7 +5,7 @@ import PDFKit
 enum HistorySearchIndexBuilder {
     private static let maxIndexLength = 500
     private static let ocrMaxPixelSize = 2048
-    private static let indexQueue = DispatchQueue(label: "com.clipy.history-index", qos: .utility)
+    private static let indexQueue = DispatchQueue(label: "com.techuboard.history-index", qos: .utility)
     private static let ocrSemaphore = DispatchSemaphore(value: 1)
 
     static func buildIndex(for item: HistoryItem) -> String? {
@@ -57,7 +57,7 @@ enum HistorySearchIndexBuilder {
                     return
                 }
                 let temp = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("clipy-ocr-\(UUID().uuidString).img")
+                    .appendingPathComponent("techuboard-ocr-\(UUID().uuidString).img")
                 do {
                     try data.write(to: temp, options: .atomic)
                 } catch {

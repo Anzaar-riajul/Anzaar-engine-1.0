@@ -40,18 +40,18 @@ enum TokenUsageJSON {
             return Date(timeIntervalSince1970: raw > 10_000_000_000 ? raw / 1000 : raw)
         }
         guard let text = value as? String else { return nil }
-        return ISO8601DateFormatter.clipyFractional.date(from: text)
-            ?? ISO8601DateFormatter.clipyPlain.date(from: text)
+        return ISO8601DateFormatter.techuFractional.date(from: text)
+            ?? ISO8601DateFormatter.techuPlain.date(from: text)
     }
 }
 
 private extension ISO8601DateFormatter {
-    static let clipyFractional: ISO8601DateFormatter = {
+    static let techuFractional: ISO8601DateFormatter = {
         let value = ISO8601DateFormatter()
         value.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return value
     }()
-    static let clipyPlain = ISO8601DateFormatter()
+    static let techuPlain = ISO8601DateFormatter()
 }
 
 enum TokenUsageParser {

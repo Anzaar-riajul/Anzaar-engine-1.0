@@ -27,7 +27,7 @@ struct SmartSwitchZCodeLauncher: SmartSwitchZCodeOpening {
 /// ZCode's verified UI flow. No private database writes or guessed URL routes.
 @MainActor
 enum SmartSwitchZCode {
-    private static let queue = DispatchQueue(label: "Clipy.smart-switch-zcode", qos: .userInitiated)
+    private static let queue = DispatchQueue(label: "Techuboard.smart-switch-zcode", qos: .userInitiated)
 
     static func newChat(text: String, canContinue: @escaping () -> Bool) async throws {
         guard AccessibilityManager.isTrusted,

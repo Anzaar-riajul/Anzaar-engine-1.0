@@ -29,6 +29,8 @@ class PreferencesManager {
     private let searchGlobalShortcutEnabledKey = "searchGlobalShortcutEnabled"
     private let searchHistoryShortcutKey = "searchHistoryShortcut"
     private let screenshotOCRLanguageKey = "screenshotOCRLanguage"
+    private let imageAutoDeleteEnabledKey = "imageAutoDeleteEnabled"
+    private let imageAutoDeleteThresholdKey = "imageAutoDeleteThreshold"
     
     /// `Host.current().localizedName` can hit mDNS/DNS resolution and block for
     /// seconds. The device name is read on hot paths (every sync handshake and
@@ -43,10 +45,31 @@ class PreferencesManager {
         return shortName.isEmpty ? "Mac" : shortName
     }()
 
-    /// Local-only opt-in; never synchronized to other devices.
+    private let menuBarOverflowExplicitKey = "menuBarOverflowExplicit"
+
+    /// Checks if any connected screen has a physical camera notch (MacBook Pro 14"/16", MacBook Air M2/M3).
+    static var hasHardwareNotch: Bool {
+        for screen in NSScreen.screens {
+            if screen.safeAreaInsets.top > 0 || screen.auxiliaryTopLeftArea != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Smart-enabled: defaults to ON if the Mac has a hardware camera notch, OFF otherwise.
+    /// Once the user explicitly toggles it, their custom preference is permanently remembered.
     var menuBarOverflowEnabled: Bool {
-        get { defaults.bool(forKey: "menuBarOverflowEnabled") }
-        set { defaults.set(newValue, forKey: "menuBarOverflowEnabled") }
+        get {
+            if defaults.bool(forKey: menuBarOverflowExplicitKey) {
+                return defaults.bool(forKey: "menuBarOverflowEnabled")
+            }
+            return Self.hasHardwareNotch
+        }
+        set {
+            defaults.set(true, forKey: menuBarOverflowExplicitKey)
+            defaults.set(newValue, forKey: "menuBarOverflowEnabled")
+        }
     }
 
     var deviceName: String {
@@ -89,6 +112,21 @@ class PreferencesManager {
         set { defaults.set(max(0, newValue), forKey: historyRetentionDaysKey) }
     }
 
+    /// Whether auto-cleanup of image/screenshot entries is enabled (default: false / unchecked).
+    var isImageAutoDeleteEnabled: Bool {
+        get { defaults.bool(forKey: imageAutoDeleteEnabledKey) }
+        set { defaults.set(newValue, forKey: imageAutoDeleteEnabledKey) }
+    }
+
+    /// Number of images to retain before auto-deleting oldest unpinned images (10, 20, 30, 40, or custom).
+    var imageAutoDeleteThreshold: Int {
+        get {
+            let val = defaults.integer(forKey: imageAutoDeleteThresholdKey)
+            return val == 0 ? 20 : val
+        }
+        set { defaults.set(max(5, newValue), forKey: imageAutoDeleteThresholdKey) }
+    }
+
     var excludedApps: [String] {
         get { defaults.stringArray(forKey: excludedAppsKey) ?? ["com.agilebits.onepassword7", "com.apple.keychainaccess"] }
         set { defaults.set(newValue, forKey: excludedAppsKey) }
@@ -97,6 +135,16 @@ class PreferencesManager {
     var isSyncEnabled: Bool {
         get { defaults.bool(forKey: syncEnabledKey) }
         set { defaults.set(newValue, forKey: syncEnabledKey) }
+    }
+
+    private let autoImageSyncKey = "autoImageSync"
+
+    var isAutoImageSyncEnabled: Bool {
+        get {
+            if defaults.object(forKey: autoImageSyncKey) == nil { return true }
+            return defaults.bool(forKey: autoImageSyncKey)
+        }
+        set { defaults.set(newValue, forKey: autoImageSyncKey) }
     }
 
     var syncPort: Int {

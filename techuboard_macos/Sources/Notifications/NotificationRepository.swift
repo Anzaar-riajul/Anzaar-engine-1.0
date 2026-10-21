@@ -22,7 +22,7 @@ final class NotificationRepository {
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone", isDirectory: true)
+            .appendingPathComponent("Techuboard", isDirectory: true)
         legacyJSONURL = appSupport.appendingPathComponent("notifications.json")
         _ = AppDatabase.shared
         migrateFromLegacyJSONIfNeeded()
@@ -310,10 +310,10 @@ final class NotificationRepository {
     @discardableResult
     private func archiveInPlaceLocked(_ existing: NotificationManager.NotificationEntry) -> Bool {
         var extras = existing.extras ?? [:]
-        extras["clipyArchived"] = "true"
+        extras["techuArchived"] = "true"
         let archived = NotificationManager.NotificationEntry(
             id: existing.id,
-            notificationKey: "clipy-archived:\(existing.id)",
+            notificationKey: "techu-archived:\(existing.id)",
             packageName: existing.packageName,
             appName: existing.appName,
             title: existing.title,
@@ -485,7 +485,7 @@ final class NotificationRepository {
             }
 
             // Keep archived WeChat history rows; never treat them as replaceable dups.
-            if let existingKey, existingKey.hasPrefix("clipy-archived:") {
+            if let existingKey, existingKey.hasPrefix("techu-archived:") {
                 continue
             }
 
@@ -522,7 +522,7 @@ final class NotificationRepository {
             postTime: sqlite3_column_double(stmt, 7),
             groupKey: optionalString(stmt, 8),
             isClearable: sqlite3_column_int(stmt, 9) != 0,
-            isArchived: decodeExtras(optionalString(stmt, 10))?["clipyArchived"] == "true",
+            isArchived: decodeExtras(optionalString(stmt, 10))?["techuArchived"] == "true",
             extras: decodeExtras(optionalString(stmt, 10))
         )
     }

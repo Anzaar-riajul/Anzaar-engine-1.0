@@ -92,7 +92,7 @@ func runMenuBarOverflowFixture(popover: Bool) -> Never {
         }
     }
     let fixture = Fixture()
-    fixture.item.button?.title = "Clipy overflow fixture"
+    fixture.item.button?.title = "Techuboard overflow fixture"
     if popover {
         let controller = NSViewController()
         controller.view = NSView(frame: CGRect(x: 0, y: 0, width: 220, height: 80))
@@ -206,7 +206,7 @@ func runMenuBarOverflowLiveTests() {
     for kind in ["menu", "popover"] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
-        process.arguments = ["--clipy-overflow-fixture-" + kind]
+        process.arguments = ["--techuboard-overflow-fixture-" + kind]
         let pipe = Pipe()
         process.standardOutput = pipe
         try! process.run()

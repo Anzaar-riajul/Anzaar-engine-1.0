@@ -15,7 +15,7 @@ struct SavedWord: Codable, Equatable, Identifiable {
 final class WordBookStore: ObservableObject {
     static let shared = WordBookStore(fileURL: FileManager.default.urls(
         for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("ClipyClone/word-book.json"))
+        .appendingPathComponent("Techuboard/word-book.json"))
 
     @Published private(set) var words: [SavedWord] = []
     @Published private(set) var errorKey: L10nKey?

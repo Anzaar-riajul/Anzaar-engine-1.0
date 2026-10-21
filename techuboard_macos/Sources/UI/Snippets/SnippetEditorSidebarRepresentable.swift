@@ -40,7 +40,7 @@ struct SnippetEditorSidebarRepresentable: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
-        static let dragType = NSPasteboard.PasteboardType("com.clipy.snippet-editor-row")
+        static let dragType = NSPasteboard.PasteboardType("com.techuboard.snippet-editor-row")
         var viewModel: SnippetEditorViewModel
         let pane: Pane
         weak var table: NSTableView?

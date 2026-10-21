@@ -503,6 +503,12 @@ extension SyncSessionMethods on SyncManager {
       appLog(
         'sync.session history.fetch → ${id.substring(0, id.length.clamp(0, 8))}',
       );
+      final snipEnv = SyncEnvelope.make(type: SyncType.snippetsFetch, peerId: peerId);
+      final snipData = syncEncodeFrame(snipEnv);
+      if (snipData != null) {
+        session.socket.add(snipData);
+        await session.socket.flush();
+      }
     } catch (e) {
       appLog('history.fetch send failed: $e', level: 'warning');
     }

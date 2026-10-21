@@ -288,7 +288,7 @@ final class PinPanel: PinFloatingPanel, NSWindowDelegate {
     /// secondary options row, beautify/effects, crop/flip, undo/redo). This
     /// matches macshot's pin → edit behavior: the floating pin closes and the
     /// image opens in a standalone editor window. Saving in the editor ingests
-    /// the edited image back into clipy1's history (see AppDelegate's
+    /// the edited image back into techuboard's history (see AppDelegate's
     override func cancelOperation(_ sender: Any?) {
         closePanel()
     }

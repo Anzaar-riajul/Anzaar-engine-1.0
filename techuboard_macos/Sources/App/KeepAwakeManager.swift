@@ -11,13 +11,13 @@ struct KeepAwakeAssertionDriver {
             IOPMAssertionCreateWithName(
                 kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                "ClipyClone Keep Awake" as CFString,
+                "Techuboard Keep Awake" as CFString,
                 &id)
         },
         release: { IOPMAssertionRelease($0) })
 }
 
-/// A session-only power assertion. The system releases it when Clipy exits;
+/// A session-only power assertion. The system releases it when Techuboard exits;
 /// explicit disable and application termination release it immediately.
 final class KeepAwakeManager: ObservableObject {
     static let shared = KeepAwakeManager()

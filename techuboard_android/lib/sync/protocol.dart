@@ -88,6 +88,10 @@ class SyncType {
   static const welcome = 'welcome';
   static const history = 'history';
 
+  /// Snippets full synchronization and delta push
+  static const snippetsSync = 'snippets.sync';
+  static const snippetsFetch = 'snippets.fetch';
+
   /// Device-list one-shot text send; no mutual authorization required.
   static const historyDirect = 'history.direct';
   static const historyFetch = 'history.fetch';

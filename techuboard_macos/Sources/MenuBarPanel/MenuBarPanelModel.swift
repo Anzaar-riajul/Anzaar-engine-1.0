@@ -66,6 +66,7 @@ final class MenuBarPanelModel: ObservableObject {
     @Published var focusRequest = 0
     @Published var notice: String?
     @Published var savingSnippetEntry: HistoryEntry?
+    @Published var previewEntry: HistoryEntry?
     var onAction: ((Action) -> Void)?
     var onHistory: ((HistoryEntry, HistoryAction) -> Void)?
     var onSnippet: ((UUID) -> Void)?
@@ -79,7 +80,7 @@ final class MenuBarPanelModel: ObservableObject {
 
     init(search: @escaping Search = { options, cancellation in
         ClipboardManager.shared.searchHistory(options: options, cancellation: cancellation).map(\.entry)
-    }, queue: DispatchQueue = DispatchQueue(label: "clipy.control-panel.search", qos: .userInitiated)) {
+    }, queue: DispatchQueue = DispatchQueue(label: "techuboard.control-panel.search", qos: .userInitiated)) {
         self.search = search
         self.queue = queue
     }
@@ -174,6 +175,61 @@ final class MenuBarPanelModel: ObservableObject {
         pending = work
         queue.asyncAfter(deadline: .now() + (immediate ? 0 : 0.18), execute: work)
     }
+
+    // MARK: - Pin Management
+    func togglePin(_ entry: HistoryEntry) {
+        ClipboardManager.shared.togglePin(for: entry)
+        if let idx = history.firstIndex(where: { $0.id == entry.id }) {
+            history[idx].isPinned.toggle()
+            history.sort {
+                if $0.isPinned != $1.isPinned {
+                    return $0.isPinned && !$1.isPinned
+                }
+                return $0.date > $1.date
+            }
+        }
+        refreshHistory()
+    }
+
+    // MARK: - Hover Preview Coordination
+    private var previewDismissWorkItem: DispatchWorkItem?
+    var isPreviewHovered: Bool = false
+
+    func hoverRow(_ entry: HistoryEntry) {
+        previewDismissWorkItem?.cancel()
+        previewDismissWorkItem = nil
+        selectedID = "h:" + entry.id
+        previewEntry = entry
+    }
+
+    func unhoverRow(_ entry: HistoryEntry) {
+        guard previewEntry?.id == entry.id else { return }
+        schedulePreviewDismiss(delay: 0.2)
+    }
+
+    func setPreviewHovered(_ hovered: Bool) {
+        isPreviewHovered = hovered
+        if hovered {
+            previewDismissWorkItem?.cancel()
+            previewDismissWorkItem = nil
+        } else {
+            schedulePreviewDismiss(delay: 0.15)
+        }
+    }
+
+    func schedulePreviewDismiss(delay: Double = 0.2) {
+        previewDismissWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard !self.isPreviewHovered else { return }
+            self.previewEntry = nil
+            if self.selectedID?.hasPrefix("h:") == true {
+                self.selectedID = nil
+            }
+        }
+        previewDismissWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
 }
 
 /// Pure policies used by the window and by the core regression harness.
@@ -181,13 +237,13 @@ enum MenuBarPanelPolicy {
     static func preferredSize(page: MenuBarPanelModel.Page, tab: MenuBarPanelModel.Tab, deviceCount: Int = 0) -> CGSize {
         switch page {
         case .home:
-            guard tab == .devices else { return CGSize(width: 520, height: 640) }
+            guard tab == .devices else { return CGSize(width: 380, height: 580) }
             // Home chrome (search, icons, usage, tabs, footer) plus refresh row and device rows.
-            let height = deviceCount == 0 ? 470 : min(640, max(430, 380 + deviceCount * 60))
-            return CGSize(width: 520, height: CGFloat(height))
-        case .tools: return CGSize(width: 520, height: 280)
-        case .notifications: return CGSize(width: 520, height: 560)
-        case .settings: return CGSize(width: 520, height: 440)
+            let height = deviceCount == 0 ? 320 : min(580, max(270, 230 + deviceCount * 45))
+            return CGSize(width: 380, height: CGFloat(height))
+        case .tools: return CGSize(width: 380, height: 320)
+        case .notifications: return CGSize(width: 380, height: 540)
+        case .settings: return CGSize(width: 380, height: 500)
         }
     }
     static func nextSelection(ids: [String], selected: String?, delta: Int) -> String? {
@@ -199,7 +255,7 @@ enum MenuBarPanelPolicy {
         let width = min(preferred.width, max(1, visible.width - 16))
         let height = min(preferred.height, max(1, visible.height - 16))
         let x = min(max(anchor.maxX - width, visible.minX + 8), visible.maxX - width - 8)
-        let y = min(max(anchor.minY - height - 8, visible.minY + 8), visible.maxY - height - 8)
+        let y = max(visible.minY, min(visible.maxY - height, anchor.minY - height))
         return CGRect(x: x, y: y, width: width, height: height)
     }
     static func mayPaste(ticket: UInt64, current: UInt64, copiedVersion: Int, currentVersion: Int,

@@ -16,7 +16,7 @@ enum LaunchAtLoginError: LocalizedError {
 }
 
 enum LaunchAtLoginManager {
-    static let bundleIdentifier = "com.yourdomain.ClipyClone"
+    static let bundleIdentifier = "com.techuboard.mac"
 
     private static var launchAgentURL: URL {
         FileManager.default.homeDirectoryForCurrentUser

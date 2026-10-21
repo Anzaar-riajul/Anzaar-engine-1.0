@@ -33,7 +33,7 @@ final class HistoryMediaStore {
 
     private init() {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone", isDirectory: true)
+            .appendingPathComponent("Techuboard", isDirectory: true)
         imagesDirectory = appSupport.appendingPathComponent("images", isDirectory: true)
         richTextDirectory = appSupport.appendingPathComponent("rich_text", isDirectory: true)
         documentsDirectory = appSupport.appendingPathComponent("documents", isDirectory: true)

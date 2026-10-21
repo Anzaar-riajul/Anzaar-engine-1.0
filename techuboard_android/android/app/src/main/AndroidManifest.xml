@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Boot: restore LAN sync after reboot via BootReceiver → FGS → FlutterEngine. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -85,18 +86,28 @@
             </intent-filter>
         </service>
 
-        <!-- TechuAvro Phonetic Keyboard with Clipboard Quick-Paste Bar -->
+        <!-- Floating Paste Hub overlay service -->
         <service
-            android:name=".TechuKeyboardService"
-            android:label="TechuAvro Keyboard"
-            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:name=".FloatingHubService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating clipboard paste hub overlay shown over other apps." />
+        </service>
+
+        <!-- Accessibility service for 1-tap paste injection into any app -->
+        <service
+            android:name=".FloatingHubAccessibilityService"
+            android:label="Techuboard Paste"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.view.InputMethod" />
+                <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data
-                android:name="android.view.im"
-                android:resource="@xml/method" />
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
 
         <!-- Holds process alive; on START_STICKY rebuild calls ensureEngine.

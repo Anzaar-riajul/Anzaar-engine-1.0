@@ -5,9 +5,9 @@ import Security
 enum SyncPairingKeys {
     private static let lock = NSLock()
     private static var cached: SymmetricKey?
-    private static var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.clipy.private-sync-group", kSecAttrAccount as String: "default"] }
+    private static var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.techuboard.private-sync-group", kSecAttrAccount as String: "default"] }
     static func load() throws -> SymmetricKey {
-        #if CLIPY_CORE_TESTS
+        #if TECHUBOARD_CORE_TESTS
         if let cached { return cached }; let testKey = SymmetricKey(size: .bits256); cached = testKey; return testKey
         #else
         lock.lock(); defer { lock.unlock() }

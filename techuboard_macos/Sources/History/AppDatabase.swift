@@ -5,16 +5,16 @@ final class AppDatabase {
     static let shared = AppDatabase()
 
     private(set) var db: OpaquePointer?
-    let queue = DispatchQueue(label: "com.clipy.database")
+    let queue = DispatchQueue(label: "com.techuboard.database")
 
     private let appSupport: URL
     private let dbURL: URL
 
     private init() {
         appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone", isDirectory: true)
+            .appendingPathComponent("Techuboard", isDirectory: true)
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-        dbURL = appSupport.appendingPathComponent("clipy.db")
+        dbURL = appSupport.appendingPathComponent("techuboard.db")
         openDatabase()
         queue.sync {
             applyPragmas()
@@ -36,7 +36,7 @@ final class AppDatabase {
     /// connection, serialized on `queue`). WAL lets readers not block on the
     /// polling/history writes; mmap + an in-memory cache reduce repeated
     /// page-fault / IO on the hot fetchSummaries / count paths so RSS does
-    /// not churn. Side effect: `clipy.db-wal` and `clipy.db-shm` appear next
+    /// not churn. Side effect: `techuboard.db-wal` and `techuboard.db-shm` appear next
     /// to the db file (normal WAL artifacts).
     private func applyPragmas() {
         guard let db else { return }

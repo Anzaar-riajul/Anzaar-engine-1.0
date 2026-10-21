@@ -9,7 +9,7 @@ func runSmartSwitchInputPanelTests() {
     let panel = SmartSwitchInputPanel(title: "Fixture", size: CGSize(width: 720, height: 500),
                                      minSize: CGSize(width: 620, height: 440), frameAutosaveName: "SmartSwitchFixture") { EmptyView() }
     precondition(panel.styleMask.contains(.nonactivatingPanel) && panel.canBecomeKey && !panel.canBecomeMain,
-                 "Input panel would activate Clipy instead of taking keyboard focus only")
+                 "Input panel would activate Techuboard instead of taking keyboard focus only")
     precondition(!panel.hidesOnDeactivate && !panel.isVisible, "Input panel unexpectedly hides or shows itself during setup")
     var escapes = 0
     panel.onEscape = { escapes += 1 }
@@ -390,7 +390,7 @@ func runSmartSwitchEscapePasteTests() {
     otherWindow = true
     finishClose()
     tick()
-    precondition(pastes.count == 1 && activationTicks.isEmpty, "Paste stole focus from a different Clipy window")
+    precondition(pastes.count == 1 && activationTicks.isEmpty, "Paste stole focus from a different Techuboard window")
     otherWindow = false
 
     session.begin(previousPID: clipy) // no recorded external caller
@@ -528,7 +528,7 @@ func runSmartSwitchWindowFocusTests() {
     }
 
     // Reproduce the reported loop: the caller's non-text focus never changes,
-    // and no outside click is available to deactivate Clipy after dismissal.
+    // and no outside click is available to deactivate Techuboard after dismissal.
     var gesture = SmartSwitchVoiceGesture()
     for _ in 0..<3 {
         expect(gesture.handle(.down(eligible: front == caller)).swallow, "Closing the popup prevented the next voice gesture")
@@ -540,7 +540,7 @@ func runSmartSwitchWindowFocusTests() {
         session.close()
         expect(front == clipy, "Focus restored before AppKit finished closing")
         finishClosing()
-        expect(front == caller, "Dismissed voice popup left Clipy active with a stale input focus")
+        expect(front == caller, "Dismissed voice popup left Techuboard active with a stale input focus")
     }
     expect(activations == [caller, caller, caller] && refreshes == 3, "Close did not restore the caller and refresh AX focus")
 
@@ -599,7 +599,7 @@ func runSmartSwitchWindowFocusTests() {
     session.close()
     otherWindow = true
     finishClosing()
-    expect(front == clipy, "Close stole focus from another Clipy window")
+    expect(front == clipy, "Close stole focus from another Techuboard window")
     otherWindow = false
 
     activationSucceeds = false
@@ -741,7 +741,7 @@ func runSmartSwitchVoicePolicyTests() {
     expect(tap.handle(.up).swallow && tap.phase == .idle, "Unpaired release escaped after setup failure")
 
     // Peripheral app-profile changes can emit an extra modifier event while
-    // Clipy is becoming active. Preserve the popup, discard the buffered key,
+    // Techuboard is becoming active. Preserve the popup, discard the buffered key,
     // and never replay it later into the new preset or foreground application.
     for _ in 0..<3 {
         _ = tap.handle(.down(eligible: true))

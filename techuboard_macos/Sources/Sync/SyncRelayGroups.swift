@@ -31,7 +31,7 @@ final class SyncRelayGroups: ObservableObject {
     var manager: Bool { members.contains { $0["device"] as? String == device && $0["manager"] as? Bool == true } }
     private var zh: Bool { PreferencesManager.shared.appLanguage == .zh }
     func t(_ cn: String,_ en: String) -> String { zh ? cn : en }
-    private static func query(_ account: String) -> [String:Any] { [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:"com.clipy.relay-groups",kSecAttrAccount as String:account] }
+    private static func query(_ account: String) -> [String:Any] { [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:"com.techuboard.relay-groups",kSecAttrAccount as String:account] }
     private static func read(_ account: String) throws -> [String:Any]? {
         var q = query(account);q[kSecReturnData as String] = true;q[kSecMatchLimit as String] = kSecMatchLimitOne;var value: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary,&value);if status == errSecItemNotFound { return nil }
@@ -71,7 +71,7 @@ final class SyncRelayGroups: ObservableObject {
     static func decode(_ text: String) throws -> [String:Any] {
         guard text.utf8.count <= 8192 else { throw RelayError.invalid("invitation length") };let raw = text.trimmingCharacters(in:.whitespacesAndNewlines);var data = Data(raw.utf8)
         if raw.hasPrefix("common-relay://join#") { var code = String(raw.dropFirst("common-relay://join#".count)).replacingOccurrences(of:"-",with:"+").replacingOccurrences(of:"_",with:"/");while code.count % 4 != 0 { code += "=" };guard let decoded = Data(base64Encoded:code) else { throw RelayError.invalid("invitation") };data = decoded }
-        guard let c = try JSONSerialization.jsonObject(with:data) as? [String:Any], c["version"] as? Int == 1, c["app"] as? String == "clipy", c["group"] is String else { throw RelayError.invalid("invitation") };return c
+        guard let c = try JSONSerialization.jsonObject(with:data) as? [String:Any], c["version"] as? Int == 1, c["app"] as? String == "techuboard", c["group"] is String else { throw RelayError.invalid("invitation") };return c
     }
     static func code(_ request: [String:Any]) throws -> String { let h = String(RelayGroups.digest(try RelayGroups.payload(request)).prefix(12)).uppercased();return stride(from:0,to:12,by:4).map { String(Array(h)[$0..<$0+4]) }.joined(separator:" ") }
     func perform(_ action: @escaping @MainActor () async throws -> Void) {
@@ -163,7 +163,7 @@ final class SyncRelayGroups: ObservableObject {
         } else {
             let identity = try Self.read("identity") ?? ["secret_key":RelayIdentity.generateSecretKey().relayHex]
             try Self.write("identity",identity)
-            c = ["url":current.config["url"] ?? "wss://eglish.top/relay/v1/ws","app":"clipy","device":SyncRelaySettings.deviceID,"secret_key":identity["secret_key"] ?? ""]
+            c = ["url":current.config["url"] ?? "wss://eglish.top/relay/v1/ws","app":"techuboard","device":SyncRelaySettings.deviceID,"secret_key":identity["secret_key"] ?? ""]
         }
         let g = RelayGroups(config:c)
         if g.config["group_entry"] == nil {
@@ -175,7 +175,7 @@ final class SyncRelayGroups: ObservableObject {
         try await refresh();message = t("设备组已创建，你是管理员。现在可以添加其他设备。","Group created. You are the manager and can now add devices.")
     }
     func join(text: String,name: String) async throws {
-        let current = try Self.load();current.config["app"] = "clipy"
+        let current = try Self.load();current.config["app"] = "techuboard"
         let raw = text.trimmingCharacters(in:.whitespacesAndNewlines)
         let inv = raw.hasPrefix("common-relay://") && !raw.hasPrefix("common-relay://join#") ? try await current.resolveInvitation(raw) : try Self.decode(raw);guard current.config["group_entry"] == nil else { throw RelayError.invalid("already enrolled") }
         if current.config["token"] != nil && (current.config["group"] as? String != inv["group"] as? String || (inv["url"] != nil && current.config["url"] as? String != inv["url"] as? String)) { throw RelayError.invalid("existing identity scope") }
@@ -188,7 +188,7 @@ final class SyncRelayGroups: ObservableObject {
             let identity = try Self.read("identity") ?? ["secret_key":RelayIdentity.generateSecretKey().relayHex]
             try Self.write("identity",identity);c["secret_key"] = identity["secret_key"]
         }
-        c["device"] = c["device"] ?? SyncRelaySettings.deviceID;c["app"] = "clipy";c["group"] = inv["group"];c["url"] = inv["url"] ?? c["url"];c["trusted_peers"] = c["trusted_peers"] ?? [String:String]();c["token"] = c["token"] ?? RelayIdentity.generateSecretKey().relayHex
+        c["device"] = c["device"] ?? SyncRelaySettings.deviceID;c["app"] = "techuboard";c["group"] = inv["group"];c["url"] = inv["url"] ?? c["url"];c["trusted_peers"] = c["trusted_peers"] ?? [String:String]();c["token"] = c["token"] ?? RelayIdentity.generateSecretKey().relayHex
         c["enrollment_invitation"] = inv;c["enrollment_name"] = c["enrollment_name"] ?? name
         let g = RelayGroups(config:c);try Self.write("pending",g.config)
         if inv["bootstrap"] != nil { try await g.bootstrap(inv,name:c["enrollment_name"] as? String ?? name);try Self.persist(g,activate:true);try Self.write("pending",nil);try await refresh();return }

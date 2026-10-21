@@ -14,6 +14,9 @@ struct SettingsView: View {
   @State private var historyRetentionDays: Int
   @State private var historyEncryptionEnabled: Bool
   @State private var historyImageOCRIndexing: Bool
+  @State private var imageAutoDeleteEnabled: Bool
+  @State private var imageThresholdOption: Int
+  @State private var imageThresholdCustom: Int
   @State private var searchGlobalShortcutEnabled: Bool
   @State private var searchHistoryShortcut: ShortcutCombo?
   @State private var wordShortcutEnabled: Bool
@@ -21,6 +24,7 @@ struct SettingsView: View {
   @State private var wordShortcutFailed = false
   @State private var syncEnabled: Bool
   @State private var syncPort: String
+  @State private var autoImageSync: Bool
   @State private var availablePeers: [DiscoveredPeer] = []
   @State private var clipboardSyncTargets: Set<String> = Set(
     PreferencesManager.shared.clipboardSyncPeerIds)
@@ -46,23 +50,26 @@ struct SettingsView: View {
     _historyRetentionDays = State(initialValue: prefs.historyRetentionDays)
     _historyEncryptionEnabled = State(initialValue: prefs.isHistoryEncryptionEnabled)
     _historyImageOCRIndexing = State(initialValue: prefs.isHistoryImageOCRIndexingEnabled)
+    let autoDel = prefs.isImageAutoDeleteEnabled
+    let thresh = prefs.imageAutoDeleteThreshold
+    _imageAutoDeleteEnabled = State(initialValue: autoDel)
+    _imageThresholdCustom = State(initialValue: thresh)
+    _imageThresholdOption = State(initialValue: [10, 20, 30, 40].contains(thresh) ? thresh : -1)
     _searchGlobalShortcutEnabled = State(initialValue: prefs.isSearchGlobalShortcutEnabled)
     _searchHistoryShortcut = State(initialValue: prefs.searchHistoryShortcut)
     _wordShortcutEnabled = State(initialValue: prefs.isWordShortcutEnabled)
     _wordLookupShortcut = State(initialValue: prefs.wordLookupShortcut)
     _syncEnabled = State(initialValue: prefs.isSyncEnabled)
     _syncPort = State(initialValue: "\(prefs.syncPort)")
+    _autoImageSync = State(initialValue: prefs.isAutoImageSyncEnabled)
   }
 
   private var settingsPages: [AppSettingsPage] {
     [
-      .init(id: "general", title: L10n.t(.designGeneral), symbol: "slider.horizontal.3"),
-      .init(id: "history", title: L10n.t(.history), symbol: "clock"),
+      .init(id: "general", title: L10n.t(.designGeneral), symbol: "gearshape"),
+      .init(id: "banglaKeyboard", title: "বাংলা কীবোর্ড", symbol: "character.textbox"),
+      .init(id: "sync", title: L10n.t(.lanDevices), symbol: "arrow.triangle.2.circlepath"),
       .init(id: "shortcuts", title: L10n.t(.shortcut), symbol: "keyboard"),
-      .init(
-        id: "smartSwitch", title: L10n.t(.smartSwitchSettingsTitle),
-        symbol: "arrow.triangle.swap"),
-      .init(id: "sync", title: L10n.t(.lanDevices), symbol: "network"),
       .init(id: "permissions", title: L10n.t(.designPermissions), symbol: "hand.raised"),
       .init(id: "about", title: L10n.t(.settingsAbout), symbol: "info.circle"),
     ]
@@ -77,7 +84,7 @@ struct SettingsView: View {
     AppSettingsLayout(selection: $selectedSettingsPage, pages: settingsPages) { pageID in
 
       if pageID == "general" {
-        Section {
+        Section(L10n.t(.designGeneral)) {
           Picker(L10n.t(.language), selection: $selectedLanguage) {
             ForEach(AppLanguage.allCases, id: \.self) { language in
               Text(language.displayName).tag(language)
@@ -86,8 +93,6 @@ struct SettingsView: View {
           .onChange(of: selectedLanguage) { newValue in
             PreferencesManager.shared.appLanguage = newValue
           }
-
-          MenuBarOverflowSettingsView()
 
           Toggle(L10n.t(.launchAtLogin), isOn: $launchAtLogin)
             .onChange(of: launchAtLogin) { newValue in
@@ -101,10 +106,22 @@ struct SettingsView: View {
                 )
               }
             }
+
+          TextField(L10n.t(.designDeviceName), text: $deviceName)
+            .focused($deviceNameFocused)
+            .onSubmit { saveDeviceName() }
+            .onChange(of: deviceNameFocused) { focused in
+              if !focused { saveDeviceName() }
+            }
+          Text(
+            L10n.format(
+              .deviceNameAutoSaveHint, String(PreferencesManager.shared.syncPeerId.prefix(8)))
+          )
+          .font(AppFont.caption)
+          .foregroundStyle(.secondary)
         }
-      }
-      if pageID == "history" {
-        Section {
+
+        Section(L10n.t(.history)) {
           HStack {
             Text(L10n.t(.historyLimit))
             TextField("", text: $historyLimitText)
@@ -129,65 +146,33 @@ struct SettingsView: View {
               commitHistoryLimitText()
             }
           }
-          Picker(L10n.t(.historyRetention), selection: $historyRetentionDays) {
-            ForEach(Self.retentionOptions, id: \.self) { days in
-              Text(
-                days == 0
-                  ? L10n.t(.historyRetentionForever) : L10n.format(.historyRetentionDays, days)
-              )
-              .tag(days)
-            }
-          }
-          .onChange(of: historyRetentionDays) { newValue in
-            PreferencesManager.shared.historyRetentionDays = newValue
-            ClipboardManager.shared.applyHistoryLimit()
-          }
-          Text(L10n.format(.historyLimitCaption, currentHistoryCount))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-        }
-        Section {
-          ExcludedAppsEditor()
-        }
-        Section {
 
-          Toggle(L10n.t(.encryptHistoryAtRest), isOn: $historyEncryptionEnabled)
-            .disabled(isReencryptingHistory)
-            .onChange(of: historyEncryptionEnabled) { newValue in
-              isReencryptingHistory = true
-              let started = ClipboardManager.shared.setHistoryEncryptionEnabled(newValue) {
-                _ in
-                isReencryptingHistory = false
-              }
-              if !started {
-                isReencryptingHistory = false
-                historyEncryptionEnabled = !newValue
-                AlertPresenter.showWarning(
-                  title: L10n.t(.error),
-                  message: L10n.t(.historyEncryptionFailed)
-                )
+          Toggle("স্বয়ংক্রিয় পুরানো ছবি অটো-ক্লিনআপ (Auto Image Cleanup)", isOn: $imageAutoDeleteEnabled)
+            .onChange(of: imageAutoDeleteEnabled) { newValue in
+              PreferencesManager.shared.isImageAutoDeleteEnabled = newValue
+              if newValue {
+                ClipboardManager.shared.applyImageAutoDeleteLimit()
               }
             }
-          if isReencryptingHistory {
-            HStack(spacing: 6) {
-              ProgressView().controlSize(.small)
-              Text(L10n.t(.historyEncryptionInProgress))
-                .font(AppFont.caption)
-                .foregroundStyle(.secondary)
+
+          HStack {
+            Text(L10n.format(.historyLimitCaption, currentHistoryCount))
+              .font(AppFont.caption)
+              .foregroundStyle(.secondary)
+            Spacer()
+            Button(role: .destructive) {
+              AlertPresenter.confirm(
+                title: "ক্লিপবোর্ড হিস্ট্রি মুছবেন?",
+                message: "আপনার বর্তমান হিস্ট্রি মুছে ফেলা হবে। পিন করা আইটেম এবং নোট সুরক্ষিত থাকবে।",
+                confirmTitle: "মুছে ফেলুন"
+              ) {
+                ClipboardManager.shared.clearHistory()
+                currentHistoryCount = 0
+              }
+            } label: {
+              Text("হিস্ট্রি পরিষ্কার করুন")
             }
           }
-          Text(L10n.t(.encryptHistoryAtRestDescription))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-
-          Toggle(L10n.t(.historyImageOCRIndexing), isOn: $historyImageOCRIndexing)
-            .onChange(of: historyImageOCRIndexing) { newValue in
-              PreferencesManager.shared.isHistoryImageOCRIndexingEnabled = newValue
-            }
-          Text(L10n.t(.historyImageOCRIndexingDescription))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-
         }
       }
       if pageID == "shortcuts" {
@@ -224,25 +209,19 @@ struct SettingsView: View {
           }
         }
       }
-      if pageID == "smartSwitch" {
-        SmartSwitchSettingsView()
-      }
       if pageID == "sync" {
-        SyncRelaySettingsView()
-        Section {
-          TextField(L10n.t(.designDeviceName), text: $deviceName)
-            .focused($deviceNameFocused)
-            .onSubmit { saveDeviceName() }
-            .onChange(of: deviceNameFocused) { focused in
-              if !focused { saveDeviceName() }
+        Section("স্বয়ংক্রিয় সিঙ্ক (Auto Sync)") {
+          Toggle("স্বয়ংক্রিয় ছবি ও ফাইল সিঙ্ক (Auto Image & File Sync)", isOn: $autoImageSync)
+            .onChange(of: autoImageSync) { newValue in
+              PreferencesManager.shared.isAutoImageSyncEnabled = newValue
             }
-          Text(
-            L10n.format(
-              .deviceNameAutoSaveHint, String(PreferencesManager.shared.syncPeerId.prefix(8)))
-          )
-          .font(AppFont.caption)
-          .foregroundStyle(.secondary)
+          Text("চালু থাকলে কপি করা ছবি, স্ক্রিনশট এবং ফাইল স্বয়ংক্রিয়ভাবে আপনার অন্য সব ডিভাইসে (Mac, Android, Windows) সিঙ্ক হবে। বন্ধ থাকলে মেনু থেকে ম্যানুয়ালি 'Send to Device' করতে পারবেন।")
+            .font(AppFont.caption)
+            .foregroundStyle(.secondary)
         }
+
+        SyncRelaySettingsView()
+
         Section {
           Toggle(L10n.t(.enableLanSync), isOn: $syncEnabled)
             .onChange(of: syncEnabled) { newValue in
@@ -407,6 +386,9 @@ struct SettingsView: View {
           }
         }
         SyncDiagnosticsSection()
+      }
+      if pageID == "banglaKeyboard" {
+        BanglaKeyboardSettingsSection()
       }
       if pageID == "permissions" {
         Section(L10n.t(.designPermissions)) {

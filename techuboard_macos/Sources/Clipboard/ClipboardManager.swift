@@ -54,7 +54,7 @@ class ClipboardManager {
     private var currentPollInterval: TimeInterval = 0.3
     private var pruneWorkItem: DispatchWorkItem?
     /// Heavy ingest work (media store writes, hashing, index building, DB insert).
-    private let ingestQueue = DispatchQueue(label: "com.clipy.ingest", qos: .userInitiated)
+    private let ingestQueue = DispatchQueue(label: "com.techuboard.ingest", qos: .userInitiated)
     private var recentContentHashes: Set<String> = []
     private let recentContentHashesMaxSize = 50
     private var pendingIndexHashes: Set<String> = []
@@ -113,7 +113,7 @@ class ClipboardManager {
 
         // Setup storage
         let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        let appSupport = paths[0].appendingPathComponent("ClipyClone")
+        let appSupport = paths[0].appendingPathComponent("Techuboard")
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         self.fileHistoryURL = appSupport.appendingPathComponent("file_history.json")
 
@@ -419,7 +419,7 @@ class ClipboardManager {
         let sourceApp = frontmostApp?.localizedName
         let bundleIdentifier = frontmostApp?.bundleIdentifier
 
-        // Clipy feature: Exclude sensitive apps (e.g., Password managers)
+        // Techuboard feature: Exclude sensitive apps (e.g., Password managers)
         if let bundleID = bundleIdentifier, PreferencesManager.shared.excludedApps.contains(bundleID) {
             return
         }
@@ -603,7 +603,7 @@ class ClipboardManager {
         if let hash = contentHash(for: item) {
             lastSyncHash = hash
         }
-        addToHistory(item, sourceApp: "Clipy Screenshot", sourceBundleId: Bundle.main.bundleIdentifier)
+        addToHistory(item, sourceApp: "Techuboard Image", sourceBundleId: Bundle.main.bundleIdentifier)
         if copyToPasteboard {
             writeToPasteboard(item)
         }
@@ -669,6 +669,9 @@ class ClipboardManager {
 
         _ = repository.insertOrReplace(entry)
         repository.trimToLimit(maxHistoryItems)
+        if PreferencesManager.shared.isImageAutoDeleteEnabled {
+            _ = repository.trimImageEntriesToLimit(PreferencesManager.shared.imageAutoDeleteThreshold)
+        }
         if trimExpiredHistory() > 0 {
             DispatchQueue.main.async { [weak self] in self?.schedulePruneUnreferencedMediaFiles() }
         }
@@ -819,10 +822,7 @@ class ClipboardManager {
 
     func togglePin(for entry: HistoryEntry) {
         let hash = entry.contentHash ?? contentHash(for: entry.item)
-        guard repository.update(contentHash: hash, item: entry.item, transform: { stored in
-            stored.isPinned.toggle()
-            stored.date = Date()
-        }) != nil else { return }
+        guard repository.togglePin(contentHash: hash, date: entry.date) else { return }
         reloadLoadedSummaries()
         notifyHistoryChanged()
     }
@@ -847,12 +847,26 @@ class ClipboardManager {
     func applyHistoryLimit() {
         let previousTotal = totalHistoryCount
         repository.trimToLimit(maxHistoryItems)
+        if PreferencesManager.shared.isImageAutoDeleteEnabled {
+            _ = repository.trimImageEntriesToLimit(PreferencesManager.shared.imageAutoDeleteThreshold)
+        }
         trimExpiredHistory()
         reloadLoadedSummaries()
         guard totalHistoryCount != previousTotal else { return }
         updateRecentContentHashes()
         schedulePruneUnreferencedMediaFiles()
         notifyHistoryChanged()
+    }
+
+    func applyImageAutoDeleteLimit() {
+        guard PreferencesManager.shared.isImageAutoDeleteEnabled else { return }
+        let threshold = PreferencesManager.shared.imageAutoDeleteThreshold
+        let removed = repository.trimImageEntriesToLimit(threshold)
+        if removed > 0 {
+            reloadLoadedSummaries()
+            schedulePruneUnreferencedMediaFiles()
+            notifyHistoryChanged()
+        }
     }
 
     func moveHistoryEntryToFront(_ entry: HistoryEntry) {
@@ -1082,7 +1096,7 @@ class ClipboardManager {
         }
     }
 
-    #if CLIPY_CORE_TESTS
+    #if TECHUBOARD_CORE_TESTS
     init(testPasteboard: NSPasteboard) {
         self.pasteboard = testPasteboard
         self.changeCount = testPasteboard.changeCount

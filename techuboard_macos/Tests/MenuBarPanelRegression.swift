@@ -16,9 +16,9 @@ func runMenuBarPanelRegressionTests() {
     NotificationPopupPolicy.setEnabled(true, defaults: suite)
     check(NotificationPopupPolicy.isEnabled(suite), "popup preference did not turn back on")
     suite.removePersistentDomain(forName: suiteName)
-    check(homeSize == CGSize(width: 520, height: 640), "home panel grew beyond compact size")
+    check(homeSize == CGSize(width: 380, height: 580), "home panel grew beyond compact size")
     check(toolsSize.height < homeSize.height && devicesSize.height < homeSize.height, "sparse pages did not shrink")
-    check(MenuBarPanelPolicy.preferredSize(page: .home, tab: .devices, deviceCount: 1).height == 440,
+    check(MenuBarPanelPolicy.preferredSize(page: .home, tab: .devices, deviceCount: 1).height == 275,
           "one-device panel retains excessive empty space")
     check(MenuBarPanelPolicy.preferredSize(page: .home, tab: .devices, deviceCount: 50).height == homeSize.height,
           "device tab grew beyond the home panel")
@@ -48,7 +48,7 @@ func runMenuBarPanelRegressionTests() {
     check(!canPaste(front: 43), "paste sent to another app")
     check(!canPaste(target: nil, front: nil), "missing caller accepted")
     check(!canPaste(visible: true), "paste into own panel")
-    check(!canPaste(key: true), "paste into another Clipy window")
+    check(!canPaste(key: true), "paste into another Techuboard window")
 
     let started = DispatchSemaphore(value: 0)
     let finish = DispatchSemaphore(value: 0)

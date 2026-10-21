@@ -10,6 +10,7 @@ import 'package:techuboard_android/notification_manager.dart';
 import 'package:techuboard_android/notification_health_monitor.dart';
 import 'package:techuboard_android/app_localizations.dart';
 import 'package:techuboard_android/database/app_database.dart';
+import 'package:techuboard_android/database/snippet_repository.dart';
 import 'package:techuboard_android/app/app.dart';
 import 'package:techuboard_android/ui/app_theme.dart';
 
@@ -41,6 +42,9 @@ Future<void> _bootstrapCore() async {
 
   try {
     await SyncManager.instance.init();
+    SnippetRepository.instance.onSnippetsChanged.listen((folders) {
+      unawaited(SyncManager.instance.broadcastSnippets(folders));
+    });
   } catch (e) {
     debugPrint('SyncManager init error: $e');
   }

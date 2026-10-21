@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>TechuAvro</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.techuboard.techu-avro</string>
+    <key>CFBundleName</key>
+    <string>TechuAvro</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSPrincipalClass</key>
+    <string>TechuAvroApp</string>
+    <!-- InputMethodKit registration keys -->
+    <key>InputMethodConnectionName</key>
+    <string>TechuAvro</string>
+    <key>InputMethodServerPort</key>
+    <string>30001</string>
+    <key>TICapsLockLanguageSwitchCapable</key>
+    <false/>
+    <key>tsInputMethodCharacterSubsets</key>
+    <array>
+        <string>com.apple.inputmethod.Bengali</string>
+    </array>
+    <key>ComponentDescription</key>
+    <string>TechuAvro Bangla Phonetic Input Method</string>
+    <key>ComponentManufacturer</key>
+    <string>Techuboard</string>
+</dict>
+</plist>

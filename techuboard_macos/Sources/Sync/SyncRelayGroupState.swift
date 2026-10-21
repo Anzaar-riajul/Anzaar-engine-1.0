@@ -5,7 +5,7 @@ import Foundation
 enum SyncRelayGroupState: Equatable {
     case unconfigured, legacy, managed
     static func classify(_ config: [String:Any]) -> Self {
-        guard config["app"] as? String == "clipy",
+        guard config["app"] as? String == "techuboard",
               let group = config["group"] as? String, !group.isEmpty,
               let device = config["device"] as? String, !device.isEmpty,
               let token = config["token"] as? String, token.count >= 32,

@@ -120,7 +120,7 @@ enum SmartSwitchError: Error, Equatable, LocalizedError {
 enum SmartSwitchCredentialStore {
     private static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.yourdomain.ClipyClone.smart-switch-api",
+         kSecAttrService as String: "com.techuboard.mac.smart-switch-api",
          kSecAttrAccount as String: "default"]
     }
 

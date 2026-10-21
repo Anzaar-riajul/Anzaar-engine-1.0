@@ -10,7 +10,7 @@ import Security
 /// lock the user out of their own history. `loadKey` still migrates any key left
 /// behind by older Keychain-based builds.
 enum HistoryKeychain {
-    private static let service = "com.yourdomain.ClipyClone.history-key"
+    private static let service = "com.techuboard.mac.history-key"
     private static let account = "default"
     private static let keyFileName = ".history-encryption-key"
 
@@ -20,7 +20,7 @@ enum HistoryKeychain {
 
     private static var keyFileURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone", isDirectory: true)
+            .appendingPathComponent("Techuboard", isDirectory: true)
         return appSupport.appendingPathComponent(keyFileName)
     }
 

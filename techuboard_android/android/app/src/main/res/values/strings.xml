@@ -26,4 +26,5 @@
     <string name="timer_panel_title">计时</string>
     <string name="timer_panel_start">开始倒计时</string>
     <string name="timer_panel_cancel">取消</string>
+    <string name="accessibility_service_desc">Techuboard paste helper allows 1-tap pasting from the floating clipboard hub into any focused text field.</string>
 </resources>

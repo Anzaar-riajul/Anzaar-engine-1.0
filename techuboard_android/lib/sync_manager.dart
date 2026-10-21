@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 
 import 'clipboard_manager.dart';
 import 'database/clipboard_repository.dart';
+import 'database/snippet_repository.dart';
 import 'database/file_transfer_repository.dart';
 import 'database/notification_repository.dart';
 import 'database/pending_sync_repository.dart';
@@ -1073,6 +1074,18 @@ class SyncManager with WidgetsBindingObserver {
       case SyncType.historyFetch:
         unawaited(_respondToHistoryFetch(from));
         break;
+      case SyncType.snippetsFetch:
+        unawaited(_respondToSnippetsFetch(from));
+        break;
+      case SyncType.snippetsSync:
+        final payload = env.payload;
+        if (payload != null) {
+          final decrypted = _decryptFrom(payload, from, env.type);
+          if (decrypted != null) {
+            unawaited(_handleRemoteSnippetsSync(decrypted));
+          }
+        }
+        break;
       case SyncType.fileMeta:
         _handleFileMetaFrame(env, from: from);
         break;
@@ -1209,6 +1222,66 @@ class SyncManager with WidgetsBindingObserver {
     try {
       await session.socket.flush();
     } catch (_) {}
+  }
+
+  Future<void> _respondToSnippetsFetch(String remotePeerId) async {
+    final session = _sessions[remotePeerId];
+    if (session == null) return;
+    final folders = await SnippetRepository.instance.fetchAllFolders();
+    final jsonStr = jsonEncode(folders.map((f) => f.toJson()).toList());
+    final payload = _encrypt(jsonStr);
+    if (payload == null) return;
+    final env = SyncEnvelope.make(
+      type: SyncType.snippetsSync,
+      peerId: peerId,
+      name: displayName,
+      payload: payload,
+    );
+    final data = syncEncodeFrame(env);
+    if (data == null) return;
+    try {
+      session.socket.add(data);
+      await session.socket.flush();
+      appLog('sync.snippets: pushed ${folders.length} snippet folders to $remotePeerId');
+    } catch (e) {
+      appLog('snippets.sync push failed: $e', level: 'warning');
+    }
+  }
+
+  Future<void> _handleRemoteSnippetsSync(String jsonStr) async {
+    try {
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      final folders = list
+          .map((item) => SnippetFolderItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+      final changed = await SnippetRepository.instance.mergeRemoteFolders(folders);
+      if (changed) {
+        appLog('sync.snippets: merged ${folders.length} folders from remote peer');
+      }
+    } catch (e) {
+      appLog('Failed to decode remote snippets sync: $e', level: 'warning');
+    }
+  }
+
+  Future<void> broadcastSnippets(List<SnippetFolderItem> folders) async {
+    if (_sessions.isEmpty) return;
+    final jsonStr = jsonEncode(folders.map((f) => f.toJson()).toList());
+    final payload = _encrypt(jsonStr);
+    if (payload == null) return;
+    final env = SyncEnvelope.make(
+      type: SyncType.snippetsSync,
+      peerId: peerId,
+      name: displayName,
+      payload: payload,
+    );
+    final data = syncEncodeFrame(env);
+    if (data == null) return;
+    for (final session in _sessions.values) {
+      try {
+        session.socket.add(data);
+        unawaited(session.socket.flush());
+      } catch (_) {}
+    }
   }
 
   void _replyAck(String peerId, String? hash) {

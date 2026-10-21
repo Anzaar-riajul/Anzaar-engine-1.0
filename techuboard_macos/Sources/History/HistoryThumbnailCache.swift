@@ -9,7 +9,7 @@ enum HistoryThumbnailCache {
 
     private static var thumbnailsDirectory: URL {
         fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone/thumbnails", isDirectory: true)
+            .appendingPathComponent("Techuboard/thumbnails", isDirectory: true)
     }
 
     static func thumbnail(for path: String, size: NSSize = NSSize(width: 24, height: 24)) -> NSImage? {

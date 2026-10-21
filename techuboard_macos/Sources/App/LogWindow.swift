@@ -121,7 +121,7 @@ final class LogWindow {
                 let viewModel = LogViewModel()
                 self.viewModel = viewModel
                 return HostingWindow(
-                    title: L10n.t(.clipyLogs),
+                    title: L10n.t(.techuboardLogs),
                     size: AppWindowSize.log,
                     minSize: AppWindowSize.listMin,
                     frameAutosaveName: "LogWindow"
@@ -137,7 +137,7 @@ final class LogWindow {
                 LogWindow.shared = nil
             },
             update: { window in
-                window.title = L10n.t(.clipyLogs)
+                window.title = L10n.t(.techuboardLogs)
             }
         )
     }

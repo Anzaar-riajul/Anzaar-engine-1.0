@@ -23,6 +23,7 @@ final class MenuBarControlPanel: EscapeClosingPanel {
 final class MenuBarPanelController: NSObject, NSWindowDelegate {
     let model = MenuBarPanelModel()
     private var panel: MenuBarControlPanel?
+    private var previewPanel: MenuBarControlPanel?
     private weak var anchor: NSStatusBarButton?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var localMonitor: Any?
@@ -53,7 +54,8 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
         sizeObservers = [
             model.$page.sink { [weak self] _ in self?.scheduleResize() },
             model.$tab.sink { [weak self] _ in self?.scheduleResize() },
-            model.$devices.sink { [weak self] _ in self?.scheduleResize() }
+            model.$devices.sink { [weak self] _ in self?.scheduleResize() },
+            model.$previewEntry.receive(on: DispatchQueue.main).sink { [weak self] in self?.updatePreview($0) }
         ]
         observe(NotificationCenter.default, NSMenu.didBeginTrackingNotification) { $0.panel?.menuDepth += 1 }
         observe(NotificationCenter.default, NSMenu.didEndTrackingNotification) { owner in
@@ -109,7 +111,7 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
         window.contentViewController = host
         window.setFrame(frame, display: false)
         window.makeKeyAndOrderFront(nil)
-        // Never activate Clipy here: its caller remains the paste target.
+        // Never activate Techuboard here: its caller remains the paste target.
         onVisibilityChanged?(true)
         installInputMonitors()
         MenuBarOverflowManager.shared.refreshForMenu()
@@ -148,10 +150,59 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
         window.command = { [weak self] event in self?.handleKey(event) ?? false }
         return window
     }
+    private func updatePreview(_ entry: HistoryEntry?) {
+        guard isVisible, let panel = self.panel, let entry else {
+            previewPanel?.orderOut(nil)
+            return
+        }
+        let previewWindow = previewPanel ?? makePreviewPanel()
+        previewPanel = previewWindow
+
+        let previewWidth: CGFloat = 340
+        let gap: CGFloat = 8
+        let screen = panel.screen ?? NSScreen.main
+        let screenLeft = (screen?.visibleFrame.minX ?? 0) + 8
+
+        var x = panel.frame.minX - previewWidth - gap
+        if x < screenLeft {
+            x = panel.frame.maxX + gap
+        }
+        let previewFrame = CGRect(x: x, y: panel.frame.minY, width: previewWidth, height: panel.frame.height)
+
+        let root = MenuBarSidePreviewView(entry: entry) { [weak self] hovering in
+            self?.model.setPreviewHovered(hovering)
+        }
+        let host = NSHostingController(rootView: root)
+        host.sizingOptions = []
+        previewWindow.contentViewController = host
+        previewWindow.setFrame(previewFrame, display: true)
+
+        if !previewWindow.isVisible {
+            panel.addChildWindow(previewWindow, ordered: .above)
+            previewWindow.orderFront(nil)
+        }
+    }
+    private func makePreviewPanel() -> MenuBarControlPanel {
+        let window = MenuBarControlPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        window.title = "Techuboard Preview"
+        window.isReleasedWhenClosed = false
+        window.hidesOnDeactivate = false
+        window.becomesKeyOnlyIfNeeded = false
+        window.isFloatingPanel = true
+        window.level = .floating
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        return window
+    }
     func dismiss() {
         generation &+= 1 // Cancels any earlier deferred action, even after the window is hidden.
         guard isVisible else { return }
         MenuBarOverflowManager.shared.endMenuPresentation()
+        previewPanel?.orderOut(nil)
+        previewPanel?.contentViewController = nil
+        model.previewEntry = nil
         panel?.orderOut(nil)
         panel?.contentViewController = nil
         model.end()

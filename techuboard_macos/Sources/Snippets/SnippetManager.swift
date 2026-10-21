@@ -86,7 +86,7 @@ class SnippetManager {
 
     private init() {
         let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        let appSupport = paths[0].appendingPathComponent("ClipyClone")
+        let appSupport = paths[0].appendingPathComponent("Techuboard")
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         self.storageURL = appSupport.appendingPathComponent("snippets.json")
         

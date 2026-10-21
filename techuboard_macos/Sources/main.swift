@@ -1,15 +1,15 @@
 import AppKit
 
-#if CLIPY_CORE_TESTS
-if CommandLine.arguments.contains("--clipy-panel-snapshot") {
+#if TECHUBOARD_CORE_TESTS
+if CommandLine.arguments.contains("--techuboard-panel-snapshot") {
     runMenuBarPanelSnapshot()
-} else if CommandLine.arguments.contains("--clipy-token-snapshot") {
+} else if CommandLine.arguments.contains("--techuboard-token-snapshot") {
     runTokenUsageSnapshot()
-} else if CommandLine.arguments.contains("--clipy-overflow-fixture-menu") {
+} else if CommandLine.arguments.contains("--techuboard-overflow-fixture-menu") {
     runMenuBarOverflowFixture(popover: false)
-} else if CommandLine.arguments.contains("--clipy-overflow-fixture-popover") {
+} else if CommandLine.arguments.contains("--techuboard-overflow-fixture-popover") {
     runMenuBarOverflowFixture(popover: true)
-} else if CommandLine.arguments.contains("--clipy-overflow-live-tests") {
+} else if CommandLine.arguments.contains("--techuboard-overflow-live-tests") {
     runMenuBarOverflowLiveTests()
 } else {
     runCoreRegressionTests()
@@ -42,7 +42,7 @@ if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--relay-impo
               let url = object["url"] as? String else { throw NSError(domain: "SyncRelay", code: 2) }
         try SyncRelaySettings.save(enabled: true, url: url, token: raw)
         UserDefaults.standard.synchronize()
-        print("Relay configuration imported; restart Clipy to connect.")
+        print("Relay configuration imported; restart Techuboard to connect.")
         exit(0)
     } catch {
         FileHandle.standardError.write(Data("Relay import failed; verify private file permissions and device configuration.\n".utf8))
@@ -74,7 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MemoryFootprintReclaimer.registerIdleHandlers()
         LaunchAtLoginManager.syncWithPreference()
         SyncManager.shared.start()
-        print("Clipy clone started!")
+        print("Techuboard started!")
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -95,7 +95,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(
             NSMenuItem(
-                title: L10n.t(.quitClipy),
+                title: L10n.t(.quitTechuboard),
                 action: #selector(NSApplication.terminate(_:)),
                 keyEquivalent: "q"
             )
@@ -123,6 +123,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-#if !CLIPY_CORE_TESTS
+#if !TECHUBOARD_CORE_TESTS
 app.run()
 #endif

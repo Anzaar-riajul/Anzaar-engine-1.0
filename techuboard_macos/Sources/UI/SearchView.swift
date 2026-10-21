@@ -50,7 +50,7 @@ final class SearchViewModel: ObservableObject {
     private var isLoadingMore = false
     private var searchGeneration = 0
     private var searchCancellation: HistorySearchCancellation?
-    private let searchQueue = DispatchQueue(label: "com.clipy.search", qos: .userInitiated)
+    private let searchQueue = DispatchQueue(label: "com.techuboard.search", qos: .userInitiated)
     private static let historyChangeDebounce: TimeInterval = 0.25
 
     init() {

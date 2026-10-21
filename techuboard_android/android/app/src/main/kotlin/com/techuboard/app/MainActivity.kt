@@ -136,6 +136,75 @@ class MainActivity: FlutterActivity() {
                     requestNotificationPermission()
                     result.success(null)
                 }
+                "canDrawOverlays" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        result.success(Settings.canDrawOverlays(this))
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "requestOverlayPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:$packageName")
+                            ).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        }
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "isAccessibilityGranted" -> {
+                    result.success(FloatingHubAccessibilityService.isRunning())
+                }
+                "openAccessibilitySettings" -> {
+                    try {
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("FAILED", e.message, null)
+                    }
+                }
+                "startFloatingHub" -> {
+                    try {
+                        val intent = Intent(this, FloatingHubService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.e("TechuMain", "Cannot start FloatingHubService", e)
+                        result.error("FAILED", e.message, null)
+                    }
+                }
+                "stopFloatingHub" -> {
+                    try {
+                        val intent = Intent(this, FloatingHubService::class.java)
+                        stopService(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("FAILED", e.message, null)
+                    }
+                }
+                "isFloatingHubRunning" -> {
+                    result.success(FloatingHubService.isRunning)
+                }
                 else -> {
                     result.notImplemented()
                 }

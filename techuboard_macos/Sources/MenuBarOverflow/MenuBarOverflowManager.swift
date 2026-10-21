@@ -11,7 +11,7 @@ final class MenuBarOverflowManager: ObservableObject {
     private let provider: MenuBarOverflowProviding
     private let environment: MenuBarOverflowEnvironment
     private let images = MenuBarOverflowImages()
-    private let queue = DispatchQueue(label: "clipy.menu-bar-overflow", qos: .utility)
+    private let queue = DispatchQueue(label: "techuboard.menu-bar-overflow", qos: .utility)
     private var timer: Timer?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var scanCancellation: MenuBarOverflowCancellation?
@@ -215,7 +215,7 @@ final class MenuBarOverflowManager: ObservableObject {
         for (center, token) in observers { center.removeObserver(token) }
     }
 
-    #if CLIPY_CORE_TESTS
+    #if TECHUBOARD_CORE_TESTS
     var hasRefreshTimer: Bool { timer != nil }
     #endif
 }

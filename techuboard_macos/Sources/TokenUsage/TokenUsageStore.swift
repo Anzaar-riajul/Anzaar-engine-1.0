@@ -210,7 +210,7 @@ final class TokenUsageStore {
     }
 
     private func failure(_ operation: String) -> NSError {
-        NSError(domain: "ClipyTokenUsage", code: Int(sqlite3_errcode(db)),
+        NSError(domain: "TechuTokenUsage", code: Int(sqlite3_errcode(db)),
                 userInfo: [NSLocalizedDescriptionKey: "Token usage \(operation): \(sqliteErrorMessage(db))"])
     }
 }

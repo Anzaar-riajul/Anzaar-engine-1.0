@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Receives text input without changing the foreground application. Peripheral
-/// tools can keep that application's preset while the user dictates into Clipy.
+/// tools can keep that application's preset while the user dictates into Techuboard.
 /// NSMenu sessions save and restore the key window around tracking. A
 /// nonactivating panel that can still become key during that window drags
 /// the panel into the session's key negotiation while the app activation

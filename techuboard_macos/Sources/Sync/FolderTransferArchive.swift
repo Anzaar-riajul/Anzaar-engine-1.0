@@ -41,7 +41,7 @@ enum FolderTransferArchive {
         let root = source.standardizedFileURL.resolvingSymlinksInPath()
         let folderName = SyncManager.sanitizeFileName(root.lastPathComponent)
         _ = try components(folderName)
-        let temp = fm.temporaryDirectory.appendingPathComponent("clipy-folder-\(UUID().uuidString)", isDirectory: true)
+        let temp = fm.temporaryDirectory.appendingPathComponent("techuboard-folder-\(UUID().uuidString)", isDirectory: true)
         let rootPath = root.resolvingSymlinksInPath().path
         guard rootPath != "/", !temp.resolvingSymlinksInPath().path.hasPrefix(rootPath + "/")
         else { throw Failure.unsupportedItem }

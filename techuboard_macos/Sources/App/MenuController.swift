@@ -122,13 +122,23 @@ class MenuController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            // 使用 SF Symbol 替代 emoji，与系统菜单栏图标风格统一。
-            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-            button.image = NSImage(
-                systemSymbolName: "clipboard",
-                accessibilityDescription: NSLocalizedString("Techuboard", comment: "status item accessibility")
-            )?.withSymbolConfiguration(config)
-            button.image?.isTemplate = true
+            if let iconURL = Bundle.main.url(forResource: "MenuBarIcon@2x", withExtension: "png") ?? Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+               let greenImage = NSImage(contentsOf: iconURL) {
+                greenImage.size = NSSize(width: 24, height: 16)
+                greenImage.isTemplate = false
+                button.image = greenImage
+            } else if let namedImage = NSImage(named: "MenuBarIcon") {
+                namedImage.size = NSSize(width: 24, height: 16)
+                namedImage.isTemplate = false
+                button.image = namedImage
+            } else {
+                let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+                button.image = NSImage(
+                    systemSymbolName: "clipboard",
+                    accessibilityDescription: NSLocalizedString("Techuboard", comment: "status item accessibility")
+                )?.withSymbolConfiguration(config)
+                button.image?.isTemplate = true
+            }
             button.target = self
             button.action = #selector(statusButtonClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])

@@ -7,7 +7,7 @@ enum SyncRelaySettings {
     static var url: String { UserDefaults.standard.string(forKey: "syncRelayURL") ?? "" }
     private static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.clipy.sync-relay", kSecAttrAccount as String: "default"]
+         kSecAttrService as String: "com.techuboard.sync-relay", kSecAttrAccount as String: "default"]
     }
     static func token() -> String {
         var request = query

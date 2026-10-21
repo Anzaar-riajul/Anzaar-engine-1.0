@@ -134,6 +134,6 @@ final class TokenPriceCatalog {
     }
 
     private static func error(_ message: String) -> NSError {
-        NSError(domain: "ClipyTokenPrice", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(domain: "TechuTokenPrice", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }

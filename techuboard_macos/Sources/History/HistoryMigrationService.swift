@@ -11,7 +11,7 @@ final class HistoryMigrationService {
     init(database: AppDatabase) {
         self.database = database
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipyClone", isDirectory: true)
+            .appendingPathComponent("Techuboard", isDirectory: true)
         self.legacyJSONURL = appSupport.appendingPathComponent("history_v2.json")
     }
 

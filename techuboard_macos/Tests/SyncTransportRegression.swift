@@ -263,7 +263,7 @@ private func runSessionReaderChecks(_ m: SyncManager) {
 }
 
 private func runRelayConfigurationChecks() {
-    let original: [String: Any] = ["app": "clipy", "group": "personal", "device": "mac_old",
+    let original: [String: Any] = ["app": "techuboard", "group": "personal", "device": "mac_old",
         "token": String(repeating: "a", count: 32), "secret_key": String(repeating: "01", count: 32),
         "trusted_peers": ["phone": String(repeating: "02", count: 32)]]
     let raw = String(decoding: try! JSONSerialization.data(withJSONObject: original), as: UTF8.self)

@@ -10,17 +10,17 @@ final class SyncRelayClient: @unchecked Sendable {
         let trusted_peers: [String: String]
         func identity() throws -> RelayIdentity { try RelayIdentity(app: app, group: group, device: device, secretKey: Data(relayHex: secret_key), trustedPeers: trusted_peers.mapValues { try Data(relayHex: $0) }) }
         static func parse(_ raw: String) -> Access? {
-            guard raw.utf8.count <= 65536, let value = try? JSONDecoder().decode(Self.self, from: Data(raw.utf8)), value.app == "clipy", value.token.count >= 32,
+            guard raw.utf8.count <= 65536, let value = try? JSONDecoder().decode(Self.self, from: Data(raw.utf8)), value.app == "techuboard", value.token.count >= 32,
                 SyncRelaySettings.validDeviceID(value.device), value.token.count <= 4096, (try? value.identity()) != nil else { return nil }; return value
         }
     }
-    let queue = DispatchQueue(label: "com.clipy.relay")
+    let queue = DispatchQueue(label: "com.techuboard.relay")
     private let url: URL, id: String, name: String
     private var token: String
     private let port: UInt16, addresses: [String], onPeers: ([Peer]) -> Void
     private static let journal: Result<RelayJournal, Error> = Result {
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        return try RelayJournal(directory: support.appendingPathComponent("ClipyClone/common-relay-journal", isDirectory: true))
+        return try RelayJournal(directory: support.appendingPathComponent("Techuboard/common-relay-journal", isDirectory: true))
     }
     var onPeerAvailable: (() -> Void)?
     private var refreshGeneration: Int?
@@ -92,7 +92,7 @@ final class SyncRelayClient: @unchecked Sendable {
     }
     private func announce(_ peer: String, _ connection: CommonRelay.RelayClient, _ current: Int) {
         guard Access.parse(token)?.trusted_peers[peer] != nil else { return }
-        let data = try! JSONSerialization.data(withJSONObject: ["type": "clipy.presence", "peerId": id, "name": name, "port": Int(port), "addresses": Array(addresses.prefix(8))])
+        let data = try! JSONSerialization.data(withJSONObject: ["type": "techuboard.presence", "peerId": id, "name": name, "port": Int(port), "addresses": Array(addresses.prefix(8))])
         Task { _ = try? await connection.sendOnline(to: peer, data: data) }
     }
     private func refresh(_ connection: CommonRelay.RelayClient, _ current: Int) {
@@ -124,7 +124,7 @@ final class SyncRelayClient: @unchecked Sendable {
         if type == "peer.up", let own = event["identity"] as? [String: Any], let peer = own["device"] as? String { onPeerAvailable?();announce(peer, connection, current) }
         if type == "peer.down", let own = event["identity"] as? [String: Any], let peer = own["device"] as? String { metadata.removeValue(forKey: peer); bridges.removeValue(forKey: peer)?.close(); callbacks.removeValue(forKey: peer); pending.removeValue(forKey: peer); opening.remove(peer) }
         if type == "message", event["offline"] as? Bool != true, let peer = event["from"] as? String, let data = event["data"] as? Data,
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], object["type"] as? String == "clipy.presence",
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], object["type"] as? String == "techuboard.presence",
             let name = object["name"] as? String, let addresses = object["addresses"] as? [String], addresses.count <= 8,
             let port = object["port"] as? Int, (1...65535).contains(port), metadata.count < 7 || metadata[peer] != nil {
             guard let lanID = Self.lanPeerID(relayID: peer, presence: object), lanID != id else { return }
@@ -184,7 +184,7 @@ private final class RelayByteBridge: @unchecked Sendable {
     var writer: SyncSocketWriter?
     var suspended = false, closed = false
     private var sentRecords = 0, receivedRecords = 0
-    private let trace = ProcessInfo.processInfo.environment["CLIPY_RELAY_TRACE"] == "1"
+    private let trace = ProcessInfo.processInfo.environment["TECHUBOARD_RELAY_TRACE"] == "1"
     init(stream: RelayStream, queue: DispatchQueue, onReady: @escaping (Int32) -> Void) { self.stream = stream; self.queue = queue; self.onReady = onReady }
     func start() {
         var fds: [Int32] = [-1, -1]; guard socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0 else { close(); return }; fd = fds[0]

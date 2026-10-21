@@ -42,12 +42,12 @@ class LogManager: ObservableObject {
 
     @Published var logs: [LogEntry] = []
     // In-memory ring for the Log window only; the full history lives in the
-    // daily files under ~/Library/Logs/ClipyClone/.
+    // daily files under ~/Library/Logs/Techuboard/.
     private let maxLogs = 200
 
     /// Batch buffer: log lines land here first so hot paths (sync/file transfer)
     /// don't hit the main thread once per line.
-    private let bufferQueue = DispatchQueue(label: "com.clipy.log-buffer")
+    private let bufferQueue = DispatchQueue(label: "com.techuboard.log-buffer")
     private var pendingEntries: [LogEntry] = []
     private var flushScheduled = false
 
@@ -57,15 +57,15 @@ class LogManager: ObservableObject {
 
     static let retentionDays = 7
 
-    /// `~/Library/Logs/ClipyClone` — survives relaunches, readable in Console.app.
+    /// `~/Library/Logs/Techuboard` — survives relaunches, readable in Console.app.
     static var logDirectory: URL {
         let base = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library")
-        return base.appendingPathComponent("Logs/ClipyClone", isDirectory: true)
+        return base.appendingPathComponent("Logs/Techuboard", isDirectory: true)
     }
 
     static var currentLogFile: URL {
-        logDirectory.appendingPathComponent("ClipyClone-\(dayFormatter.string(from: Date())).log")
+        logDirectory.appendingPathComponent("Techuboard-\(dayFormatter.string(from: Date())).log")
     }
 
     private init() {}
@@ -160,7 +160,7 @@ class LogManager: ObservableObject {
 
         let directory = Self.logDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("ClipyClone-\(day).log")
+        let url = directory.appendingPathComponent("Techuboard-\(day).log")
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }

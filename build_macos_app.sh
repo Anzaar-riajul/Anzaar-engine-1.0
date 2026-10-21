@@ -6,11 +6,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${REPO_ROOT}/scripts/lib/build_common.sh"
 resolve_build_version
 
-MACOS_PROJECT_DIR="${REPO_ROOT}/clipy_macos"
+MACOS_PROJECT_DIR="${REPO_ROOT}/techuboard_macos"
 APP_NAME="Techuboard"
 APP_BUNDLE="${APP_NAME}.app"
-# Preserve the existing identifier: changing it invalidates existing TCC grants.
-BUNDLE_ID="${BUNDLE_ID:-com.yourdomain.ClipyClone}"
+BUNDLE_ID="${BUNDLE_ID:-com.techuboard.mac}"
 GENERATE_DSYM="${GENERATE_DSYM:-1}"
 INSTALL_APP="${INSTALL_APP:-0}"
 LAUNCH_APP="${LAUNCH_APP:-0}"
@@ -34,7 +33,7 @@ if [ "${INSTALL_APP}" = 1 ] && pgrep -x "${APP_NAME}" >/dev/null; then
 fi
 
 # Build in isolation. A compile/signing failure leaves the previous bundle intact.
-BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/clipy-build.XXXXXX")"
+BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/techuboard-build.XXXXXX")"
 trap 'rm -rf "${BUILD_DIR}"' EXIT
 STAGED_APP="${BUILD_DIR}/${APP_BUNDLE}"
 mkdir -p "${STAGED_APP}/Contents/MacOS" "${STAGED_APP}/Contents/Resources"
@@ -77,7 +76,7 @@ cp "${MACOS_PROJECT_DIR}/Resources/Info.plist" "${PLIST}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" "${PLIST}"
 plutil -lint "${PLIST}"
 
-ICON_SOURCE="${REPO_ROOT}/Clipy/Resources/AppIcon.png"
+ICON_SOURCE="${REPO_ROOT}/Techuboard/Resources/AppIcon.png"
 [ -f "${ICON_SOURCE}" ] || fail "App icon source is missing: ${ICON_SOURCE}"
 ICONSET="${BUILD_DIR}/AppIcon.iconset"
 mkdir -p "${ICONSET}"
@@ -92,6 +91,33 @@ cp "${REPO_ROOT}/LICENSE" \
 cp "${MACOS_PROJECT_DIR}/Resources/token-prices-seed.json" \
    "${MACOS_PROJECT_DIR}/Resources/token-prices-overrides.json" \
    "${STAGED_APP}/Contents/Resources/"
+if [ -f "${MACOS_PROJECT_DIR}/Resources/MenuBarIcon.png" ]; then
+  cp "${MACOS_PROJECT_DIR}/Resources"/MenuBarIcon*.png "${STAGED_APP}/Contents/Resources/"
+fi
+
+# --------------------------------------------------------------------------
+# Build and embed TechuAvro.app (Bangla phonetic system input method)
+# --------------------------------------------------------------------------
+TECHU_AVRO_SRC="${MACOS_PROJECT_DIR}/TechuAvro"
+TECHU_AVRO_BUILD_SCRIPT="${TECHU_AVRO_SRC}/build_techu_avro.sh"
+if [ -f "${TECHU_AVRO_BUILD_SCRIPT}" ]; then
+  printf 'Building TechuAvro IME...\n'
+  MACOS_ARCH="${MACOS_ARCH}" bash "${TECHU_AVRO_BUILD_SCRIPT}"
+  TECHU_AVRO_APP="${TECHU_AVRO_SRC}/TechuAvro.app"
+  if [ -d "${TECHU_AVRO_APP}" ]; then
+    DEST_PLUGINS="${STAGED_APP}/Contents/Resources/TechuAvro.app"
+    ditto "${TECHU_AVRO_APP}" "${DEST_PLUGINS}"
+    # Sign the embedded bundle with the same identity
+    codesign --force --sign "${SIGN_IDENTITY}" --identifier "com.techuboard.techu-avro" \
+      --timestamp=none "${DEST_PLUGINS}"
+    printf 'Embedded TechuAvro.app into %s\n' "${STAGED_APP}/Contents/Resources/"
+  else
+    printf 'WARNING: TechuAvro.app not found after build; skipping embed.\n'
+  fi
+else
+  printf 'WARNING: TechuAvro build script not found; skipping Bangla IME build.\n'
+fi
+# --------------------------------------------------------------------------
 
 if [ "${GENERATE_DSYM}" = 1 ]; then
   dsymutil "${STAGED_APP}/Contents/MacOS/${APP_NAME}" -o "${BUILD_DIR}/${APP_BUNDLE}.dSYM"
@@ -117,7 +143,7 @@ if [ "${INSTALL_APP}" = 1 ]; then
   INSTALLED_APP="/Applications/${APP_BUNDLE}"
   # Explicit opt-in installation retains a recoverable copy of the old app.
   if [ -e "${INSTALLED_APP}" ]; then
-    BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/clipy-install-backup.XXXXXX")"
+    BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/techuboard-install-backup.XXXXXX")"
     mv "${INSTALLED_APP}" "${BACKUP_DIR}/${APP_BUNDLE}"
     printf 'Previous installation saved at: %s\n' "${BACKUP_DIR}/${APP_BUNDLE}"
   fi

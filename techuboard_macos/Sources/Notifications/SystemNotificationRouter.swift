@@ -10,7 +10,7 @@ import UserNotifications
 final class SystemNotificationRouter: NSObject, UNUserNotificationCenterDelegate {
     static let shared = SystemNotificationRouter()
 
-    private static let fileNotificationIdentifierPrefix = "clipy.file."
+    private static let fileNotificationIdentifierPrefix = "techuboard.file."
 
     override private init() {
         super.init()

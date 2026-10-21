@@ -1,81 +1,43 @@
-# Clipy app icon
+# Techuboard Official Branding & Logo Assets
 
-The redesigned mark combines two interlocking document outlines to represent
-clipboard history, copying and cross-device connection. It retains Clipy's
-blue-and-white palette, with no text inside the icon so it remains legible at
-small sizes.
+Techuboard features official branding assets designed for universal cross-platform usage across macOS, Windows, Android, and iOS.
 
-## Canonical artwork
+---
 
-- `icon-master.png`: opaque, square, full-bleed artwork generated with the built-in
-  image generation tool. Keep this original intact when exporting platform sizes.
-- The macOS menu-bar symbol is a separate monochrome system symbol; it is not a
-  launcher icon and should continue adapting to the menu bar's appearance.
+## 🎨 Official Logo Variants (`/Logos`)
 
-## Platform exports
+All logos are maintained in high resolution with strict aspect ratio preservation:
 
-The checked-in exports are used directly by normal builds; no image-generation
-service, API key or additional package is required to build Clipy.
+| Asset Name | Resolution | Aspect Ratio | Transparency | Primary Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| **`techuboard-square-logo.png`**<br>*(Bangla-English Keyboard Clipboard Logo)* | 1254 × 1254 | **1:1 (Square)** | Opaque Background | **App Icons**: macOS `AppIcon.icns`, Android mipmaps (`ic_launcher`), iOS `AppIcon`, Windows `.ico`, Favicons, and In-App Avatars. |
+| **`techuboard-logo.png`**<br>*(Green Keyboard Clipboard Logo)* | 1536 × 1024 | **3:2 (Landscape)** | Transparent Alpha | **Navigation & Headers**: macOS About dialog, Web Studio navbar, README headers, and transparent UI bars. |
+| **`techuboard-emblem.png`**<br>*(Techuboard Green Keyboard Emblem)* | 1536 × 1024 | **3:2 (Landscape)** | Transparent Alpha | **Emblem & Badges**: High-contrast branding badges, presentation slides, and promotional banners. |
 
-| Target | Resource | Treatment |
-| --- | --- | --- |
-| macOS | `Clipy/Resources/AppIcon.png` | 1024 px RGBA, rounded tile with transparent padding; the build creates the `.icns` sizes |
-| Android < 8 | `mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png` | 48/72/96/144/192 px legacy launcher icons |
-| Android 8+ | `mipmap-anydpi-v26/ic_launcher.xml` | Independent blue background and transparent foreground; system-applied mask |
-| Android 13+ | `mipmap-anydpi-v33/ic_launcher.xml` | Adds a white alpha silhouette for launcher-themed icons |
-| iOS | `clipy_android/ios/Runner/Assets.xcassets/AppIcon.appiconset/` | 15 opaque RGB sizes from `Contents.json`, no baked mask or padding |
-| Windows | `clipy_android/windows/runner/resources/app_icon.ico` | Seven PNG-backed ICO sizes exported from the approved macOS tile |
-| Documentation | `Logo.png` | 512 px rounded transparent tile used by both root README files |
+> [!IMPORTANT]
+> **Strict Aspect Ratio Guarantee**:
+> Under no circumstances should the geometry or aspect ratio of any logo variant be distorted or stretched.
+> When rendering horizontally in HTML/CSS, always use `height: Xpx; width: auto; object-fit: contain;`.
+> When rendering square icons, only use the 1:1 `techuboard-square-logo.png`.
 
-Android paths above are relative to `clipy_android/android/app/src/main/res/`.
-After updating the master exports, run `swift scripts/export_windows_icon.swift`
-to regenerate the Windows resource, then run `python3 scripts/check_icons.py`.
-The foreground layers are 432 px at xxxhdpi (108 dp); the 54 dp tall mark is
-centered and checked against the 66 dp safe circle. The system is free to apply
-circle, rounded-square or other masks. See the official
-[Android adaptive icon guidance](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive).
-Notification status icons and the macOS menu-bar symbol retain their separate
-monochrome, functional artwork.
+---
 
-## Regenerate and validate
+## 📁 Ecosystem Asset Placements
 
-From the repository root on macOS with Xcode's Swift tools:
+1. **macOS**:
+   - Master Icon: `Techuboard/Resources/AppIcon.png` (1024 × 1024 square, generated from master square logo).
+   - Compiled Bundle: `techuboard_macos/Techuboard.app/Contents/Resources/AppIcon.icns`.
+   - Packaged Release: `Techu Complete Versions/macOS/Techuboard-macOS.zip`.
 
-```bash
-swift scripts/export_app_icons.swift
-python3 scripts/check_icons.py
-```
+2. **Android**:
+   - Launcher Icons: `techuboard_android/android/app/src/main/res/mipmap-*` (`ic_launcher.png`, `ic_launcher_round.png`).
+   - Adaptive Foreground: `techuboard_android/android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png`.
+   - In-App Branding: `techuboard_android/assets/branding/techuboard-logo.png`.
 
-The exporter uses only macOS system frameworks (CoreGraphics, ImageIO, AppKit).
-It preserves the approved master and deterministically applies platform framing,
-resizing and a color matte for Android. **The matte thresholds are specific to
-this blue-and-white master**; review the extraction and safe area if the design
-changes. Do not use a flattened checkerboard image as transparent artwork.
+3. **iOS**:
+   - Master App Icon: `techuboard_android/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png`.
 
-Review `icon-preview.png` after exporting, including the 16/32/64 px samples,
-then rebuild the applications. The preview uses representative masks, not device
-screenshots; actual Android masks/theme colors vary by launcher. The unused legacy
-`assets/logo/logo_placeholder.png` is also refreshed to avoid retaining old branding.
-
-The portable Python check uses only the standard library and runs as part of
-`bash scripts/check.sh repo`. It checks PNG dimensions/color modes, transparent
-corners, Android safe area and themed silhouette, adaptive XML wiring, and every
-iOS catalogue entry. Icon asset validation does not establish that the experimental
-iOS application's native features work.
-
-![Platform icon previews](icon-preview.png)
-
-## Generation prompt
-
-Tool: built-in `image_gen` (not the API/CLI fallback).
-
-```text
-Use case: logo-brand.
-Asset type: production-ready square app icon for Clipy, a native macOS clipboard-history utility with Android LAN synchronization.
-Primary request: completely redesign the existing icon into an original, exceptionally polished, simple and memorable app symbol. Retain the brand's established blue-and-white family. NO typography.
-Subject: exactly two interlocking, softly rounded document-card contours, offset slightly diagonally, whose shared negative space creates one bold open-C / bent-paperclip silhouette. This must feel like a single coherent copy-and-connect mark, not several separate icons. A porcelain-white front contour and a subtly ice-blue rear contour, with substantial stroke weight and large clean negative spaces so the silhouette remains legible at 32 pixels. Broad rounded terminals. No internal text lines. A refined tactile 2.5D treatment: very shallow extruded depth, satin ceramic surfaces, restrained bevels and soft contact shadows, crisp precision edges.
-Scene/backdrop: saturated rich cobalt/azure blue square background, gently lit from upper left; restrained tonal depth, no rainbow or purple gradient. Background fills the entire square to every edge, no surrounding canvas, no rounded exterior corners, no external shadow, no transparency. The operating system will apply icon masking.
-Composition: single front-facing icon, straight-on orthographic view, mathematically balanced and optically centered, the complete white-and-ice-blue mark contained inside the central 58% of the canvas, generous clear margins, no parts near the edge. Square 1024 x 1024 or larger.
-Style: contemporary premium macOS utility icon, minimal and calm, carefully sculpted rather than toy-like. A beautiful strong silhouette that is recognizable without lettering.
-Constraints: one icon only, no contact sheet, no presentation board, no phone/computer mockup, no text, no letters printed on the icon, no watermark, no sync arrows, no orbit rings, no circles around the symbol, no sparkles, no tiny decorative details, no photorealistic environment. Do not reproduce another company's logo.
-```
+4. **Web Preview Studio**:
+   - Navbar Logo: `web_preview/assets/logo.png` (Transparent landscape, `height: 30px; width: auto; object-fit: contain;`).
+   - App Icon / Favicon: `web_preview/assets/logo-square.png`.
+   - High Contrast Emblem: `web_preview/assets/logo-emblem.png`.

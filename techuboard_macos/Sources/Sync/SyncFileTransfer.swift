@@ -387,7 +387,7 @@ extension SyncManager {
     }
 
     /// Heavy tail of the receive path: hash verification, move into
-    /// ~/Downloads/Clipy, history insert, ack. Runs on fileReceiveQueue with
+    /// ~/Downloads/Techuboard, history insert, ack. Runs on fileReceiveQueue with
     /// an isolated copy of the state (already removed from the live map).
     private func completeIncomingFile(_ state: IncomingFileState) {
         let sha256Hex = hashFile(at: state.partURL)
@@ -415,7 +415,7 @@ extension SyncManager {
             return
         }
         let senderName = state.senderName
-        #if !CLIPY_CORE_TESTS
+        #if !TECHUBOARD_CORE_TESTS
         let fileName = destination.lastPathComponent
         DispatchQueue.main.async {
             ClipboardManager.shared.handleRemoteFileSync(url: destination, senderName: senderName)
@@ -476,7 +476,7 @@ extension SyncManager {
     // MARK: - Paths
 
     private func incomingFileDirectory() -> URL {
-        #if CLIPY_CORE_TESTS
+        #if TECHUBOARD_CORE_TESTS
         if let directory = fileReceiveDirectoryForTesting { return directory }
         #endif
         return Self.fileReceiveDirectory()
@@ -487,7 +487,7 @@ extension SyncManager {
     static func fileReceiveDirectory() -> URL {
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let directory = downloads.appendingPathComponent("Clipy", isDirectory: true)
+        let directory = downloads.appendingPathComponent("Techuboard", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }

@@ -28,7 +28,7 @@ final class SmartSwitchFocusMonitor {
         }
     }
     private(set) var snapshot: Snapshot?
-    private let queue = DispatchQueue(label: "Clipy.smart-switch-focus", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "Techuboard.smart-switch-focus", qos: .userInitiated)
     private let reader: Reader
     private let requestTimeout: TimeInterval
     private let readSlots = DispatchSemaphore(value: 2)

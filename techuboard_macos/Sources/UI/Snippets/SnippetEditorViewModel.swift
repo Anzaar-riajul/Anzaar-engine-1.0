@@ -184,11 +184,11 @@ final class SnippetEditorViewModel: ObservableObject {
         reloadSidebar()
     }
 
-    /// `.clipy` has no registered UTI, so it is declared here as an XML subtype.
+    /// `.techuboard` has no registered UTI, so it is declared here as an XML subtype.
     private static let snippetContentTypes: [UTType] = {
         var types: [UTType] = [.xml]
-        if let clipy = UTType(filenameExtension: "clipy", conformingTo: .xml) {
-            types.insert(clipy, at: 0)
+        if let techuboard = UTType(filenameExtension: "techuboard", conformingTo: .xml) {
+            types.insert(techuboard, at: 0)
         }
         return types
     }()
@@ -220,7 +220,7 @@ final class SnippetEditorViewModel: ObservableObject {
     func exportSnippets() {
         let savePanel = NSSavePanel()
         savePanel.title = L10n.t(.exportSnippets)
-        savePanel.nameFieldStringValue = "ClipySnippets.clipy"
+        savePanel.nameFieldStringValue = "TechuSnippets.techuboard"
         savePanel.allowedContentTypes = Self.snippetContentTypes
         savePanel.canCreateDirectories = true
         savePanel.begin { response in

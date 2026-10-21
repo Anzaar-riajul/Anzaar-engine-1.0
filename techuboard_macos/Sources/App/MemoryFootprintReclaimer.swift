@@ -4,7 +4,7 @@ import Darwin
 enum MemoryFootprintReclaimer {
 
     /// Serializes access to `pendingDelayedReclaim`; callers come from any thread.
-    private static let schedulerQueue = DispatchQueue(label: "com.clipy.memory-reclaim", qos: .utility)
+    private static let schedulerQueue = DispatchQueue(label: "com.techuboard.memory-reclaim", qos: .utility)
     private static var pendingDelayedReclaim: DispatchWorkItem?
     private static var pendingFinalReclaim: DispatchWorkItem?
     private static var didRegisterIdleHandlers = false

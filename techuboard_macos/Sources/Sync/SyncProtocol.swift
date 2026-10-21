@@ -76,6 +76,8 @@ enum SyncType {
     static let hello = "hello"
     static let welcome = "welcome"
     static let history = "history"
+    static let snippetsSync = "snippets.sync"
+    static let snippetsFetch = "snippets.fetch"
     /// Device-list one-shot text send; no mutual authorization required.
     static let historyDirect = "history.direct"
     static let historyFetch = "history.fetch"

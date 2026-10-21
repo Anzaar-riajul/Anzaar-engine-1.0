@@ -10,7 +10,7 @@ func runFolderTransferRegressionTests() {
         do { try action(); preconditionFailure(message) } catch { }
     }
     do {
-        let sandbox = fm.temporaryDirectory.appendingPathComponent("clipy-folder-test-\(UUID().uuidString)")
+        let sandbox = fm.temporaryDirectory.appendingPathComponent("techuboard-folder-test-\(UUID().uuidString)")
         try fm.createDirectory(at: sandbox, withIntermediateDirectories: false)
         defer { try? fm.removeItem(at: sandbox) }
         let source = sandbox.appendingPathComponent("资料.v1")

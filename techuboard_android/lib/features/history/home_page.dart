@@ -17,7 +17,7 @@ import '../transfers/incoming_share.dart';
 import '../transfers/shared_files_page.dart';
 import '../logs/log_page.dart';
 import '../settings/mobile_settings_content.dart';
-import '../keyboard/techu_avro_page.dart';
+import '../snippets/snippets_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -284,30 +284,26 @@ class _HomePageState extends State<HomePage>
     final l10n = context.l10n;
     final titles = [
       l10n.history,
+      'My Notes',
       l10n.devices,
-      l10n.notifications,
       l10n.settings,
     ];
     final subtitles = [
       Platform.isIOS ? l10n.iosHistoryTagline : l10n.historyTagline,
+      'Saved notes and quick text templates',
       l10n.localNetwork,
-      Platform.isAndroid
-          ? l10n.notificationIntro
-          : l10n.remoteNotificationIntro,
       l10n.settingsTagline,
     ];
     final icons = [
       Icons.content_paste_rounded,
+      Icons.note_alt_rounded,
       Icons.devices_rounded,
-      Icons.notifications_outlined,
       Icons.tune_rounded,
     ];
     final pages = <Widget Function()>[
       _history,
+      () => const SnippetsPage(),
       () => const DevicesPage(),
-      () => Platform.isAndroid
-          ? const NotificationSyncPage(embedded: true)
-          : const RemoteNotificationsPage(),
       _settings,
     ];
     final wide = MediaQuery.sizeOf(context).width >= 720;
@@ -389,14 +385,6 @@ class _HomePageState extends State<HomePage>
             ],
           ),
           actions: [
-            IconButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(builder: (_) => const TechuAvroPage()),
-              ),
-              tooltip: 'TechuAvro Keyboard',
-              icon: const Icon(Icons.keyboard_rounded),
-            ),
             IconButton(
               onPressed: _openFiles,
               tooltip: l10n.receivedFiles,
