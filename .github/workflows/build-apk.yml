@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build Pure Native Android APK
+    name: Build Techuboard Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
@@ -24,19 +24,33 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Build Native Android APK with Gradle
-        working-directory: native_android/TechuboardKeyboard
+      - name: Read pinned Flutter version
+        id: flutter
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          channel: stable
+          cache: true
+
+      - name: Build Android Release APK
+        working-directory: techuboard_android
         run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          flutter pub get
+          flutter build apk --release
 
       - name: Locate and Prepare Release APK
         run: |
           mkdir -p dist
-          APK_PATH=$(find native_android/TechuboardKeyboard/app/build/outputs/apk -name "*.apk" | head -n 1)
+          APK_PATH=$(find techuboard_android/build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            APK_PATH=$(find techuboard_android/build/app/outputs -name "*.apk" | grep -v "unaligned" | head -n 1)
+          fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
             echo "ERROR: Release APK not found!"
-            find native_android/TechuboardKeyboard/app/build -maxdepth 5
+            find techuboard_android/build -maxdepth 5
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
@@ -55,24 +69,16 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         continue-on-error: true
         with:
-          tag_name: native-v1.0-${{ github.run_number }}
-          name: Techuboard Native Android v1.0 (Build ${{ github.run_number }})
+          tag_name: android-v1.0-${{ github.run_number }}
+          name: Techuboard Android v1.0 (Build ${{ github.run_number }})
           body: |
-            ## 🎉 Techuboard Pure Native Android Keyboard APK
-
+            ## 🎉 Techuboard Complete Android App v1.0
             ### 🚀 Features:
-            - **100% Pure Native Kotlin IME**: Fast, lightweight, zero-bloat.
-            - **TechuAvro Phonetic Engine**: Instant Avro transliteration into Bengali script.
-            - **Instant Toggle**: Seamless 1-tap switch between TechuAvro and English modes.
-            - **Integrated Clipboard Bar**: 1-tap pasting directly from the keyboard candidate bar.
-            - **Spacebar Cursor Control**: Swipe left/right across the spacebar to glide the cursor precisely.
-            - **Modern Dark UI**: Designed for Android 7.0 to Android 14+.
-
-            ### 📲 Quick Install Guide:
-            1. Download `Techuboard-Android-v1.0.apk` below and install it on your Android phone.
-            2. Open the Techuboard app and tap **"১. কীবোর্ড সক্রিয় করুন (Enable in Settings)"**.
-            3. Tap **"২. Techuboard নির্বাচন করুন (Select Input Method)"** and choose Techuboard.
-            4. Type anywhere in WhatsApp, Messenger, Facebook, Chrome, etc.!
+            - **Floating Paste Hub**: Global draggable overlay with 1-tap direct paste injection
+            - **My Notes**: Complete cross-device synchronized notes and folders
+            - **Auto Image & File Sync**: Real-time clipboard, photo, and file streaming
+            - **Multi-Device Mesh Sync**: Auto discovery and seamless syncing between Mac, Android, and Windows
+            - **Privacy First**: 100% end-to-end encrypted, zero tracking
           files: |
             dist/Techuboard-Android-v1.0.apk
         env:
