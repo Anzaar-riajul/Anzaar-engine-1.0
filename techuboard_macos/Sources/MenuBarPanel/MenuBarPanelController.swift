@@ -156,7 +156,10 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
     }
     private func updatePreview(_ entry: HistoryEntry?) {
         guard isVisible, let panel = self.panel, let entry else {
-            previewPanel?.orderOut(nil)
+            if let preview = previewPanel {
+                self.panel?.removeChildWindow(preview)
+                preview.orderOut(nil)
+            }
             return
         }
         let previewWindow = previewPanel ?? makePreviewPanel()
@@ -208,8 +211,11 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
         generation &+= 1 // Cancels any earlier deferred action, even after the window is hidden.
         guard isVisible else { return }
         MenuBarOverflowManager.shared.endMenuPresentation()
-        previewPanel?.orderOut(nil)
-        previewPanel?.contentViewController = nil
+        if let preview = previewPanel {
+            panel?.removeChildWindow(preview)
+            preview.orderOut(nil)
+            preview.contentViewController = nil
+        }
         model.previewEntry = nil
         panel?.orderOut(nil)
         panel?.contentViewController = nil

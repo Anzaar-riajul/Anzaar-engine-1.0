@@ -7,6 +7,7 @@ import Foundation
 import InputMethodKit
 import AppKit
 
+@objc(TechuAvroController)
 final class TechuAvroController: IMKInputController {
 
     // MARK: - State

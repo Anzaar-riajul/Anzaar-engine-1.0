@@ -19,18 +19,19 @@
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSPrincipalClass</key>
-    <string>TechuAvroApp</string>
-    <!-- InputMethodKit registration keys -->
+    <string>NSApplication</string>
     <key>InputMethodConnectionName</key>
-    <string>TechuAvro</string>
-    <key>InputMethodServerPort</key>
-    <string>30001</string>
+    <string>TechuAvro_Connection</string>
+    <key>InputMethodServerControllerClass</key>
+    <string>TechuAvroController</string>
+    <key>TISIntendedLanguage</key>
+    <string>bn</string>
+    <key>tsInputMethodCharacterRepertoireKey</key>
+    <array>
+        <string>Beng</string>
+    </array>
     <key>TICapsLockLanguageSwitchCapable</key>
     <false/>
-    <key>tsInputMethodCharacterSubsets</key>
-    <array>
-        <string>com.apple.inputmethod.Bengali</string>
-    </array>
     <key>ComponentDescription</key>
     <string>TechuAvro Bangla Phonetic Input Method</string>
     <key>ComponentManufacturer</key>

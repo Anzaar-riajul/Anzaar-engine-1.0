@@ -124,7 +124,7 @@ class MenuController: NSObject {
         if let button = statusItem.button {
             if let iconURL = Bundle.main.url(forResource: "MenuBarIcon@2x", withExtension: "png") ?? Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
                let iconImage = NSImage(contentsOf: iconURL) {
-                iconImage.size = NSSize(width: 22, height: 16)
+                iconImage.size = NSSize(width: 24, height: 16)
                 iconImage.isTemplate = true
                 button.image = iconImage
             } else if let namedImage = NSImage(named: "MenuBarIcon") {

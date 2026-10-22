@@ -113,12 +113,6 @@ struct SettingsView: View {
             .onChange(of: deviceNameFocused) { focused in
               if !focused { saveDeviceName() }
             }
-          Text(
-            L10n.format(
-              .deviceNameAutoSaveHint, String(PreferencesManager.shared.syncPeerId.prefix(8)))
-          )
-          .font(AppFont.caption)
-          .foregroundStyle(.secondary)
         }
 
         Section(L10n.t(.history)) {
@@ -220,10 +214,8 @@ struct SettingsView: View {
             .foregroundStyle(.secondary)
         }
 
-        SyncRelaySettingsView()
-
-        Section {
-          Toggle(L10n.t(.enableLanSync), isOn: $syncEnabled)
+        Section("কানেক্টেড ডিভাইস (Connected Devices)") {
+          Toggle("ডিভাইস সিঙ্ক চালু রাখুন (Enable Sync)", isOn: $syncEnabled)
             .onChange(of: syncEnabled) { newValue in
               PreferencesManager.shared.isSyncEnabled = newValue
               if newValue {
@@ -233,41 +225,31 @@ struct SettingsView: View {
               }
             }
 
-          TextField(L10n.t(.syncPort), text: $syncPort)
-            .onChange(of: syncPort) { newValue in
-              if let port = Int(newValue) {
-                PreferencesManager.shared.syncPort = port
+          HStack {
+            Text("একই নেটওয়ার্কে থাকা আপনার অন্যান্য ডিভাইস স্বয়ংক্রিয়ভাবে নিচে দেখাবে।")
+              .font(AppFont.caption)
+              .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+              guard !isRefreshingDevices else { return }
+              isRefreshingDevices = true
+              SyncManager.shared.refreshDiscovery(pruneCache: true, scanFullSubnet: true)
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                availablePeers = SyncManager.shared.availablePeers
+                isRefreshingDevices = false
+              }
+            } label: {
+              HStack {
+                if isRefreshingDevices {
+                  ProgressView().controlSize(.small)
+                } else {
+                  Image(systemName: "arrow.clockwise")
+                }
+                Text("রিফ্রেশ")
               }
             }
-
-          Text(L10n.t(.authorizedDevices))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-          Text(L10n.t(.syncTargetsHint))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-
-          Button {
-            guard !isRefreshingDevices else { return }
-            isRefreshingDevices = true
-            // User refresh: prune ghosts + full /24 scan.
-            SyncManager.shared.refreshDiscovery(pruneCache: true, scanFullSubnet: true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-              availablePeers = SyncManager.shared.availablePeers
-              isRefreshingDevices = false
-            }
-          } label: {
-            HStack {
-              if isRefreshingDevices {
-                ProgressView()
-                  .controlSize(.small)
-                Text(L10n.t(.refreshingDevices))
-              } else {
-                Text(L10n.t(.refreshDevices))
-              }
-            }
+            .disabled(!syncEnabled || isRefreshingDevices)
           }
-          .disabled(!syncEnabled || isRefreshingDevices)
 
           let authDeviceRows = Self.authDeviceRows(
             availablePeers: availablePeers,
@@ -277,33 +259,20 @@ struct SettingsView: View {
           if authDeviceRows.isEmpty {
             Text(L10n.t(.noDevicesFound))
               .foregroundStyle(.secondary)
+              .font(AppFont.caption)
+              .padding(.vertical, 4)
           } else {
             ForEach(authDeviceRows, id: \.peerId) { row in
               VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                  Image(systemName: row.displayName.lowercased().contains("phone") || row.displayName.lowercased().contains("android") ? "iphone" : "laptopcomputer")
+                    .foregroundStyle(.blue)
                   Text(row.displayName)
+                    .fontWeight(.medium)
                   Spacer()
-                  Text(row.isOnline ? L10n.t(.deviceOnline) : L10n.t(.deviceOffline))
+                  Text(row.isOnline ? "অনলাইন" : "অফলাইন")
                     .font(AppFont.caption)
                     .foregroundStyle(row.isOnline ? .green : .secondary)
-                  if clipboardSyncTargets.contains(row.peerId)
-                    || notificationSyncTargets.contains(row.peerId)
-                  {
-                    Button {
-                      clipboardSyncTargets.remove(row.peerId)
-                      notificationSyncTargets.remove(row.peerId)
-                      PreferencesManager.shared.removeAuthorizedPeer(row.peerId)
-                    } label: {
-                      Image(systemName: "trash")
-                        .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-                  }
-                }
-                if let hostPort = row.hostPort {
-                  Text(hostPort)
-                    .font(AppFont.caption)
-                    .foregroundStyle(.secondary)
                 }
                 Toggle(
                   isOn: Binding(
@@ -322,70 +291,14 @@ struct SettingsView: View {
                     }
                   )
                 ) {
-                  Text(L10n.t(.syncClipboardToDevice))
-                    .font(AppFont.caption)
-                }
-                Toggle(
-                  isOn: Binding(
-                    get: { notificationSyncTargets.contains(row.peerId) },
-                    set: { enabled in
-                      if enabled {
-                        notificationSyncTargets.insert(row.peerId)
-                      } else {
-                        notificationSyncTargets.remove(row.peerId)
-                      }
-                      PreferencesManager.shared.setNotificationSync(
-                        peerId: row.peerId, enabled: enabled)
-                      if enabled {
-                        SyncManager.shared.refreshPendingDelivery(for: row.peerId)
-                      }
-                    }
-                  )
-                ) {
-                  Text(L10n.t(.syncNotificationsToDevice))
+                  Text("ক্লিপবোর্ড সিঙ্ক")
                     .font(AppFont.caption)
                 }
               }
-              .padding(.vertical, 2)
-            }
-          }
-
-          Divider()
-          Text(L10n.t(.syncAddManualDevice))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-          Text(L10n.t(.syncManualDeviceHint))
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
-
-          Button {
-            manualPeerHost = ""
-            manualPeerPort = "\(PreferencesManager.shared.syncPort)"
-            showAddManualPeer = true
-          } label: {
-            Label(L10n.t(.syncAdd), systemImage: "plus")
-          }
-          .disabled(!syncEnabled)
-
-          ForEach(manualPeers, id: \.self) { entry in
-            HStack {
-              Text(entry)
-                .font(AppFont.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
-              Spacer()
-              Button(role: .destructive) {
-                PreferencesManager.shared.removeManualPeer(entry)
-                manualPeers = PreferencesManager.shared.manualSyncPeers
-                SyncManager.shared.triggerCrossBandDiscovery()
-              } label: {
-                Image(systemName: "minus.circle")
-              }
-              .buttonStyle(.borderless)
+              .padding(.vertical, 4)
             }
           }
         }
-        SyncDiagnosticsSection()
       }
       if pageID == "banglaKeyboard" {
         BanglaKeyboardSettingsSection()

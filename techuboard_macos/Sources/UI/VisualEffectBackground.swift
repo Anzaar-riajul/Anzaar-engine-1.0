@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct VisualEffectBackground: NSViewRepresentable {
-    var material: NSVisualEffectView.Material = .hudWindow
+    var material: NSVisualEffectView.Material = .popover
     var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
     var state: NSVisualEffectView.State = .active
     var cornerRadius: CGFloat = 18
@@ -31,13 +31,13 @@ extension View {
         self.background(
             ZStack {
                 VisualEffectBackground(
-                    material: .hudWindow,
+                    material: .popover,
                     blendingMode: .behindWindow,
                     state: .active,
                     cornerRadius: cornerRadius
                 )
-                // Frosted glass refractive highlight
-                Color.white.opacity(0.05)
+                // Frosted subtle specular refraction
+                Color.white.opacity(0.04)
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -46,9 +46,9 @@ extension View {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.38),
-                            Color.white.opacity(0.12),
-                            Color.white.opacity(0.03)
+                            Color.white.opacity(0.45),
+                            Color.white.opacity(0.18),
+                            Color.white.opacity(0.06)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -56,6 +56,6 @@ extension View {
                     lineWidth: 0.75
                 )
         )
-        .shadow(color: Color.black.opacity(0.28), radius: 30, x: 0, y: 14)
+        .shadow(color: Color.black.opacity(0.24), radius: 24, x: 0, y: 12)
     }
 }

@@ -151,10 +151,10 @@ struct MenuBarPanelView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 34)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.75)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
         )
     }
     private var overflowStrip: some View {
@@ -1012,7 +1012,16 @@ private struct MenuBarPanelHistoryRow: View {
                 .transition(.opacity)
             } else {
                 HStack(spacing: 4) {
-                    if let source = entry.sourceApp {
+                    if entry.isPinned {
+                        Button(action: togglePin) {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(AppColor.accent)
+                                .frame(width: 20, height: 20)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Unpin from Top")
+                    } else if let source = entry.sourceApp {
                         Text(source)
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Color.secondary)

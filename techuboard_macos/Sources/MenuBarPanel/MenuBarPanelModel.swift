@@ -188,7 +188,6 @@ final class MenuBarPanelModel: ObservableObject {
                 return $0.date > $1.date
             }
         }
-        refreshHistory()
     }
 
     // MARK: - Hover Preview Coordination
@@ -204,7 +203,7 @@ final class MenuBarPanelModel: ObservableObject {
 
     func unhoverRow(_ entry: HistoryEntry) {
         guard previewEntry?.id == entry.id else { return }
-        schedulePreviewDismiss(delay: 0.2)
+        schedulePreviewDismiss(delay: 0.15)
     }
 
     func setPreviewHovered(_ hovered: Bool) {
@@ -221,7 +220,19 @@ final class MenuBarPanelModel: ObservableObject {
         previewDismissWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            guard !self.isPreviewHovered else { return }
+            if self.isPreviewHovered {
+                if let panel = NSApp.windows.first(where: { $0.title == "Techuboard Preview" }),
+                   panel.isVisible {
+                    let mouseLoc = NSEvent.mouseLocation
+                    if !panel.frame.contains(mouseLoc) {
+                        self.isPreviewHovered = false
+                    } else {
+                        return
+                    }
+                } else {
+                    self.isPreviewHovered = false
+                }
+            }
             self.previewEntry = nil
             if self.selectedID?.hasPrefix("h:") == true {
                 self.selectedID = nil
