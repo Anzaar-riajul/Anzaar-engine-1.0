@@ -51,32 +51,43 @@ struct HistoryPreviewView: View {
     }
 
     private func previewHeader(for entry: HistoryEntry) -> some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xs) {
-            HStack(spacing: AppSpacing.xs) {
-                Text(typeLabel(for: entry.item)).font(AppFont.section)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(typeLabel(for: entry.item))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
                 if entry.isPinned {
                     Image(systemName: "pin.fill")
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppColor.accent)
                         .help(L10n.t(.pinToTop))
                 }
                 Spacer()
                 Text(RelativeTimeFormatter.string(from: entry.date))
-                    .font(AppFont.caption)
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: AppSpacing.xs) {
+            HStack(spacing: 6) {
                 if let source = entry.sourceApp {
-                    Text(source).lineLimit(1)
+                    Text(source)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.primary.opacity(0.8))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3.5))
+                        .lineLimit(1)
                 }
                 Spacer()
                 if let detail = headerDetail(for: entry) {
-                    Text(detail).lineLimit(1)
+                    Text(detail)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
-            .font(AppFont.caption)
-            .foregroundStyle(.secondary)
         }
-        .padding(AppSpacing.md)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder

@@ -12,6 +12,13 @@ struct MenuBarPanelView: View {
     @State private var refreshingDevices = false
     @State private var imageAutoDelete = PreferencesManager.shared.isImageAutoDeleteEnabled
     @State private var imageDeleteLimit = PreferencesManager.shared.imageAutoDeleteThreshold
+    @State private var launchAtLogin = LaunchAtLoginManager.isEnabled
+    @State private var clipboardHistoryLimit = PreferencesManager.shared.historyLimit
+    @State private var syncEnabled = PreferencesManager.shared.isSyncEnabled
+    @State private var autoImageSync = PreferencesManager.shared.isAutoImageSyncEnabled
+    @State private var isAvroInstalled = TechuAvroInstaller.isInstalled()
+    @State private var isAvroWorking = false
+    @State private var showClearHistoryConfirm = false
     var activateIcon: (MenuBarOverflowItem) -> Void
 
     var body: some View {
@@ -56,31 +63,38 @@ struct MenuBarPanelView: View {
     }
     private var topBar: some View {
         HStack(spacing: 8) {
-            search.frame(maxWidth: .infinity)
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    model.pinned.toggle()
+            // Left: Techuboard brand logo
+            HStack(spacing: 6) {
+                if let iconURL = Bundle.main.url(forResource: "MenuBarIcon@2x", withExtension: "png") ?? Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+                   let nsImage = NSImage(contentsOf: iconURL) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .renderingMode(.template)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 17, height: 13)
+                        .foregroundStyle(AppColor.accent)
+                } else {
+                    Image(systemName: "keyboard.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColor.accent)
                 }
-            } label: {
-                Image(systemName: model.pinned ? "pin.fill" : "pin")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(model.pinned ? AppColor.accent : Color.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(model.pinned ? AppColor.accent.opacity(0.12) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(model.pinned ? 0.15 : 0.04), lineWidth: 0.5))
+                Text("Techuboard")
+                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.primary)
             }
-            .buttonStyle(.plain)
-            .help(L10n.t(model.pinned ? .panelUnpin : .panelPin))
+            .padding(.trailing, 2)
+
+            search.frame(maxWidth: .infinity)
 
             Button {
                 model.navigate(model.page == .settings ? .home : .settings)
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(model.page == .settings ? AppColor.accent : Color.secondary)
                     .frame(width: 32, height: 32)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.04), lineWidth: 0.5))
+                    .background(model.page == .settings ? AppColor.accent.opacity(0.12) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(model.page == .settings ? 0.15 : 0.05), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .help(L10n.t(.preferences))
@@ -91,38 +105,15 @@ struct MenuBarPanelView: View {
             Button { model.navigate(.home) } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                    Text(L10n.t(.panelBack)).font(.system(size: 12, weight: .medium))
+                    Text(L10n.t(.panelBack)).font(.system(size: 12, weight: .semibold))
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .contentShape(Rectangle())
             }.buttonStyle(.plain).foregroundStyle(AppColor.accent)
-            Text(pageTitle).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            Text(pageTitle).font(.system(size: 13, weight: .bold)).lineLimit(1)
             Spacer(minLength: 0)
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    model.pinned.toggle()
-                }
-            } label: {
-                Image(systemName: model.pinned ? "pin.fill" : "pin")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(model.pinned ? AppColor.accent : Color.secondary)
-                    .frame(width: 28, height: 28)
-                    .background(model.pinned ? AppColor.accent.opacity(0.12) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.navigate(model.page == .settings ? .home : .settings)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.secondary)
-                    .frame(width: 28, height: 28)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-            .buttonStyle(.plain)
         }.frame(height: 32)
     }
     private var search: some View {
@@ -267,6 +258,7 @@ struct MenuBarPanelView: View {
     private func tabIcon(_ tab: MenuBarPanelModel.Tab) -> String {
         switch tab {
         case .clipboard: return "doc.on.clipboard"
+        case .pinned: return "pin.fill"
         case .snippets: return "folder"
         case .devices: return "laptopcomputer.and.iphone"
         }
@@ -278,6 +270,7 @@ struct MenuBarPanelView: View {
             else {
                 switch model.tab {
                 case .clipboard: historyContent
+                case .pinned: pinnedContent
                 case .snippets: snippetsContent
                 case .devices: devicesContent
                 }
@@ -308,6 +301,43 @@ struct MenuBarPanelView: View {
             }.padding(.bottom, 4)
             historyList
             actionLink(.panelAllHistory) { model.onAction?(.search(model.query)) }
+        }
+    }
+    private var pinnedContent: some View {
+        let pinnedItems = model.history.filter { $0.isPinned }
+        return ScrollViewReader { proxy in
+            ScrollView {
+                if model.loading { ProgressView().padding(30).frame(maxWidth: .infinity) }
+                else if pinnedItems.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "pin.slash")
+                            .font(.system(size: 32, weight: .light))
+                            .foregroundStyle(.secondary)
+                        Text("No Pinned Items")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.primary)
+                        Text("Hover over any clip in 'All' and click the pin icon to keep it here permanently.")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+                }
+                else {
+                    LazyVStack(spacing: 2) {
+                        ForEach(pinnedItems) { entry in historyRow(entry) }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .onHover { hovering in
+                if !hovering && !model.isPreviewHovered {
+                    model.schedulePreviewDismiss(delay: 0.15)
+                }
+            }
+            .onChange(of: model.selectedID) { id in if let id { proxy.scrollTo(id) } }
         }
     }
     private var historyList: some View {
@@ -502,167 +532,432 @@ struct MenuBarPanelView: View {
     }
     private var settingsContent: some View {
         ScrollView {
-            VStack(spacing: 10) {
-                // Card 1: Panel & Display
-                VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColor.accent)
-                            .frame(width: 26, height: 26)
-                            .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Keep Panel Open")
-                                .font(.system(size: 12.5, weight: .medium))
-                            Text("Stay open when clicking outside")
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $model.pinned)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .controlSize(.small)
-                    }
-                    .padding(10)
-
-                    Divider().padding(.horizontal, 10)
-
-                    HStack(spacing: 12) {
-                        Image(systemName: "menubar.arrow.down.rectangle")
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColor.accent)
-                            .frame(width: 26, height: 26)
-                            .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 5) {
-                                Text("Hidden Menu Bar Icons")
-                                    .font(.system(size: 12.5, weight: .medium))
-                                if PreferencesManager.hasHardwareNotch {
-                                    Text("Auto-Detected")
-                                        .font(.system(size: 8.5, weight: .bold))
-                                        .foregroundStyle(Color.green)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
-                                }
-                            }
-                            Text(PreferencesManager.hasHardwareNotch ? "Active for your MacBook camera notch" : "Show icons hidden behind menu bar notch")
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(get: { overflow.enabled }, set: { overflow.setEnabled($0) }))
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .controlSize(.small)
-                    }
-                    .padding(10)
-                }
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-
-                // Card 2: Image Storage Auto-Cleanup
-                VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "photo.stack")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.orange)
-                            .frame(width: 26, height: 26)
-                            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Auto-Delete Old Images")
-                                .font(.system(size: 12.5, weight: .medium))
-                            Text(imageAutoDelete ? "Keeps newest \(imageDeleteLimit) screenshots" : "Keep all screenshots forever")
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $imageAutoDelete)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .onChange(of: imageAutoDelete) { enabled in
-                                PreferencesManager.shared.isImageAutoDeleteEnabled = enabled
-                                if enabled {
-                                    ClipboardManager.shared.applyImageAutoDeleteLimit()
-                                }
-                            }
-                    }
-                    .padding(10)
-
-                    if imageAutoDelete {
-                        Divider().padding(.horizontal, 10)
-                        HStack {
-                            Text("Storage limit:")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Picker("", selection: $imageDeleteLimit) {
-                                Text("10").tag(10)
-                                Text("20").tag(20)
-                                Text("30").tag(30)
-                                Text("40").tag(40)
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 150)
-                            .onChange(of: imageDeleteLimit) { limit in
-                                PreferencesManager.shared.imageAutoDeleteThreshold = limit
-                                ClipboardManager.shared.applyImageAutoDeleteLimit()
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                    }
-                }
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-
-                // Card 3: System Permissions & Preferences
-                VStack(spacing: 0) {
-                    Button { model.onAction?(.permission) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "hand.raised.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(Color.secondary)
-                                .frame(width: 20)
-                            Text("Accessibility Permissions")
-                                .font(.system(size: 12, weight: .medium))
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-
-                    Divider().padding(.horizontal, 10)
-
-                    Button { model.onAction?(.preferences) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(AppColor.accent)
-                                .frame(width: 20)
-                            Text("More settings and permissions")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(AppColor.accent)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(AppColor.accent)
-                        }
-                        .padding(10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+            VStack(spacing: 12) {
+                settingsGeneralSection
+                settingsTechuAvroSection
+                settingsDevicesSection
+                settingsShortcutsSection
+                settingsActionsSection
             }
             .padding(.vertical, 8)
+        }
+        .confirmationDialog("Clear Unpinned History?", isPresented: $showClearHistoryConfirm, titleVisibility: .visible) {
+            Button("Clear Unpinned Items", role: .destructive) {
+                ClipboardManager.shared.clearHistory()
+                model.refreshHistory()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Pinned clips and notes will be kept safely. Only unpinned clipboard history will be cleared.")
+        }
+    }
+
+    private var settingsGeneralSection: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "power")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColor.accent)
+                    .frame(width: 26, height: 26)
+                    .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Launch at Login")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Start Techuboard automatically when your Mac starts")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: $launchAtLogin)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .onChange(of: launchAtLogin) { enabled in
+                        try? LaunchAtLoginManager.setEnabled(enabled)
+                    }
+            }
+            .padding(10)
+
+            Divider().padding(.horizontal, 10)
+
+            HStack(spacing: 12) {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColor.accent)
+                    .frame(width: 26, height: 26)
+                    .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Keep Panel Open")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Stay open when clicking outside")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: $model.pinned)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+            }
+            .padding(10)
+
+            Divider().padding(.horizontal, 10)
+
+            HStack(spacing: 12) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColor.accent)
+                    .frame(width: 26, height: 26)
+                    .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("History Capacity")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Maximum clipboard items to keep")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("", selection: $clipboardHistoryLimit) {
+                    Text("100").tag(100)
+                    Text("250").tag(250)
+                    Text("500").tag(500)
+                    Text("1000").tag(1000)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+                .onChange(of: clipboardHistoryLimit) { limit in
+                    PreferencesManager.shared.historyLimit = limit
+                }
+            }
+            .padding(10)
+
+            Divider().padding(.horizontal, 10)
+
+            HStack(spacing: 12) {
+                Image(systemName: "photo.stack")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.orange)
+                    .frame(width: 26, height: 26)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto-Delete Old Images")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text(imageAutoDelete ? "Retains newest \(imageDeleteLimit) screenshots" : "Keep all screenshots")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: $imageAutoDelete)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .onChange(of: imageAutoDelete) { enabled in
+                        PreferencesManager.shared.isImageAutoDeleteEnabled = enabled
+                        if enabled { ClipboardManager.shared.applyImageAutoDeleteLimit() }
+                    }
+            }
+            .padding(10)
+
+            if imageAutoDelete {
+                Divider().padding(.horizontal, 10)
+                HStack {
+                    Text("Screenshot limit:")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("", selection: $imageDeleteLimit) {
+                        Text("10").tag(10)
+                        Text("20").tag(20)
+                        Text("30").tag(30)
+                        Text("40").tag(40)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 140)
+                    .onChange(of: imageDeleteLimit) { limit in
+                        PreferencesManager.shared.imageAutoDeleteThreshold = limit
+                        ClipboardManager.shared.applyImageAutoDeleteLimit()
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+            }
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    private var settingsTechuAvroSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "character.textbox")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.blue)
+                    .frame(width: 26, height: 26)
+                    .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TechuAvro Bangla Keyboard")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Native phonetic input method for macOS")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(isAvroInstalled ? "Installed" : "Not Installed")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(isAvroInstalled ? Color.green : Color.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2.5)
+                    .background(isAvroInstalled ? Color.green.opacity(0.12) : Color.primary.opacity(0.06), in: Capsule())
+            }
+            .padding(10)
+
+            Divider().padding(.horizontal, 10)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Type Bangla phonetically anywhere (e.g. 'ami' → 'আমি'). Switch input sources with Control + Space.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+
+                HStack {
+                    if isAvroWorking {
+                        ProgressView().scaleEffect(0.7)
+                        Text("Setting up...").font(.system(size: 11)).foregroundStyle(.secondary)
+                    } else {
+                        Button {
+                            isAvroWorking = true
+                            let appDir = Bundle.main.bundleURL.deletingLastPathComponent()
+                            let bundleURL = Bundle.main.url(forResource: "TechuAvro", withExtension: "app") ?? appDir.appendingPathComponent("TechuAvro.app")
+                            TechuAvroInstaller.install(from: bundleURL) { err in
+                                isAvroWorking = false
+                                isAvroInstalled = TechuAvroInstaller.isInstalled()
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: isAvroInstalled ? "arrow.clockwise" : "arrow.down.circle.fill")
+                                Text(isAvroInstalled ? "Verify / Reinstall" : "Install TechuAvro")
+                            }
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                            .foregroundStyle(AppColor.accent)
+                        }
+                        .buttonStyle(.plain)
+
+                        if isAvroInstalled {
+                            Button {
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            } label: {
+                                Text("Open Keyboard Settings")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+            }
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    private var settingsDevicesSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "laptopcomputer.and.iphone")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.green)
+                    .frame(width: 26, height: 26)
+                    .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Device Sync")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Sync clips between Mac, Android, and PC")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: $syncEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .onChange(of: syncEnabled) { enabled in
+                        PreferencesManager.shared.isSyncEnabled = enabled
+                    }
+            }
+            .padding(10)
+
+            Divider().padding(.horizontal, 10)
+
+            HStack(spacing: 12) {
+                Image(systemName: "photo.on.rectangle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.purple)
+                    .frame(width: 26, height: 26)
+                    .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto-Sync Photos & Files")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Instantly transfer images copied on either device")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: $autoImageSync)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .onChange(of: autoImageSync) { enabled in
+                        PreferencesManager.shared.isAutoImageSyncEnabled = enabled
+                    }
+            }
+            .padding(10)
+
+            if !model.devices.isEmpty {
+                Divider().padding(.horizontal, 10)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Connected Devices (\(model.devices.count))")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 6)
+                    ForEach(model.devices, id: \.peerId) { dev in
+                        deviceRow(dev: dev)
+                    }
+                }
+                .padding(.bottom, 6)
+            }
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    private func deviceRow(dev: DeviceEntry) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(Color.green).frame(width: 7, height: 7)
+            Text(dev.displayName)
+                .font(.system(size: 12, weight: .medium))
+            Spacer()
+            Text(dev.connectionDescription)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+    }
+
+    private var settingsShortcutsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "command")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColor.accent)
+                    .frame(width: 26, height: 26)
+                    .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                Text("Shortcuts Guide")
+                    .font(.system(size: 12.5, weight: .semibold))
+                Spacer()
+            }
+            .padding(10)
+
+            Divider().padding(.horizontal, 10)
+
+            VStack(spacing: 6) {
+                shortcutItem(title: "Open Clipboard History", keys: "Command + Shift + V")
+                shortcutItem(title: "Search Clips", keys: "Command + F")
+                shortcutItem(title: "Paste Selected Clip", keys: "Return (Enter)")
+                shortcutItem(title: "Quick Side Preview", keys: "Hover Mouse")
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    private var settingsActionsSection: some View {
+        VStack(spacing: 0) {
+            Button {
+                model.onAction?(.permission)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "hand.raised.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 22)
+                    Text("Accessibility Permission")
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider().padding(.horizontal, 10)
+
+            Button {
+                showClearHistoryConfirm = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.red)
+                        .frame(width: 22)
+                    Text("Clear Unpinned History")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.red)
+                    Spacer()
+                }
+                .padding(10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider().padding(.horizontal, 10)
+
+            Button {
+                model.onAction?(.quit)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "power")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 22)
+                    Text("Quit Techuboard")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                    Spacer()
+                }
+                .padding(10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    private func shortcutItem(title: String, keys: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 11.5, weight: .medium))
+            Spacer()
+            Text(keys)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
         }
     }
     private var footer: some View {
@@ -960,14 +1255,14 @@ private struct MenuBarPanelHistoryRow: View {
                     }
                     if let badge = badgeInfo {
                         Text(badge.label)
-                            .font(.system(size: 8.5, weight: .bold))
+                            .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(badge.color)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(badge.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(badge.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 3.5))
                     }
                     Text(entry.listDisplayTitle)
-                        .font(.system(size: 12.5, weight: selected ? .medium : .regular))
+                        .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .foregroundStyle(Color.primary)
@@ -1023,28 +1318,32 @@ private struct MenuBarPanelHistoryRow: View {
                         .help("Unpin from Top")
                     } else if let source = entry.sourceApp {
                         Text(source)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(Color.secondary)
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(Color.primary.opacity(0.75))
                             .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 3))
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3.5))
                     }
                     Text(RelativeTimeFormatter.string(from: entry.date))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Color.secondary)
                         .lineLimit(1)
                 }
-                .frame(maxWidth: 80, alignment: .trailing)
+                .frame(maxWidth: 85, alignment: .trailing)
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 32)
+        .frame(height: 34)
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
         .background(
-            selected ? AppColor.accent.opacity(0.09) : Color.clear,
+            selected ? AppColor.accent.opacity(0.12) : Color.clear,
             in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(selected ? AppColor.accent.opacity(0.2) : Color.clear, lineWidth: 0.5)
         )
         .overlay(alignment: .leading) {
             if selected {

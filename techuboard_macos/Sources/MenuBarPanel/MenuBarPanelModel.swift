@@ -4,12 +4,13 @@ import Combine
 /// UI-only state. History queries are bounded and cancelled on every edit/close.
 /// No clipboard data or temporary menu-bar identities are persisted here.
 final class MenuBarPanelModel: ObservableObject {
-    enum Tab: CaseIterable { case clipboard, snippets, devices
+    enum Tab: CaseIterable { case clipboard, pinned, snippets, devices
         var title: String {
             switch self {
-            case .clipboard: return L10n.t(.panelClipboard)
-            case .snippets: return L10n.t(.snippets)
-            case .devices: return L10n.t(.panelDevices)
+            case .clipboard: return "All"
+            case .pinned: return "Pinned"
+            case .snippets: return "Notes"
+            case .devices: return "Devices"
             }
         }
     }
@@ -134,6 +135,7 @@ final class MenuBarPanelModel: ObservableObject {
         if isSearching { return history.map { "h:" + $0.id } + visibleSnippets.map { "s:" + $0.id.uuidString } + matchingTools.map { "t:" + $0.rawValue } }
         switch tab {
         case .clipboard: return history.map { "h:" + $0.id }
+        case .pinned: return history.filter(\.isPinned).map { "h:" + $0.id }
         case .snippets: return visibleSnippets.map { "s:" + $0.id.uuidString }
         case .devices: return []
         }

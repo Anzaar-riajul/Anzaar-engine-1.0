@@ -127,8 +127,8 @@ struct PlainTextPreviewRepresentable: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: AppFont.bodySize, weight: .regular)
-        textView.textColor = .textColor
+        textView.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        textView.textColor = NSColor.labelColor
         textView.drawsBackground = false
         textView.backgroundColor = .clear
         textView.textContainerInset = NSSize(width: AppSpacing.md, height: AppSpacing.md)
