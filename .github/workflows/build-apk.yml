@@ -46,13 +46,13 @@ jobs:
       - name: Locate and Prepare Release APK
         run: |
           mkdir -p dist
-          APK_PATH=$(find techuboard_android/build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          APK_PATH=$(find . -name "*release*.apk" | grep -v "unaligned" | head -n 1)
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find techuboard_android/build/app/outputs -name "*.apk" | grep -v "unaligned" | head -n 1)
+            APK_PATH=$(find . -name "*.apk" | grep -v "unaligned" | head -n 1)
           fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
             echo "ERROR: Release APK not found!"
-            find techuboard_android/build -maxdepth 5
+            find . -name "*.apk"
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
