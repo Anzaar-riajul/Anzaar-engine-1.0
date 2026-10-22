@@ -24,10 +24,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: "3.24.5"
+          channel: "stable"
           cache: true
 
       - name: Accept Android Licenses
@@ -37,7 +38,7 @@ jobs:
       - name: Flutter Dependencies
         working-directory: techuboard_android
         run: |
-          flutter pub get
+          flutter pub get 2>&1 | tee /tmp/pub_get.log
 
       - name: Build Techuboard Android Release APK
         working-directory: techuboard_android
@@ -49,7 +50,8 @@ jobs:
         run: |
           echo "### ⚠️ Build Failure Log" >> $GITHUB_STEP_SUMMARY
           echo '```text' >> $GITHUB_STEP_SUMMARY
-          tail -n 250 /tmp/flutter_build.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No build log found" >> $GITHUB_STEP_SUMMARY
+          tail -n 250 /tmp/pub_get.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
+          tail -n 250 /tmp/flutter_build.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Locate and Prepare Release APK
