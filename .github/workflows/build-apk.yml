@@ -35,34 +35,31 @@ jobs:
         run: |
           set -eo pipefail
           flutter pub get
-          flutter build apk --release --verbose 2>&1 | tee ../build.log
+          flutter build apk --release
 
       - name: Locate and Prepare Release APK
         run: |
           mkdir -p dist
-          echo "=== Searching for APK files in workspace ==="
+          echo "=== Searching for APK files ==="
           find . -name "*.apk" -ls || true
-          echo "=== Searching for APK files everywhere ==="
           find /home/runner -name "*.apk" -ls 2>/dev/null || true
-          APK_PATH=$(find /home/runner -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          APK_PATH=$(find . -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            APK_PATH=$(find /home/runner -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          fi
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            APK_PATH=$(find . -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
             APK_PATH=$(find /home/runner -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: Release APK not found! Printing end of build.log:"
-            tail -n 100 build.log || true
+            echo "ERROR: Release APK not found!"
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
           cp "$APK_PATH" dist/Techuboard-Android-v1.0.apk
           ls -lh dist/Techuboard-Android-v1.0.apk
-
-      - name: Upload Build Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-log
-          path: build.log
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
