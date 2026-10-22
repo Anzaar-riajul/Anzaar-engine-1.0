@@ -30,12 +30,27 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Accept Android Licenses
+        run: |
+          yes | flutter doctor --android-licenses 2>/dev/null || true
+
+      - name: Flutter Dependencies
+        working-directory: techuboard_android
+        run: |
+          flutter pub get
+
       - name: Build Techuboard Android Release APK
         working-directory: techuboard_android
         run: |
-          set -eo pipefail
-          flutter pub get
-          flutter build apk --release --verbose
+          flutter build apk --release --verbose 2>&1 | tee /tmp/flutter_build.log
+
+      - name: Capture Failure Log If Any
+        if: failure()
+        run: |
+          echo "### ⚠️ Build Failure Log" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 250 /tmp/flutter_build.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No build log found" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Locate and Prepare Release APK
         run: |
