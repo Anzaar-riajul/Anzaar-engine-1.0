@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:common_relay/common_relay.dart' as cr;
-import 'package:sodium/sodium.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'relay_identity.dart';
+import 'sodium_helper.dart';
 
 /// Serializes management actions; pending enrollment survives closing the page.
 class TechuRelayGroups {
@@ -63,7 +63,7 @@ class TechuRelayGroups {
         : saved.isNotEmpty
         ? saved
         : 'wss://eglish.top/relay/v1/ws';
-    return cr.RelayGroups(await SodiumInit.init(), c);
+    return cr.RelayGroups(await initSodium(), c);
   }
 
   static Future<void> persist(cr.RelayGroups groups) async {
@@ -204,7 +204,7 @@ class TechuRelayGroups {
   }
 
   static Future<void> clearEnrollment() async {
-    final sodium = await SodiumInit.init();
+    final sodium = await initSodium();
     // Change only the relay identity, leaving LAN identity and local data intact.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('syncRelayEnabled', false);
@@ -224,7 +224,7 @@ class TechuRelayGroups {
     final raw = await TechuRelayIdentity.groupDraft();
     if (raw.isEmpty) return null;
     return cr.RelayGroups(
-      await SodiumInit.init(),
+      await initSodium(),
       jsonDecode(raw) as Map<String, dynamic>,
     );
   }

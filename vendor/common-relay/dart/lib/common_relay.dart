@@ -6,7 +6,7 @@ import 'dart:io';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 // Pinned sodium native bindings expose init_push before any data record.
-import 'package:sodium/src/ffi/bindings/libsodium.ffi.dart' as native;
+import 'package:sodium/src/ffi/bindings/libsodium.ffi.dart' as native_bindings;
 import 'dart:typed_data';
 import 'package:sodium/sodium.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +16,19 @@ part 'src/files.dart';
 part 'src/journal.dart';
 part 'src/groups.dart';
 part 'src/invitation_links.dart';
+
+ffi.DynamicLibrary _defaultSodiumLib() {
+  if (Platform.isAndroid || Platform.isLinux) {
+    return ffi.DynamicLibrary.open('libsodium.so');
+  }
+  if (Platform.isWindows) {
+    return ffi.DynamicLibrary.open('sodium.dll');
+  }
+  return ffi.DynamicLibrary.process();
+}
+
+final _sodiumLib = _defaultSodiumLib();
+final native = native_bindings.LibSodiumFFI(_sodiumLib);
 
 String hex(List<int> bytes) => bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 Uint8List unhex(String value) {
@@ -56,7 +69,7 @@ class RelayEncryptStream implements ffi.Finalizable {
   final ffi.Pointer<ffi.Void> _state;
   final Uint8List header;
   bool finished = false, _closed = false;
-  static final _finalizer = ffi.NativeFinalizer(ffi.Native.addressOf(native.sodium_free));
+  static final _finalizer = ffi.NativeFinalizer(_sodiumLib.lookup('sodium_free'));
   RelayEncryptStream._(this.key, this._state, this.header) { _finalizer.attach(this, _state, detach: this); }
   static Future<RelayEncryptStream> create(Sodium sodium) async {
     final key = sodium.crypto.secretStream.keygen();

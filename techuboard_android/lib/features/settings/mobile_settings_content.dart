@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../clipboard_manager.dart';
 import '../../app_localizations.dart';
 import '../../ui/app_components.dart';
@@ -340,8 +341,10 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                     secondary:
                         const TechuIcon(Icons.dashboard_customize_rounded),
                     title: const Text('Floating Paste Pill'),
-                    subtitle: const Text(
-                      'Floating capsule on top of any app for 1-tap pasting',
+                    subtitle: Text(
+                      _hasOverlayPermission
+                          ? 'Floating capsule on top of any app (Overlay permission active)'
+                          : 'Floating capsule on top of any app for 1-tap pasting',
                     ),
                     value: _floatingHubEnabled,
                     onChanged: (val) => _toggleFloatingHub(val),

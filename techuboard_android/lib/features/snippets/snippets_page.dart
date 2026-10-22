@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import '../../database/snippet_repository.dart';
 import '../../models.dart';
-import '../../ui/app_components.dart';
 
 class SnippetsPage extends StatefulWidget {
   const SnippetsPage({super.key});

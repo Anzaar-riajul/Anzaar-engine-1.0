@@ -246,7 +246,7 @@ class _PaginatedClipboardHistoryListState
                   child: entry.item.type == 'image'
                       ? Image.file(
                           File(entry.item.value as String),
-                          errorBuilder: (_, _, _) =>
+                          errorBuilder: (_, __, ___) =>
                               Text(context.l10n.fileNotFound),
                         )
                       : SelectableText(

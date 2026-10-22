@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'relay_configuration.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:sodium/sodium.dart';
 import 'package:common_relay/common_relay.dart' as cr;
+import 'sodium_helper.dart';
 
 /// Identity keys, access token and private LAN group key never enter ordinary preferences.
 class TechuRelayIdentity {
@@ -15,7 +15,7 @@ class TechuRelayIdentity {
   static Future<Map<String, dynamic>> _loadIdentity() async {
     final saved = await _store.read(key: 'commonRelayIdentity');
     if (saved != null) return jsonDecode(saved) as Map<String, dynamic>;
-    final sodium = await SodiumInit.init();
+    final sodium = await initSodium();
     final pair = sodium.crypto.box.keyPair();
     final value = {
       'secret_key': cr.hex(pair.secretKey.extractBytes()),
@@ -50,7 +50,7 @@ class TechuRelayIdentity {
   static Future<String> groupKey() async {
     final saved = await _store.read(key: 'privateSyncGroupKey');
     if (saved != null) return saved;
-    final sodium = await SodiumInit.init();
+    final sodium = await initSodium();
     final value = cr.hex(sodium.randombytes.buf(32));
     await _store.write(key: 'privateSyncGroupKey', value: value);
     return value;

@@ -13,7 +13,7 @@ Future<void> pickAndSendFileToDevice(
 ) async {
   final l10n = context.l10n;
   try {
-    final result = await FilePicker.pickFiles(allowMultiple: false);
+    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
     if (result == null || result.files.isEmpty) return;
     final path = result.files.single.path;
     if (path == null) return;

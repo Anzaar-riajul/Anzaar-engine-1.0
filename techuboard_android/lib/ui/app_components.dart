@@ -53,7 +53,7 @@ class TechuIcon extends StatelessWidget {
     decoration: BoxDecoration(
       color: Theme.of(
         context,
-      ).colorScheme.primaryContainer.withValues(alpha: .65),
+      ).colorScheme.primaryContainer.withOpacity(.65),
       borderRadius: BorderRadius.circular(size * .32),
     ),
     child: Icon(

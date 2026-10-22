@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:common_relay/common_relay.dart' as cr;
 import 'package:sodium/sodium.dart';
+import 'sodium_helper.dart';
 import '../storage_paths.dart';
 import 'relay_configuration.dart';
 
@@ -161,7 +162,7 @@ class SyncRelayClient {
           !RelayConfiguration.validDevice(c['device'] as String)) {
         throw StateError('Device identity mismatch');
       }
-      final sodium = await SodiumInit.init();
+      final sodium = await initSodium();
       key = SecureKey.fromList(sodium, cr.unhex(c['secret_key'] as String));
       final identity = cr.RelayIdentity(
         sodium: sodium,

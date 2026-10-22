@@ -916,7 +916,7 @@ class _NotificationSyncPageState extends State<NotificationSyncPage>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: Theme.of(
         context,
-      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+      ).colorScheme.surfaceContainerHighest.withOpacity(0.3),
       child: Row(
         children: [
           Icon(

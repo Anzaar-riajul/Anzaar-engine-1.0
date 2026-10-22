@@ -4,8 +4,6 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import '../../clipboard_manager.dart';
 import '../../sync_manager.dart';
-import '../../notification_sync_page.dart';
-import 'remote_notifications_page.dart';
 import '../../app_localizations.dart';
 import '../../ui/clipboard_history_list.dart';
 import '../../ui/app_components.dart';

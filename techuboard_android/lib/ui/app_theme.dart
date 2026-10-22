@@ -97,7 +97,7 @@ abstract final class TechuTheme {
           color: scheme.onSurface,
         ),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: scheme.surface,
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -166,12 +166,12 @@ abstract final class TechuTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
-      dialogTheme: DialogThemeData(
+      dialogTheme: DialogTheme(
         shape: shape,
         backgroundColor: scheme.surface,
       ),
       dividerTheme: DividerThemeData(
-        color: scheme.outlineVariant.withValues(alpha: .55),
+        color: scheme.outlineVariant.withOpacity(.55),
         space: 1,
       ),
       chipTheme: base.chipTheme.copyWith(
