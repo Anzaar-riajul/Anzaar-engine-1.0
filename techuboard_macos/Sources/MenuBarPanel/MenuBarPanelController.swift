@@ -108,6 +108,10 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
         }.environmentObject(AppLanguageObserver.shared)
         let host = NSHostingController(rootView: root)
         host.sizingOptions = []
+        host.view.wantsLayer = true
+        host.view.layer?.backgroundColor = NSColor.clear.cgColor
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.contentViewController = host
         window.setFrame(frame, display: false)
         window.makeKeyAndOrderFront(nil)
@@ -174,6 +178,10 @@ final class MenuBarPanelController: NSObject, NSWindowDelegate {
         }
         let host = NSHostingController(rootView: root)
         host.sizingOptions = []
+        host.view.wantsLayer = true
+        host.view.layer?.backgroundColor = NSColor.clear.cgColor
+        previewWindow.backgroundColor = .clear
+        previewWindow.isOpaque = false
         previewWindow.contentViewController = host
         previewWindow.setFrame(previewFrame, display: true)
 

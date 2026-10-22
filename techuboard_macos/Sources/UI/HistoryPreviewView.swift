@@ -4,6 +4,7 @@ import PDFKit
 
 struct HistoryPreviewView: View {
     let entry: HistoryEntry?
+    var transparentBackground: Bool = false
 
     var body: some View {
         Group {
@@ -14,7 +15,7 @@ struct HistoryPreviewView: View {
             }
         }
         .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColor.groupedBackground)
+        .background(transparentBackground ? Color.clear : AppColor.groupedBackground)
     }
 
     @ViewBuilder

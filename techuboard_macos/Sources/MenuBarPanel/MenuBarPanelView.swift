@@ -2175,7 +2175,7 @@ struct MenuBarSidePreviewView: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            HistoryPreviewView(entry: entry)
+            HistoryPreviewView(entry: entry, transparentBackground: true)
 
             if case .image(let path) = entry.item {
                 Button {

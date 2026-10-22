@@ -3,7 +3,7 @@ description: Common Relay v1 client with pinned peer encryption and bounded stre
 version: 0.1.0
 publish_to: none
 environment:
-  sdk: '>=3.11.0 <4.0.0'
+  sdk: '>=3.0.0 <4.0.0'
 dependencies:
   sodium: 4.0.2
   ffi: 2.2.0

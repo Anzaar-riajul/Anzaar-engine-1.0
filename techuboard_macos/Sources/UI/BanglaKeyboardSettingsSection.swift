@@ -124,33 +124,25 @@ struct BanglaKeyboardSettingsSection: View {
         isWorking = true
         if isInstalled {
             statusMessage = "সরানো হচ্ছে…"
-            DispatchQueue.global(qos: .userInitiated).async {
-                let err = TechuAvroInstaller.uninstall()
-                DispatchQueue.main.async {
-                    isWorking = false
-                    if let e = err {
-                        errorMessage = e
-                        showError = true
-                    } else {
-                        isInstalled = false
-                    }
+            TechuAvroInstaller.uninstall { err in
+                isWorking = false
+                if let e = err {
+                    errorMessage = e
+                    showError = true
+                } else {
+                    isInstalled = false
                 }
             }
         } else {
             statusMessage = "ইনস্টল হচ্ছে…"
-            // The built app bundle lives next to the main Techuboard.app
-            // At runtime we resolve it relative to this app's bundle
             let bundleURL = resolvedTechuAvroBundleURL()
-            DispatchQueue.global(qos: .userInitiated).async {
-                let err = TechuAvroInstaller.install(from: bundleURL)
-                DispatchQueue.main.async {
-                    isWorking = false
-                    if let e = err {
-                        errorMessage = e
-                        showError = true
-                    } else {
-                        isInstalled = true
-                    }
+            TechuAvroInstaller.install(from: bundleURL) { err in
+                isWorking = false
+                if let e = err {
+                    errorMessage = e
+                    showError = true
+                } else {
+                    isInstalled = true
                 }
             }
         }
