@@ -1,5 +1,5 @@
 name: techuboard_android
-description: Clipboard history, encrypted LAN sync, notification mirroring, file transfer, and TechuAvro phonetic keyboard for Techuboard.
+description: Clipboard history, encrypted LAN sync, floating paste hub, notes, notification mirroring, and file transfer for Techuboard.
 publish_to: none
 version: 1.0.32+12284
 

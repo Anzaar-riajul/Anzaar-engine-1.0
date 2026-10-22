@@ -12,7 +12,7 @@ jobs:
   build-apk:
     name: Build Techuboard Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
@@ -24,22 +24,30 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Build Techuboard Native Android APK
-        working-directory: native_android/TechuboardKeyboard
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Techuboard Android Release APK
+        working-directory: techuboard_android
         run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          set -eo pipefail
+          flutter pub get
+          flutter build apk --release --verbose
 
       - name: Locate and Prepare Release APK
         run: |
           mkdir -p dist
-          APK_PATH=$(find native_android/TechuboardKeyboard/app/build/outputs/apk -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          echo "=== Searching for Release APK ==="
+          find . -name "*.apk" -ls || true
+          APK_PATH=$(find . -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find native_android/TechuboardKeyboard/app/build/outputs/apk -name "*.apk" 2>/dev/null | head -n 1)
+            APK_PATH=$(find . -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
             echo "ERROR: Release APK not found!"
-            find native_android/TechuboardKeyboard/app/build -maxdepth 5
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
@@ -61,13 +69,13 @@ jobs:
           tag_name: android-v1.0-${{ github.run_number }}
           name: Techuboard Android v1.0 (Build ${{ github.run_number }})
           body: |
-            ## 🎉 Techuboard Android App v1.0
+            ## 🎉 Techuboard Android Clipboard Companion v1.0
             ### 🚀 Features:
-            - **Native Avro Phonetic Engine**: Real-time Bangla transliteration (e.g. `ami` → `আমি`, `bangla` → `বাংলা`)
-            - **Instant Bangla/English Switch**: 1-tap quick toggle between Bengali and English
-            - **Quick Clipboard Bar**: 1-tap pasting from recent clipboard history directly above keyboard
-            - **Spacebar Cursor Glide**: Swipe left/right on spacebar for smooth cursor positioning
-            - **Modern Liquid Glass UI**: Optimized for Android 7.0 through Android 15
+            - **Real-time Clipboard Sync**: Sync clips instantly between Mac and Android
+            - **Floating Paste Hub**: Floating bubble to paste clips directly anywhere
+            - **My Notes & Folders**: Notes synced across devices
+            - **LAN Mesh Device Sync**: 100% offline local encrypted sync with your Mac
+            - **Zero Tracking**: 100% private, no cloud dependencies
           files: |
             dist/Techuboard-Android-v1.0.apk
         env:

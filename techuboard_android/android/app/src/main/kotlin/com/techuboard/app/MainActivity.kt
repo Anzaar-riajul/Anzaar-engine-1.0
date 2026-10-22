@@ -103,17 +103,6 @@ class MainActivity: FlutterActivity() {
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PERMISSIONS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                "openKeyboardSettings" -> {
-                    try {
-                        val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        startActivity(intent)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        Log.e("TechuMain", "Cannot open keyboard settings", e)
-                        result.error("FAILED", e.message, null)
-                    }
-                }
                 "requestStoragePermission" -> {
                     requestStoragePermission()
                     result.success(true)
