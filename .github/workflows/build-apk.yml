@@ -34,7 +34,7 @@ jobs:
         working-directory: techuboard_android
         run: |
           flutter pub get
-          flutter build apk --release
+          flutter build apk --release --verbose
 
       - name: Locate and Prepare Release APK
         run: |
