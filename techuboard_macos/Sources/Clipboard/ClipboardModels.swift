@@ -128,6 +128,7 @@ enum HistoryItem: Codable {
 
 enum HistoryTypeFilter: String, CaseIterable, Identifiable {
     case all
+    case pinned
     case text
     case image
     case file
@@ -138,6 +139,7 @@ enum HistoryTypeFilter: String, CaseIterable, Identifiable {
     var labelKey: L10nKey {
         switch self {
         case .all: return .historyFilterAll
+        case .pinned: return .panelPin
         case .text: return .historyTypeText
         case .image: return .historyTypeImage
         case .file: return .historyTypeFile
@@ -147,7 +149,7 @@ enum HistoryTypeFilter: String, CaseIterable, Identifiable {
 
     func matches(_ item: HistoryItem) -> Bool {
         switch self {
-        case .all:
+        case .all, .pinned:
             return true
         case .text:
             if case .text = item { return true }
@@ -165,6 +167,13 @@ enum HistoryTypeFilter: String, CaseIterable, Identifiable {
                 return false
             }
         }
+    }
+
+    func matches(entry: HistoryEntry) -> Bool {
+        if self == .pinned {
+            return entry.isPinned
+        }
+        return matches(entry.item)
     }
 }
 

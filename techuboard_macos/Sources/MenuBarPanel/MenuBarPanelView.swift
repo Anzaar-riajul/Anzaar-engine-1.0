@@ -258,7 +258,6 @@ struct MenuBarPanelView: View {
     private func tabIcon(_ tab: MenuBarPanelModel.Tab) -> String {
         switch tab {
         case .clipboard: return "doc.on.clipboard"
-        case .pinned: return "pin.fill"
         case .snippets: return "folder"
         case .devices: return "laptopcomputer.and.iphone"
         }
@@ -270,7 +269,6 @@ struct MenuBarPanelView: View {
             else {
                 switch model.tab {
                 case .clipboard: historyContent
-                case .pinned: pinnedContent
                 case .snippets: snippetsContent
                 case .devices: devicesContent
                 }
@@ -293,9 +291,9 @@ struct MenuBarPanelView: View {
     }
     private var historyContent: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ForEach(HistoryTypeFilter.allCases) { filter in
-                    pill(L10n.t(filter.labelKey), selected: model.filter == filter) { model.filter = filter }
+                    filterPill(filter)
                 }
                 Spacer(minLength: 0)
             }.padding(.bottom, 4)
@@ -303,42 +301,37 @@ struct MenuBarPanelView: View {
             actionLink(.panelAllHistory) { model.onAction?(.search(model.query)) }
         }
     }
-    private var pinnedContent: some View {
-        let pinnedItems = model.history.filter { $0.isPinned }
-        return ScrollViewReader { proxy in
-            ScrollView {
-                if model.loading { ProgressView().padding(30).frame(maxWidth: .infinity) }
-                else if pinnedItems.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "pin.slash")
-                            .font(.system(size: 32, weight: .light))
-                            .foregroundStyle(.secondary)
-                        Text("No Pinned Items")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
-                        Text("Hover over any clip in 'All' and click the pin icon to keep it here permanently.")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 48)
-                }
-                else {
-                    LazyVStack(spacing: 2) {
-                        ForEach(pinnedItems) { entry in historyRow(entry) }
-                    }
-                    .padding(.vertical, 2)
-                }
+
+    private func filterPill(_ filter: HistoryTypeFilter) -> some View {
+        let isSelected = model.filter == filter
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                model.filter = filter
             }
-            .onHover { hovering in
-                if !hovering && !model.isPreviewHovered {
-                    model.schedulePreviewDismiss(delay: 0.15)
+        } label: {
+            HStack(spacing: 4) {
+                if filter == .pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9.5, weight: .bold))
                 }
+                Text(filter == .pinned ? "Pinned" : L10n.t(filter.labelKey))
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
             }
-            .onChange(of: model.selectedID) { id in if let id { proxy.scrollTo(id) } }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                isSelected ? AppColor.accent.opacity(0.18) : Color.primary.opacity(0.04),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    isSelected ? AppColor.accent.opacity(0.4) : Color.primary.opacity(0.06),
+                    lineWidth: 0.5
+                )
+            )
+            .foregroundStyle(isSelected ? AppColor.accent : Color.secondary)
         }
+        .buttonStyle(.plain)
     }
     private var historyList: some View {
         ScrollViewReader { proxy in
@@ -617,17 +610,42 @@ struct MenuBarPanelView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Picker("", selection: $clipboardHistoryLimit) {
-                    Text("100").tag(100)
-                    Text("250").tag(250)
-                    Text("500").tag(500)
-                    Text("1000").tag(1000)
+                Menu {
+                    Button("100 items") {
+                        clipboardHistoryLimit = 100
+                        PreferencesManager.shared.historyLimit = 100
+                    }
+                    Button("250 items") {
+                        clipboardHistoryLimit = 250
+                        PreferencesManager.shared.historyLimit = 250
+                    }
+                    Button("500 items") {
+                        clipboardHistoryLimit = 500
+                        PreferencesManager.shared.historyLimit = 500
+                    }
+                    Button("1,000 items") {
+                        clipboardHistoryLimit = 1000
+                        PreferencesManager.shared.historyLimit = 1000
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(clipboardHistoryLimit == 1000 ? "1,000 items" : "\(clipboardHistoryLimit) items")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(Color.primary)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 8.5, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                    )
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 140)
-                .onChange(of: clipboardHistoryLimit) { limit in
-                    PreferencesManager.shared.historyLimit = limit
-                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
             .padding(10)
 
@@ -687,84 +705,208 @@ struct MenuBarPanelView: View {
     }
 
     private var settingsTechuAvroSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header with authentic logo, title, and status pill
             HStack(spacing: 10) {
-                Image(systemName: "character.textbox")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.blue)
-                    .frame(width: 26, height: 26)
-                    .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                // Creative glowing icon container
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.blue.opacity(0.28), Color.purple.opacity(0.18)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.cyan.opacity(0.4), lineWidth: 0.8)
+                        )
+
+                    if let iconURL = Bundle.main.url(forResource: "MenuBarIcon@2x", withExtension: "png") ?? Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+                       let nsImg = NSImage(contentsOf: iconURL) {
+                        Image(nsImage: nsImg)
+                            .resizable()
+                            .renderingMode(.template)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 18, height: 14)
+                            .foregroundStyle(Color.cyan)
+                    } else {
+                        Image(systemName: "keyboard.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color.cyan)
+                    }
+                }
+                .frame(width: 32, height: 32)
+
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("TechuAvro Bangla Keyboard")
-                        .font(.system(size: 12.5, weight: .semibold))
-                    Text("Native phonetic input method for macOS")
+                    HStack(spacing: 6) {
+                        Text("TechuAvro Bangla Keyboard")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(Color.primary)
+                        Text("NATIVE")
+                            .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                LinearGradient(colors: [Color.blue, Color.purple], startPoint: .leading, endPoint: .trailing),
+                                in: Capsule()
+                            )
+                    }
+                    Text("Phonetic Avro Input Method for macOS")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(isAvroInstalled ? "Installed" : "Not Installed")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(isAvroInstalled ? Color.green : Color.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2.5)
-                    .background(isAvroInstalled ? Color.green.opacity(0.12) : Color.primary.opacity(0.06), in: Capsule())
-            }
-            .padding(10)
 
-            Divider().padding(.horizontal, 10)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Type Bangla phonetically anywhere (e.g. 'ami' → 'আমি'). Switch input sources with Control + Space.")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-
-                HStack {
-                    if isAvroWorking {
-                        ProgressView().scaleEffect(0.7)
-                        Text("Setting up...").font(.system(size: 11)).foregroundStyle(.secondary)
-                    } else {
-                        Button {
-                            isAvroWorking = true
-                            let appDir = Bundle.main.bundleURL.deletingLastPathComponent()
-                            let bundleURL = Bundle.main.url(forResource: "TechuAvro", withExtension: "app") ?? appDir.appendingPathComponent("TechuAvro.app")
-                            TechuAvroInstaller.install(from: bundleURL) { err in
-                                isAvroWorking = false
-                                isAvroInstalled = TechuAvroInstaller.isInstalled()
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: isAvroInstalled ? "arrow.clockwise" : "arrow.down.circle.fill")
-                                Text(isAvroInstalled ? "Verify / Reinstall" : "Install TechuAvro")
-                            }
-                            .font(.system(size: 11, weight: .semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(AppColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                            .foregroundStyle(AppColor.accent)
-                        }
-                        .buttonStyle(.plain)
-
-                        if isAvroInstalled {
-                            Button {
-                                if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Text("Open Keyboard Settings")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                // Status pill
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(isAvroInstalled ? Color.green : Color.orange)
+                        .frame(width: 6, height: 6)
+                    Text(isAvroInstalled ? "Active" : "Not Installed")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(isAvroInstalled ? Color.green : Color.orange)
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(
+                    isAvroInstalled ? Color.green.opacity(0.12) : Color.orange.opacity(0.12),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule().strokeBorder(isAvroInstalled ? Color.green.opacity(0.25) : Color.orange.opacity(0.25), lineWidth: 0.5)
+                )
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+
+            // Creative Phonetic Demonstration Pill (Instant user clarity)
+            HStack(spacing: 8) {
+                Text("Phonetic:")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("ami")
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                    Text("আমি")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.cyan)
+                }
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                HStack(spacing: 4) {
+                    Text("bangla")
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                    Text("বাংলা")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.cyan)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .padding(.horizontal, 12)
+
+            // Action Buttons
+            HStack(spacing: 8) {
+                if isAvroWorking {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Configuring System Input Method...").font(.system(size: 11)).foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        isAvroWorking = true
+                        let bundleURL = TechuAvroInstaller.findBundleURL()
+                        TechuAvroInstaller.install(from: bundleURL) { err in
+                            isAvroWorking = false
+                            isAvroInstalled = TechuAvroInstaller.isInstalled()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: isAvroInstalled ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(isAvroInstalled ? "Reinstall / Verify" : "1-Click Install TechuAvro")
+                                .font(.system(size: 11.5, weight: .semibold))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.blue.opacity(0.85), Color.cyan.opacity(0.85)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        )
+                        .foregroundStyle(Color.white)
+                        .shadow(color: Color.blue.opacity(0.25), radius: 4, y: 1.5)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 10, weight: .medium))
+                            Text("Keyboard Settings")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.blue.opacity(0.08),
+                    Color.purple.opacity(0.05),
+                    Color.cyan.opacity(0.03)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.blue.opacity(0.35),
+                            Color.cyan.opacity(0.2),
+                            Color.purple.opacity(0.25)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.8
+                )
+        )
     }
 
     private var settingsDevicesSection: some View {

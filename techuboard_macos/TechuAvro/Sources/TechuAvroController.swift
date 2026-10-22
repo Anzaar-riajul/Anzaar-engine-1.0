@@ -16,6 +16,10 @@ final class TechuAvroController: IMKInputController {
     private var activeCandidateIndex: Int = 0
 
     // MARK: - Lifecycle
+    override init() {
+        super.init()
+    }
+
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
         candidateWindow = CandidateWindow()

@@ -12,7 +12,7 @@ jobs:
   build-apk:
     name: Build Techuboard Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -24,37 +24,22 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Build Android Release APK
-        working-directory: techuboard_android
+      - name: Build Techuboard Native Android APK
+        working-directory: native_android/TechuboardKeyboard
         run: |
-          set -eo pipefail
-          flutter pub get
-          flutter build apk --release
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Locate and Prepare Release APK
         run: |
           mkdir -p dist
-          echo "=== Searching for APK files ==="
-          find . -name "*.apk" -ls || true
-          find /home/runner -name "*.apk" -ls 2>/dev/null || true
-          APK_PATH=$(find . -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          APK_PATH=$(find native_android/TechuboardKeyboard/app/build/outputs/apk -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find /home/runner -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
-          fi
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find . -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
-          fi
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find /home/runner -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+            APK_PATH=$(find native_android/TechuboardKeyboard/app/build/outputs/apk -name "*.apk" 2>/dev/null | head -n 1)
           fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
             echo "ERROR: Release APK not found!"
+            find native_android/TechuboardKeyboard/app/build -maxdepth 5
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
@@ -76,13 +61,13 @@ jobs:
           tag_name: android-v1.0-${{ github.run_number }}
           name: Techuboard Android v1.0 (Build ${{ github.run_number }})
           body: |
-            ## 🎉 Techuboard Complete Android App v1.0
+            ## 🎉 Techuboard Android App v1.0
             ### 🚀 Features:
-            - **Floating Paste Hub**: Global draggable overlay with 1-tap direct paste injection
-            - **My Notes**: Complete cross-device synchronized notes and folders
-            - **Auto Image & File Sync**: Real-time clipboard, photo, and file streaming
-            - **Multi-Device Mesh Sync**: Auto discovery and seamless syncing between Mac, Android, and Windows
-            - **Privacy First**: 100% end-to-end encrypted, zero tracking
+            - **Native Avro Phonetic Engine**: Real-time Bangla transliteration (e.g. `ami` → `আমি`, `bangla` → `বাংলা`)
+            - **Instant Bangla/English Switch**: 1-tap quick toggle between Bengali and English
+            - **Quick Clipboard Bar**: 1-tap pasting from recent clipboard history directly above keyboard
+            - **Spacebar Cursor Glide**: Swipe left/right on spacebar for smooth cursor positioning
+            - **Modern Liquid Glass UI**: Optimized for Android 7.0 through Android 15
           files: |
             dist/Techuboard-Android-v1.0.apk
         env:

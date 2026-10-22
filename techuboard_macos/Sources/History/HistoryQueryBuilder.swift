@@ -34,7 +34,11 @@ final class HistoryQueryBuilder {
 
         if let filters {
             if filters.typeFilter != .all {
-                conditions.append("item_type IN (\(sqlTypeList(for: filters.typeFilter)))")
+                if filters.typeFilter == .pinned {
+                    conditions.append("is_pinned = 1")
+                } else {
+                    conditions.append("item_type IN (\(sqlTypeList(for: filters.typeFilter)))")
+                }
             }
             if let sourceApp = filters.sourceApp, !sourceApp.isEmpty {
                 conditions.append("source_app LIKE ? COLLATE NOCASE")
@@ -98,7 +102,7 @@ final class HistoryQueryBuilder {
     /// Maps a content type filter to the corresponding SQL `IN (...)` literal list.
     func sqlTypeList(for filter: HistoryTypeFilter) -> String {
         switch filter {
-        case .all:
+        case .all, .pinned:
             return "'text','image','rtf','pdf','html','files'"
         case .text:
             return "'text'"

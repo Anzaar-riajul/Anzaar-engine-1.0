@@ -5,11 +5,43 @@
 // Calling them on background threads triggers `dispatch_assert_queue` SIGTRAP crashes.
 
 import Foundation
+import AppKit
 import Carbon.HIToolbox
 
 enum TechuAvroInstaller {
 
     static let bundleID = "com.techuboard.techu-avro"
+
+    // MARK: - Bundle Locator
+
+    /// Discovers the built TechuAvro.app bundle across all standard staging and app locations.
+    static func findBundleURL() -> URL? {
+        // 1. Embedded inside currently running app Resources
+        if let url = Bundle.main.url(forResource: "TechuAvro", withExtension: "app"),
+           FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("TechuAvro.app"),
+           FileManager.default.fileExists(atPath: resourceURL.path) {
+            return resourceURL
+        }
+        // 2. Installed inside /Applications/Techuboard.app
+        let installedAppBundle = URL(fileURLWithPath: "/Applications/Techuboard.app/Contents/Resources/TechuAvro.app")
+        if FileManager.default.fileExists(atPath: installedAppBundle.path) {
+            return installedAppBundle
+        }
+        // 3. Local build tree
+        let devBundle = URL(fileURLWithPath: "/Users/azaanmac/Documents/Clipy/techuboard_macos/TechuAvro/TechuAvro.app")
+        if FileManager.default.fileExists(atPath: devBundle.path) {
+            return devBundle
+        }
+        // 4. Staged app bundle
+        let stagedBundle = URL(fileURLWithPath: "/Users/azaanmac/Documents/Clipy/techuboard_macos/Techuboard.app/Contents/Resources/TechuAvro.app")
+        if FileManager.default.fileExists(atPath: stagedBundle.path) {
+            return stagedBundle
+        }
+        return nil
+    }
 
     // MARK: - Public API
 
@@ -23,7 +55,12 @@ enum TechuAvroInstaller {
 
     /// Copies the bundle to ~/Library/Input Methods/ and enables the input source.
     /// Runs file I/O in background and TIS registration safely on main thread.
-    static func install(from bundlePath: URL, completion: @escaping (String?) -> Void) {
+    static func install(from bundlePath: URL? = nil, completion: @escaping (String?) -> Void) {
+        guard let sourcePath = bundlePath ?? findBundleURL() else {
+            completion("TechuAvro.app bundle not found.")
+            return
+        }
+
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager.default
             let inputMethodsDir = fm.homeDirectoryForCurrentUser
@@ -35,7 +72,7 @@ enum TechuAvroInstaller {
                 if fm.fileExists(atPath: dest.path) {
                     try fm.removeItem(at: dest)
                 }
-                try fm.copyItem(at: bundlePath, to: dest)
+                try fm.copyItem(at: sourcePath, to: dest)
             } catch {
                 DispatchQueue.main.async {
                     completion("Failed to copy bundle: \(error.localizedDescription)")
@@ -43,12 +80,16 @@ enum TechuAvroInstaller {
                 return
             }
 
-            let destURL = inputMethodsDir.appendingPathComponent("TechuAvro.app") as CFURL
+            let destURL = inputMethodsDir.appendingPathComponent("TechuAvro.app")
 
             // Carbon TIS registration MUST execute on the main thread
             DispatchQueue.main.async {
-                let registerResult = TISRegisterInputSource(destURL)
+                let cfDestURL = destURL as CFURL
+                let registerResult = TISRegisterInputSource(cfDestURL)
                 _ = registerResult
+
+                // Launch the IME background process so InputMethodKit connects immediately
+                NSWorkspace.shared.openApplication(at: destURL, configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
 
                 // Allow HIToolbox to index the new bundle
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
