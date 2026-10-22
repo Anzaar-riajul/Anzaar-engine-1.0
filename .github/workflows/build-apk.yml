@@ -38,38 +38,30 @@ jobs:
       - name: Flutter Dependencies
         working-directory: techuboard_android
         run: |
-          flutter pub get 2>&1 | tee /tmp/pub_get.log
+          flutter pub get
 
       - name: Build Techuboard Android Release APK
         working-directory: techuboard_android
         run: |
-          flutter build apk --release --verbose 2>&1 | tee /tmp/flutter_build.log
-
-      - name: Capture Failure Log If Any
-        if: failure()
-        run: |
-          echo "### ⚠️ Build Failure Log" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          tail -n 250 /tmp/pub_get.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
-          tail -n 250 /tmp/flutter_build.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Locate and Prepare Release APK
-        run: |
-          mkdir -p dist
-          echo "=== Searching for Release APK ==="
-          find . -name "*.apk" -ls || true
-          APK_PATH=$(find . -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find . -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          flutter build apk --release
+          mkdir -p ../dist
+          echo "=== Built APK files ==="
+          find build -type f -name "*.apk" -ls
+          
+          # Copy release APK to dist
+          APK_FILE=$(find build/app/outputs -type f -name "*release*.apk" | grep -v "unaligned" | head -n 1)
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            APK_FILE=$(find build -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
           fi
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: Release APK not found!"
+          
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            echo "ERROR: Release APK was not found in build directory!"
             exit 1
           fi
-          echo "Found APK at: $APK_PATH"
-          cp "$APK_PATH" dist/Techuboard-Android-v1.0.apk
-          ls -lh dist/Techuboard-Android-v1.0.apk
+          
+          echo "Found release APK: $APK_FILE"
+          cp "$APK_FILE" ../dist/Techuboard-Android-v1.0.apk
+          ls -lh ../dist/Techuboard-Android-v1.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -80,7 +72,7 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/feat/')
         continue-on-error: true
         with:
           tag_name: android-v1.0-${{ github.run_number }}
