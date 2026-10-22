@@ -33,20 +33,24 @@ jobs:
       - name: Build Android Release APK
         working-directory: techuboard_android
         run: |
+          set -eo pipefail
           flutter pub get
           flutter build apk --release --verbose 2>&1 | tee ../build.log
 
       - name: Locate and Prepare Release APK
         run: |
           mkdir -p dist
-          echo "=== Searching for APK files ==="
-          find /home/runner/work -name "*.apk" -ls || true
-          APK_PATH=$(find /home/runner/work -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          echo "=== Searching for APK files in workspace ==="
+          find . -name "*.apk" -ls || true
+          echo "=== Searching for APK files everywhere ==="
+          find /home/runner -name "*.apk" -ls 2>/dev/null || true
+          APK_PATH=$(find /home/runner -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            APK_PATH=$(find /home/runner/work -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+            APK_PATH=$(find /home/runner -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           fi
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: Release APK not found in /home/runner/work!"
+            echo "ERROR: Release APK not found! Printing end of build.log:"
+            tail -n 100 build.log || true
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
