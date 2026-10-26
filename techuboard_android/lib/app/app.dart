@@ -5,6 +5,7 @@ import 'package:techuboard_android/app_localizations.dart';
 import 'package:techuboard_android/features/history/home_page.dart';
 import 'package:techuboard_android/features/history/mac_home_page.dart';
 import 'package:techuboard_android/ui/app_theme.dart';
+import 'package:techuboard_android/ui/strict_update_blocker.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -27,7 +28,9 @@ class MyApp extends StatelessWidget {
           theme: TechuTheme.build(Brightness.light),
           darkTheme: TechuTheme.build(Brightness.dark),
           themeMode: AppAppearance.instance.mode,
-          home: Platform.isMacOS ? const MacHomePage() : const HomePage(),
+          home: Platform.isMacOS
+              ? const MacHomePage()
+              : const StrictUpdateBlocker(child: HomePage()),
         );
       },
     );

@@ -197,6 +197,11 @@ extension SyncManager {
             self.recordPeer(peerId: peerId, name: name, host: host, port: port)
             if !host.hasPrefix("relay:") { self.persistEndpoint(peerId: peerId, name: name, host: host, port: port) }
             self.flushPending(for: peerId)
+            if !self.clipboardAuthIds().contains(peerId) {
+                PreferencesManager.shared.setClipboardSync(peerId: peerId, enabled: true)
+                PreferencesManager.shared.setNotificationSync(peerId: peerId, enabled: true)
+                appLog("Auto-authorized connected peer \(name) (\(peerId.prefix(8))) for clipboard & notifications")
+            }
             if self.clipboardAuthIds().contains(peerId) {
                 let rows = HistoryRepository.shared.recentTextRowids(limit: 50)
                 if !rows.isEmpty {

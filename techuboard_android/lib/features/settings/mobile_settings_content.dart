@@ -146,7 +146,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                           try {
                             await AppUpdaterService.instance.downloadAndInstall(
                               downloadUrl: info.downloadUrl!,
-                              onProgress: (p) {
+                              onProgress: (p, received, total) {
                                 setDialogState(() => progress = p);
                               },
                             );

@@ -21,6 +21,7 @@ struct MenuBarPanelView: View {
     @State private var isAvroWorking = false
     @State private var showClearHistoryConfirm = false
     @ObservedObject private var relayGroups = SyncRelayGroups.shared
+    @ObservedObject private var updater = MacAppUpdater.shared
     @State private var deviceTabMode: Int = 0
     @State private var copiedPairingPin = false
     @State private var showPairingCard = false
@@ -29,6 +30,9 @@ struct MenuBarPanelView: View {
     var body: some View {
         let _ = language.revision
         VStack(spacing: 0) {
+            if updater.hasUpdate {
+                updateAlertBanner
+            }
             if let entry = model.savingSnippetEntry {
                 MenuBarPanelSaveSnippetView(entry: entry, model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -120,6 +124,42 @@ struct MenuBarPanelView: View {
             Text(pageTitle).font(.system(size: 13, weight: .bold)).lineLimit(1)
             Spacer(minLength: 0)
         }.frame(height: 32)
+    }
+    private var updateAlertBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Update Required: \(updater.latestVersion)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white)
+                Text("A new release is available to keep sync running smoothly.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.white.opacity(0.85))
+            }
+            Spacer()
+            Button {
+                if let urlStr = updater.downloadUrl, let url = URL(string: urlStr) {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Text("Update Now")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.black)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            LinearGradient(colors: [Color.red.opacity(0.9), Color.orange.opacity(0.9)], startPoint: .leading, endPoint: .trailing),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .padding(.bottom, 8)
     }
     private var search: some View {
         HStack(spacing: 8) {
@@ -529,7 +569,23 @@ struct MenuBarPanelView: View {
             if deviceTabMode == 0 {
                 // Pair Device Tab (For Android app "Scan Mac QR Code" & 6-digit PIN)
                 VStack(spacing: 8) {
-                    let pairingCode = relayGroups.pairingCode ?? "common-relay://join#techuboard-mac"
+                    let ips = SyncManager.localIPv4Addresses()
+                    let primaryIP = ips.first ?? "127.0.0.1"
+                    let macPin = relayGroups.shortPin.replacingOccurrences(of: " ", with: "")
+                    let payloadDict: [String: Any] = [
+                        "app": "techuboard",
+                        "v": 1,
+                        "id": SyncManager.shared.peerId,
+                        "name": Host.current().localizedName ?? SyncManager.shared.displayName,
+                        "ips": ips,
+                        "ip": primaryIP,
+                        "port": Int(SyncManager.shared.syncPort),
+                        "pin": macPin,
+                        "relay": relayGroups.pairingCode ?? ""
+                    ]
+                    let pairingCode = (try? JSONSerialization.data(withJSONObject: payloadDict))
+                        .flatMap { String(data: $0, encoding: .utf8) } ?? "{\"app\":\"techuboard\",\"v\":1,\"id\":\"\(SyncManager.shared.peerId)\",\"name\":\"Mac\",\"ip\":\"\(primaryIP)\",\"port\":5566,\"pin\":\"\(macPin)\"}"
+
                     if let qr = qrImage(for: pairingCode) {
                         Image(nsImage: qr)
                             .interpolation(.none)
@@ -562,7 +618,7 @@ struct MenuBarPanelView: View {
 
                             Button {
                                 NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(relayGroups.shortPin.replacingOccurrences(of: " ", with: ""), forType: .string)
+                                NSPasteboard.general.setString(macPin, forType: .string)
                                 copiedPairingPin = true
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                     copiedPairingPin = false
@@ -574,6 +630,13 @@ struct MenuBarPanelView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .help("পিন কপি করুন")
+                        }
+
+                        if primaryIP != "127.0.0.1" {
+                            Text("Wi-Fi IP: \(primaryIP):\(SyncManager.shared.syncPort)")
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.secondary.opacity(0.8))
+                                .padding(.top, 2)
                         }
                     }
                 }

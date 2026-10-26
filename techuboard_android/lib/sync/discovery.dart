@@ -273,6 +273,8 @@ extension SyncDiscoveryMethods on SyncManager {
     }
   }
 
+  Future<List<String>> enumerateLocalIPv4s() => _enumerateLocalIPv4s();
+
   Future<List<String>> _enumerateLocalIPv4s({bool forScan = false}) async {
     final result = <String>[];
     final diagParts = <String>[];

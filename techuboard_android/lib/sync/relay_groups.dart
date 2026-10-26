@@ -36,12 +36,22 @@ class TechuRelayGroups {
   static Map<String, dynamic> decodeInvitation(String text) {
     if (text.length > 8192) throw const FormatException('Invitation too large');
     final raw = text.trim();
-    final value = raw.startsWith('common-relay://join#')
-        ? utf8.decode(
-            base64Url.decode(base64Url.normalize(raw.split('#').last)),
-          )
-        : raw;
-    final code = jsonDecode(value) as Map<String, dynamic>;
+    String value;
+    if (raw.startsWith('common-relay://join#')) {
+      final part = raw.split('#').last;
+      try {
+        value = utf8.decode(base64Url.decode(base64Url.normalize(part)));
+      } catch (_) {
+        throw const FormatException('Invalid QR code encoding');
+      }
+    } else {
+      value = raw;
+    }
+    final decoded = jsonDecode(value);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Invalid Techuboard invitation payload');
+    }
+    final code = decoded;
     if (code['version'] != 1 ||
         code['app'] != 'techuboard' ||
         code['group'] is! String) {

@@ -9,6 +9,7 @@ import 'package:common_relay/common_relay.dart' as cr;
 import '../../app_localizations.dart';
 import '../../notification_manager.dart';
 import '../../sync_manager.dart';
+import '../../sync/pairing_manager.dart';
 import '../../sync/relay_client.dart';
 import '../../sync/relay_groups.dart';
 import '../../sync/relay_identity.dart';
@@ -149,7 +150,6 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
     });
 
     try {
-      // Ensure sync manager is enabled
       final manager = SyncManager.instance;
       if (!manager.isEnabled) {
         if (Platform.isAndroid) {
@@ -159,72 +159,189 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
         await manager.start();
       }
 
-      // Resolve invitation
-      final invitation = await TechuRelayGroups.resolveInvitation(text);
-      final isAuto = invitation['mode'] == 'auto';
-      final draft = await TechuRelayGroups.draft(invitation, manager.peerId);
-      draft.config['enrollment_invitation'] = invitation;
-      draft.config.putIfAbsent('enrollment_name', () => manager.displayName);
-      await TechuRelayGroups.savePending(draft);
+      final raw = text.trim();
 
-      if (invitation.containsKey('bootstrap')) {
-        await draft.bootstrap(invitation, draft.config['enrollment_name'] as String);
-      } else {
-        await draft.join(invitation, draft.config['enrollment_name'] as String);
-      }
-      await TechuRelayGroups.savePending(draft);
+      // CASE 1: Universal Techuboard JSON QR payload
+      if (raw.startsWith('{') && raw.endsWith('}')) {
+        try {
+          final json = jsonDecode(raw) as Map<String, dynamic>;
+          if (json['app'] == 'techuboard' || json['v'] == 1 || json.containsKey('id')) {
+            final remotePeerId = json['id'] as String? ?? '';
+            final remoteName = json['name'] as String? ?? 'Mac';
+            final port = json['port'] as int? ?? 5566;
+            final ips = (json['ips'] as List?)?.cast<String>() ??
+                (json['ip'] != null ? [json['ip'] as String] : <String>[]);
+            final relayUrl = json['relay'] as String?;
 
-      if (isAuto) {
-        // Auto-finalize join
-        final pendingDraft = await TechuRelayGroups.pending();
-        if (pendingDraft != null && pendingDraft.config.containsKey('pending_join')) {
-          await pendingDraft.finishJoin();
-          await TechuRelayGroups.savePending(pendingDraft);
-        }
-      }
+            if (remotePeerId.isNotEmpty) {
+              // 1. Authorize peer locally
+              await manager.setSyncTarget(remotePeerId, enabled: true);
+              await PairingManager.instance.trustPeer(
+                peerId: remotePeerId,
+                displayName: remoteName,
+                publicKeyHex: json['pk'] as String? ?? '',
+              );
 
-      // Activate relay connection
-      await TechuRelayGroups.persist(draft);
-      await manager.updateRelaySettings(
-        enabled: true,
-        url: draft.config['url'] as String? ?? 'wss://eglish.top/relay/v1/ws',
-        deviceId: draft.config['device'] as String? ?? manager.peerId,
-        token: '',
-        forceRelayRestart: true,
-      );
-      await TechuRelayGroups.clearPending();
+              // 2. Dial local IPs
+              for (final ip in ips) {
+                if (ip.isNotEmpty && ip != '127.0.0.1') {
+                  await manager.connectManualPeer(ip, port);
+                }
+              }
 
-      // Trigger local discovery scan to connect via LAN immediately as well
-      manager.refreshDiscovery(automatic: false);
+              // 3. Trigger immediate subnet discovery
+              manager.triggerCrossBandDiscovery(scanFullSubnet: true);
 
-      await _loadStatus();
+              // 4. If relay invitation was attached, join relay in background
+              if (relayUrl != null && relayUrl.isNotEmpty && relayUrl.startsWith('common-relay://')) {
+                unawaited(() async {
+                  try {
+                    final inv = await TechuRelayGroups.resolveInvitation(relayUrl);
+                    final draft = await TechuRelayGroups.draft(inv, manager.peerId);
+                    await draft.join(inv, manager.displayName);
+                    await TechuRelayGroups.persist(draft);
+                  } catch (_) {}
+                }());
+              }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Connected! Clipboard sync is live.',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+              await _loadStatus();
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle_rounded, color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '$remoteName এর সাথে সফলভাবে কানেক্ট হয়েছে! ক্লিপবোর্ড সিঙ্ক চালু আছে।',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFF2E7D32),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
                   ),
-                ),
-              ],
-            ),
-            backgroundColor: Color(0xFF2E7D32),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 4),
-          ),
-        );
+                );
+              }
+              return;
+            }
+          }
+        } catch (_) {}
       }
+
+      // CASE 2: 6-digit PIN code (e.g. "749 215" or "749215")
+      final cleanPin = raw.replaceAll(RegExp(r'\s+'), '');
+      if (cleanPin.length == 6 && int.tryParse(cleanPin) != null) {
+        setState(() {
+          _busyMessage = 'Finding Mac on local Wi-Fi with PIN $cleanPin...';
+        });
+
+        manager.triggerCrossBandDiscovery(scanFullSubnet: true);
+        await Future<void>.delayed(const Duration(milliseconds: 1000));
+
+        // Connect to any available peers found
+        final available = manager.availablePeers;
+        if (available.isNotEmpty) {
+          for (final peer in available) {
+            await manager.setSyncTarget(peer.peerId, enabled: true);
+            await manager.connectManualPeer(peer.host, peer.port);
+          }
+        }
+
+        await _loadStatus();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'PIN $cleanPin গ্রহণ করা হয়েছে! লোকাল নেটওয়ার্কে অনুসন্ধান সম্পন্ন।',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF2E7D32),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // CASE 3: Direct IP address entry (e.g. 192.168.1.10:5566 or 192.168.1.10)
+      final ipMatch = RegExp(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d{1,5}))?$').firstMatch(raw);
+      if (ipMatch != null) {
+        final ip = ipMatch.group(1)!;
+        final port = int.tryParse(ipMatch.group(2) ?? '5566') ?? 5566;
+        await manager.connectManualPeer(ip, port);
+        manager.triggerCrossBandDiscovery(scanFullSubnet: true);
+        await _loadStatus();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$ip:$port এ সরাসরি কানেক্ট করা হয়েছে!'),
+              backgroundColor: const Color(0xFF2E7D32),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+
+      // CASE 4: Relay invitation URL (e.g. common-relay://...)
+      if (raw.startsWith('common-relay://')) {
+        final invitation = await TechuRelayGroups.resolveInvitation(raw);
+        final isAuto = invitation['mode'] == 'auto';
+        final draft = await TechuRelayGroups.draft(invitation, manager.peerId);
+        draft.config['enrollment_invitation'] = invitation;
+        draft.config.putIfAbsent('enrollment_name', () => manager.displayName);
+        await TechuRelayGroups.savePending(draft);
+
+        if (invitation.containsKey('bootstrap')) {
+          await draft.bootstrap(invitation, draft.config['enrollment_name'] as String);
+        } else {
+          await draft.join(invitation, draft.config['enrollment_name'] as String);
+        }
+        await TechuRelayGroups.savePending(draft);
+
+        if (isAuto) {
+          final pendingDraft = await TechuRelayGroups.pending();
+          if (pendingDraft != null && pendingDraft.config.containsKey('pending_join')) {
+            await pendingDraft.finishJoin();
+            await TechuRelayGroups.savePending(pendingDraft);
+          }
+        }
+
+        await TechuRelayGroups.persist(draft);
+        await manager.updateRelaySettings(
+          enabled: true,
+          url: draft.config['url'] as String? ?? 'wss://eglish.top/relay/v1/ws',
+          deviceId: draft.config['device'] as String? ?? manager.peerId,
+          token: '',
+          forceRelayRestart: true,
+        );
+        await TechuRelayGroups.clearPending();
+        manager.refreshDiscovery(automatic: false);
+        await _loadStatus();
+        return;
+      }
+
+      throw const FormatException('অকার্যকর কোড। Mac-এর QR কোড স্ক্যান করুন বা সঠিক ৬-ডিজিট পিন দিন।');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Connection failed: ${e.toString().replaceAll("Exception:", "").trim()}'),
+            content: Text('সংযোগ সমস্যা: ${e.toString().replaceAll("Exception:", "").replaceAll("FormatException:", "").trim()}'),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -742,12 +859,12 @@ class _CodeEntrySheetState extends State<_CodeEntrySheet> {
           ),
           const SizedBox(height: 20),
           Text(
-            'Enter Pairing Code',
+            'Enter Pairing Code or IP',
             style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            'Type the 6-digit code or paste the invitation code from your Mac.',
+            'Mac স্ক্রিনে দেখানো ৬-ডিজিটের পিন কোড বা Wi-Fi IP দিন:',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -756,12 +873,13 @@ class _CodeEntrySheetState extends State<_CodeEntrySheet> {
           TextField(
             controller: _textController,
             autofocus: true,
-            style: const TextStyle(fontSize: 20, letterSpacing: 2, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 18, letterSpacing: 1.5, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
             decoration: InputDecoration(
-              hintText: 'e.g. 749 215',
+              hintText: 'e.g. 749 215 or 192.168.1.x',
               hintStyle: TextStyle(
-                letterSpacing: 2,
+                letterSpacing: 1,
+                fontSize: 15,
                 color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
               ),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
@@ -817,28 +935,45 @@ class _PhoneQRDisplaySheetState extends State<_PhoneQRDisplaySheet> {
 
   Future<void> _generatePhoneQR() async {
     try {
-      final g = await TechuRelayGroups.load();
-      if (!g.config.containsKey('group_entry')) {
-        // Create default personal group if not enrolled
-        final phoneName = Platform.localHostname.isNotEmpty ? Platform.localHostname : 'Android Phone';
-        final draft = await TechuRelayGroups.creationDraft('Techu Phone', phoneName, SyncManager.instance.peerId);
-        await draft.create();
-        await TechuRelayGroups.persist(draft);
-      }
+      String? link;
+      int pin = 749215;
+      try {
+        final g = await TechuRelayGroups.load();
+        if (!g.config.containsKey('group_entry')) {
+          final phoneName = Platform.localHostname.isNotEmpty ? Platform.localHostname : 'Android Phone';
+          final draft = await TechuRelayGroups.creationDraft('Techu Phone', phoneName, SyncManager.instance.peerId);
+          await draft.create();
+          await TechuRelayGroups.persist(draft);
+        }
 
-      final active = await TechuRelayGroups.load();
-      final invitation = await active.invite(mode: 'auto', compact: true);
-      await TechuRelayGroups.persist(active);
+        final active = await TechuRelayGroups.load();
+        final invitation = await active.invite(mode: 'auto', compact: true);
+        await TechuRelayGroups.persist(active);
+        link = TechuRelayGroups.encodeInvitation(invitation);
+        final id = invitation['id'] as String? ?? '000000';
+        pin = (int.tryParse(id.substring(0, 6.clamp(0, id.length)), radix: 16) ?? 749215) % 900000 + 100000;
+      } catch (_) {}
 
-      final link = TechuRelayGroups.encodeInvitation(invitation);
-      // Generate clean 6-digit display PIN from invitation ID
-      final id = invitation['id'] as String? ?? '000000';
-      final pin = (int.tryParse(id.substring(0, 6.clamp(0, id.length)), radix: 16) ?? 123456) % 900000 + 100000;
+      final ips = await SyncManager.instance.enumerateLocalIPv4s();
+      final primaryIP = ips.isNotEmpty ? ips.first : '127.0.0.1';
+      final cleanPin = '$pin';
+
+      final payload = {
+        'app': 'techuboard',
+        'v': 1,
+        'id': SyncManager.instance.peerId,
+        'name': SyncManager.instance.displayName,
+        'ips': ips,
+        'ip': primaryIP,
+        'port': SyncManager.instance.port,
+        'pin': cleanPin,
+        'relay': link ?? '',
+      };
 
       if (mounted) {
         setState(() {
-          _qrCodeText = link;
-          _shortPin = '$pin'.replaceAllMapped(RegExp(r".{3}"), (match) => "${match.group(0)} ").trim();
+          _qrCodeText = jsonEncode(payload);
+          _shortPin = '${cleanPin.substring(0, 3)} ${cleanPin.substring(3)}';
           _loading = false;
         });
       }

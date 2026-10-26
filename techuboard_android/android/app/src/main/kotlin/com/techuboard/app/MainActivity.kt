@@ -106,6 +106,21 @@ class MainActivity: FlutterActivity() {
                         result.error("INVALID_ARGUMENT", "File path is null", null)
                     }
                 }
+                "getAppVersionInfo" -> {
+                    try {
+                        val pInfo = packageManager.getPackageInfo(packageName, 0)
+                        val vName = pInfo.versionName ?: "1.0.81"
+                        val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            pInfo.longVersionCode
+                        } else {
+                            @Suppress("DEPRECATION")
+                            pInfo.versionCode.toLong()
+                        }
+                        result.success(mapOf("versionName" to vName, "versionCode" to vCode))
+                    } catch (e: Exception) {
+                        result.success(mapOf("versionName" to "1.0.81", "versionCode" to 81L))
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }

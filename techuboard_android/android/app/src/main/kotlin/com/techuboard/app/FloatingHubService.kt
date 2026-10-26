@@ -1538,20 +1538,36 @@ class FloatingHubService : Service() {
     private fun fetchPairedDevices(): List<DeviceItem> {
         val result = mutableListOf<DeviceItem>()
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-        val raw = prefs.getString("flutter.techuboard.trusted_peers.v4", null) ?: return result
-        try {
-            val json = JSONObject(raw)
-            val keys = json.keys()
-            while (keys.hasNext()) {
-                val peerId = keys.next()
-                val obj = json.getJSONObject(peerId)
-                val name = obj.optString("name", "Mac Device")
-                val isMac = name.contains("Mac", ignoreCase = true) || name.contains("Apple", ignoreCase = true)
-                val pairedAt = obj.optString("paired_at", "Recently")
-                result.add(DeviceItem(peerId, name, isMac, isConnected = true, pairedAt = pairedAt))
+        val seenIds = mutableSetOf<String>()
+        val raw = prefs.getString("flutter.techuboard.trusted_peers.v4", null)
+        if (raw != null) {
+            try {
+                val json = JSONObject(raw)
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val peerId = keys.next()
+                    seenIds.add(peerId)
+                    val obj = json.getJSONObject(peerId)
+                    val name = obj.optString("name", "Mac Device")
+                    val isMac = name.contains("Mac", ignoreCase = true) || name.contains("Apple", ignoreCase = true)
+                    val pairedAt = obj.optString("paired_at", "Recently")
+                    result.add(DeviceItem(peerId, name, isMac, isConnected = true, pairedAt = pairedAt))
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error parsing trusted peers: $e")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error parsing trusted peers: $e")
+        }
+        val clipPeers = prefs.getString("flutter.clipboardSyncPeerIds", null)
+        if (clipPeers != null) {
+            try {
+                val arr = JSONArray(clipPeers)
+                for (i in 0 until arr.length()) {
+                    val pid = arr.getString(i)
+                    if (!seenIds.contains(pid) && pid.isNotEmpty()) {
+                        result.add(DeviceItem(pid, "MacBook ($pid)", isMac = true, isConnected = true, pairedAt = "Connected"))
+                    }
+                }
+            } catch (_: Exception) {}
         }
         return result
     }

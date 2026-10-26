@@ -76,6 +76,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         SyncManager.shared.start()
         DispatchQueue.main.async {
             SyncRelayGroups.shared.ensureReady()
+            MacAppUpdater.shared.start()
         }
         print("Techuboard started!")
     }

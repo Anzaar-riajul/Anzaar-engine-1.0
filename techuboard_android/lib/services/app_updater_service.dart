@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,8 @@ class UpdateInfo {
   final bool hasUpdate;
   final String latestVersion;
   final String currentVersion;
+  final int latestBuildNumber;
+  final int currentBuildNumber;
   final String releaseNotes;
   final String? downloadUrl;
   final String? apkName;
@@ -16,6 +19,8 @@ class UpdateInfo {
     required this.hasUpdate,
     required this.latestVersion,
     required this.currentVersion,
+    required this.latestBuildNumber,
+    required this.currentBuildNumber,
     required this.releaseNotes,
     this.downloadUrl,
     this.apkName,
@@ -26,17 +31,73 @@ class AppUpdaterService {
   static final AppUpdaterService instance = AppUpdaterService._();
   AppUpdaterService._();
 
-  static const String currentVersion = '1.0.32';
   static const String repoOwner = 'Anzaar-riajul';
   static const String repoName = 'Anzaar-engine-1.0';
   static const MethodChannel _channel = MethodChannel('com.techuboard.app/open_folder');
 
+  final ValueNotifier<UpdateInfo?> updateNotifier = ValueNotifier<UpdateInfo?>(null);
+  Timer? _periodicTimer;
+  bool _isChecking = false;
+
+  /// Starts recurring background checks (runs immediately, then every 30 mins)
+  void startAutoCheck() {
+    _periodicTimer?.cancel();
+    checkForUpdate();
+    _periodicTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      checkForUpdate();
+    });
+  }
+
+  /// Get local app version and build number from native package manager
+  Future<Map<String, dynamic>> _getLocalVersionInfo() async {
+    try {
+      final info = await _channel.invokeMapMethod<String, dynamic>('getAppVersionInfo');
+      if (info != null) {
+        return {
+          'versionName': info['versionName']?.toString() ?? '1.0.81',
+          'versionCode': int.tryParse(info['versionCode']?.toString() ?? '81') ?? 81,
+        };
+      }
+    } catch (e) {
+      debugPrint('[AppUpdater] getAppVersionInfo error: $e');
+    }
+    return {
+      'versionName': '1.0.81',
+      'versionCode': 81,
+    };
+  }
+
+  /// Extract build number from GitHub tag like "android-v1.0-85" -> 85
+  int _extractBuildNumber(String tag) {
+    final match = RegExp(r'[-v](\d+)$').firstMatch(tag.trim());
+    if (match != null) {
+      return int.tryParse(match.group(1)!) ?? 0;
+    }
+    return 0;
+  }
+
   /// Check GitHub releases for a newer APK version.
   Future<UpdateInfo> checkForUpdate() async {
+    if (_isChecking) {
+      return updateNotifier.value ?? const UpdateInfo(
+        hasUpdate: false,
+        latestVersion: '',
+        currentVersion: '',
+        latestBuildNumber: 0,
+        currentBuildNumber: 0,
+        releaseNotes: '',
+      );
+    }
+    _isChecking = true;
+
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 10);
 
     try {
+      final localInfo = await _getLocalVersionInfo();
+      final currentVersionName = localInfo['versionName'] as String;
+      final currentBuildNumber = localInfo['versionCode'] as int;
+
       final uri = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/releases/latest');
       final request = await client.getUrl(uri);
       request.headers.set('Accept', 'application/vnd.github.v3+json');
@@ -45,18 +106,21 @@ class AppUpdaterService {
       final response = await request.close();
       if (response.statusCode != 200) {
         debugPrint('[AppUpdater] GitHub API returned status ${response.statusCode}');
-        return const UpdateInfo(
+        final fallback = UpdateInfo(
           hasUpdate: false,
-          latestVersion: currentVersion,
-          currentVersion: currentVersion,
+          latestVersion: currentVersionName,
+          currentVersion: currentVersionName,
+          latestBuildNumber: currentBuildNumber,
+          currentBuildNumber: currentBuildNumber,
           releaseNotes: '',
         );
+        return fallback;
       }
 
       final body = await response.transform(utf8.decoder).join();
       final data = json.decode(body) as Map<String, dynamic>;
 
-      final tagName = (data['tag_name'] as String? ?? '').replaceAll('v', '').replaceAll('android-', '').trim();
+      final rawTag = data['tag_name'] as String? ?? '';
       final releaseNotes = data['body'] as String? ?? '';
       final assets = (data['assets'] as List<dynamic>? ?? []);
 
@@ -72,33 +136,47 @@ class AppUpdaterService {
         }
       }
 
-      final isNewer = _isVersionGreater(tagName, currentVersion);
+      final remoteBuild = _extractBuildNumber(rawTag);
+      final isNewer = (remoteBuild > 0 && currentBuildNumber > 0)
+          ? remoteBuild > currentBuildNumber
+          : _isVersionGreater(rawTag, currentVersionName);
 
-      return UpdateInfo(
+      final displayLatest = rawTag.isNotEmpty ? rawTag : 'v$currentVersionName';
+
+      final info = UpdateInfo(
         hasUpdate: isNewer && apkUrl != null,
-        latestVersion: tagName.isNotEmpty ? tagName : currentVersion,
-        currentVersion: currentVersion,
+        latestVersion: displayLatest,
+        currentVersion: 'v$currentVersionName (Build $currentBuildNumber)',
+        latestBuildNumber: remoteBuild,
+        currentBuildNumber: currentBuildNumber,
         releaseNotes: releaseNotes,
         downloadUrl: apkUrl,
         apkName: apkName,
       );
+
+      updateNotifier.value = info;
+      return info;
     } catch (e) {
       debugPrint('[AppUpdater] Failed to check for updates: $e');
-      return const UpdateInfo(
+      final fallback = const UpdateInfo(
         hasUpdate: false,
-        latestVersion: currentVersion,
-        currentVersion: currentVersion,
+        latestVersion: '',
+        currentVersion: '',
+        latestBuildNumber: 0,
+        currentBuildNumber: 0,
         releaseNotes: '',
       );
+      return fallback;
     } finally {
       client.close();
+      _isChecking = false;
     }
   }
 
-  /// Downloads the APK and triggers Android system package installer.
+  /// Downloads the APK directly and invokes native package installer.
   Future<void> downloadAndInstall({
     required String downloadUrl,
-    required void Function(double progress) onProgress,
+    required void Function(double progress, int receivedBytes, int totalBytes) onProgress,
   }) async {
     final client = HttpClient();
     try {
@@ -107,11 +185,6 @@ class AppUpdaterService {
       request.headers.set('User-Agent', 'Techuboard-Android-App');
       final response = await request.close();
 
-      if (response.statusCode != 200 && response.statusCode != 302) {
-        throw Exception('Download failed with status ${response.statusCode}');
-      }
-
-      // If redirected, follow the redirect
       HttpClientResponse downloadResponse = response;
       if (response.statusCode == 302 || response.statusCode == 301) {
         final redirectLocation = response.headers.value('location');
@@ -121,6 +194,10 @@ class AppUpdaterService {
           redirectRequest.headers.set('User-Agent', 'Techuboard-Android-App');
           downloadResponse = await redirectRequest.close();
         }
+      }
+
+      if (downloadResponse.statusCode != 200) {
+        throw Exception('Download failed with status ${downloadResponse.statusCode}');
       }
 
       final contentLength = downloadResponse.contentLength;
@@ -138,7 +215,7 @@ class AppUpdaterService {
         receivedBytes += chunk.length;
         sink.add(chunk);
         if (contentLength > 0) {
-          onProgress(receivedBytes / contentLength);
+          onProgress(receivedBytes / contentLength, receivedBytes, contentLength);
         }
       }
 
@@ -147,7 +224,7 @@ class AppUpdaterService {
 
       debugPrint('[AppUpdater] APK downloaded to ${apkFile.path}, launching installer...');
 
-      // Launch native Android package installer
+      // Launch native Android package installer directly
       await _channel.invokeMethod('installApk', {
         'filePath': apkFile.path,
       });

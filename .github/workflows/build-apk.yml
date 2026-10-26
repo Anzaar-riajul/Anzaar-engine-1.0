@@ -44,7 +44,7 @@ jobs:
       - name: Build Techuboard Android Release APK
         working-directory: techuboard_android
         run: |
-          flutter build apk --release --no-tree-shake-icons 2>&1 | tee /tmp/build.log || true
+          flutter build apk --release --no-tree-shake-icons --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} 2>&1 | tee /tmp/build.log || true
           mkdir -p ../dist
           echo "=== Searching for Generated APK ==="
           find build -type f -name "*.apk" -ls || true
