@@ -7,7 +7,7 @@ from check_repository import check_path, check_text
 
 
 class RepositoryPrivacyTests(unittest.TestCase):
-    snippet_path = 'clipy_macos/Sources/Snippets/SnippetManager.swift'
+    snippet_path = 'techuboard_macos/Sources/Snippets/SnippetManager.swift'
 
     def test_personal_exports_and_databases_are_rejected(self):
         for path in (
@@ -15,7 +15,7 @@ class RepositoryPrivacyTests(unittest.TestCase):
             'cache/history.db', 'cache/history.db-wal', 'cache/history.db-shm',
             'cache/history.sqlite', 'cache/history.sqlite3',
             'cache/history.sqlite3-wal', 'cache/history.sqlite-shm',
-            'res/search.png', 'clipy_android/android/key.properties',
+            'res/search.png', 'techuboard_android/android/key.properties',
         ):
             with self.subTest(path=path):
                 self.assertIsNotNone(check_path(path))

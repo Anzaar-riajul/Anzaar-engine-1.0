@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import 'database/app_log_repository.dart';
 
 class LogManager extends ChangeNotifier {
@@ -7,6 +9,10 @@ class LogManager extends ChangeNotifier {
   LogManager._();
 
   Timer? _notifyDebounce;
+  String? currentTraceId;
+
+  void startTrace() => currentTraceId = const Uuid().v4();
+  void endTrace() => currentTraceId = null;
 
   Future<List<AppLogRecord>> fetchPage({
     required int offset,
@@ -17,13 +23,21 @@ class LogManager extends ChangeNotifier {
 
   Future<int> count() => AppLogRepository.instance.count();
 
-  void log(String message, {String level = 'info'}) {
-    final timestamp = DateTime.now().toString().split('.')[0];
-    final logMessage = '[$timestamp] [${level.toUpperCase()}] $message';
+  void log(String message, {String level = 'info', Map<String, dynamic>? metadata}) {
+    final logData = {
+      'ts': DateTime.now().toIso8601String(),
+      'level': level.toUpperCase(),
+      'message': message,
+      if (currentTraceId != null) 'traceId': currentTraceId,
+      if (metadata != null) 'metadata': metadata,
+    };
+    
+    final jsonMessage = jsonEncode(logData);
+    
     if (kDebugMode) {
-      debugPrint(logMessage);
+      debugPrint(jsonMessage);
     }
-    unawaited(AppLogRepository.instance.insert(level: level, message: message));
+    unawaited(AppLogRepository.instance.insert(level: level, message: jsonMessage));
     _scheduleNotify();
   }
 
@@ -40,6 +54,6 @@ class LogManager extends ChangeNotifier {
   }
 }
 
-void appLog(String message, {String level = 'info'}) {
-  LogManager.instance.log(message, level: level);
+void appLog(String message, {String level = 'info', Map<String, dynamic>? metadata}) {
+  LogManager.instance.log(message, level: level, metadata: metadata);
 }

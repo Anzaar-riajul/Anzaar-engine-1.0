@@ -9,8 +9,8 @@ enum IconError: Error { case invalid(String) }
 
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
 let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-let android = "clipy_android/android/app/src/main/res"
-let ios = "clipy_android/ios/Runner/Assets.xcassets/AppIcon.appiconset"
+let android = "techuboard_android/android/app/src/main/res"
+let ios = "techuboard_android/ios/Runner/Assets.xcassets/AppIcon.appiconset"
 
 func canvas(_ width: Int, _ height: Int? = nil, opaque: Bool = false) throws -> CGContext {
     let alpha = opaque ? CGImageAlphaInfo.noneSkipLast : .premultipliedLast

@@ -1,0 +1,2935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Techuboard — Pixel-Perfect Multi-Device Live Studio</title>
+  <link rel="icon" type="image/png" href="assets/logo-square.png">
+  <script>
+    if ((window.innerWidth <= 800 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) && !window.location.search.includes('view=desktop')) {
+      window.location.replace('/mobile');
+    }
+  </script>
+  <style>
+    :root {
+      --bg-studio: #090d13;
+      --bg-studio-panel: #131821;
+      --border-studio: #21262d;
+      --mac-accent: #0A84FF;
+      --mac-bg: rgba(30, 30, 32, 0.96);
+      --mac-card-bg: rgba(255, 255, 255, 0.04);
+      --mac-text-pri: #f5f5f7;
+      --mac-text-sec: #8e8e93;
+      --mac-text-ter: #636366;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-studio);
+      color: #f0f6fc;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Studio Navigation Bar */
+    .studio-bar {
+      height: 56px;
+      background: var(--bg-studio-panel);
+      border-bottom: 1px solid var(--border-studio);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo {
+      height: 30px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .brand-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-pill {
+      background: rgba(10, 132, 255, 0.15);
+      color: #58a6ff;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 12px;
+      border: 1px solid rgba(10, 132, 255, 0.3);
+    }
+
+    /* Device Switcher */
+    .device-switcher {
+      display: flex;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 3px;
+      border-radius: 8px;
+      gap: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .dev-tab {
+      background: transparent;
+      border: none;
+      color: #8b949e;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .dev-tab.active {
+      background: #0A84FF;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(10, 132, 255, 0.4);
+    }
+
+    .dev-tab:hover:not(.active) {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .studio-right-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .state-toggle-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e6edf3;
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.15s;
+    }
+
+    .state-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .badge-live {
+      font-size: 11px;
+      color: #3fb950;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 500;
+    }
+
+    .badge-live::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3fb950;
+      box-shadow: 0 0 6px #3fb950;
+    }
+
+    .phone-test-btn {
+      background: linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(10, 132, 255, 0.22) 100%);
+      border: 1px solid rgba(0, 229, 255, 0.45);
+      color: #fff;
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .phone-test-btn:hover {
+      background: linear-gradient(135deg, rgba(0, 229, 255, 0.28) 0%, rgba(10, 132, 255, 0.35) 100%);
+      border-color: #00e5ff;
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
+    }
+
+    .phone-ip-badge {
+      background: rgba(0, 229, 255, 0.25);
+      color: #00e5ff;
+      font-size: 11px;
+      font-family: monospace;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Main Canvas */
+    .studio-viewport {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 16px;
+      background: radial-gradient(circle at center, #161c26 0%, #090d13 100%);
+      position: relative;
+    }
+
+    /* ========================================================================= */
+    /* 1. MACOS NATIVE MENU BAR & EXACT POPOVER PANEL (1:1 PIXEL PERFECT)       */
+    /* ========================================================================= */
+    .macos-desktop-canvas {
+      width: 960px;
+      height: 700px;
+      background: linear-gradient(135deg, #182838 0%, #201a30 50%, #151a24 100%);
+      border-radius: 14px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* macOS Top Menu Bar */
+    .mac-os-menubar {
+      height: 28px;
+      background: rgba(18, 20, 24, 0.82);
+      backdrop-filter: blur(30px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 12px;
+      color: #e6edf3;
+      z-index: 50;
+    }
+
+    .mac-menubar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-weight: 500;
+    }
+
+    .mac-menubar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+    }
+
+    .mac-menubar-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .mac-techu-pill {
+      background: rgba(10, 132, 255, 0.22);
+      padding: 2px 7px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* THE EXACT NATIVE MACOS PANEL (0 gap flush against menubar: top: 28px) */
+    .mac-panel-wrapper {
+      position: absolute;
+      top: 28px;
+      left: 36px;
+      width: 370px;
+      height: 580px;
+      background: rgba(28, 28, 30, 0.98);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border-radius: 16px;
+      border: 0.75px solid rgba(255, 255, 255, 0.11);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      padding: 14px 14px 12px 14px;
+      z-index: 100;
+      animation: macPanelFade 0.15s ease-out;
+    }
+
+    /* NATIVE SIDE PREVIEW PANEL (Appears adjacent to main panel on hover: 0 gap top) */
+    .mac-side-preview {
+      position: absolute;
+      top: 28px;
+      left: 414px;
+      width: 360px;
+      height: 580px;
+      background: rgba(28, 28, 30, 0.98);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border-radius: 16px;
+      border: 0.75px solid rgba(255, 255, 255, 0.11);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+      display: none;
+      flex-direction: column;
+      padding: 16px;
+      z-index: 100;
+      animation: macPanelFade 0.15s ease-out;
+    }
+
+    @keyframes macPanelFade {
+      from { opacity: 0; transform: translateY(-4px) scale(0.99); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Row 1: Search Field + Pin + Gear */
+    .mac-top-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .mac-token-strip {
+      height: 28px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 0.5px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .mac-token-strip:hover {
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .mac-sample-chip {
+      background: rgba(255, 255, 255, 0.04);
+      border: 0.5px solid rgba(255, 255, 255, 0.07);
+      border-radius: 6px;
+      padding: 4px 7px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .mac-sample-chip:hover {
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .mac-search-box {
+      flex: 1;
+      height: 34px;
+      background: rgba(255, 255, 255, 0.055);
+      border: 0.75px solid rgba(255, 255, 255, 0.08);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+    }
+
+    .mac-search-icon {
+      color: var(--mac-text-ter);
+      display: flex;
+      align-items: center;
+    }
+
+    .mac-search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .mac-search-input::placeholder {
+      color: var(--mac-text-sec);
+      font-size: 13px;
+    }
+
+    .mac-shortcut-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--mac-text-ter);
+      padding: 2px 5px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .mac-icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--mac-text-sec);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mac-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    .mac-icon-btn.active {
+      color: var(--mac-accent);
+      background: rgba(10, 132, 255, 0.12);
+      border-color: rgba(10, 132, 255, 0.2);
+    }
+
+    /* Row 2: Tabs (Clipboard, Snippets, Devices 0) */
+    .mac-tabs-container {
+      display: flex;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 3px;
+      border-radius: 10px;
+      gap: 3px;
+      margin-bottom: 10px;
+    }
+
+    .mac-tab-item {
+      flex: 1;
+      height: 30px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--mac-text-sec);
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      transition: all 0.12s;
+    }
+
+    .mac-tab-item.active {
+      background: #2a2a2c;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+
+    .mac-tab-item:hover:not(.active) {
+      color: #e6edf3;
+    }
+
+    /* Row 3: Filter Pills (All, Text, Image, File, Rich Text) */
+    .mac-pills-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      overflow-x: auto;
+    }
+
+    .mac-pills-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .mac-pill {
+      font-size: 11px;
+      font-weight: 400;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      color: var(--mac-text-sec);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.12s;
+    }
+
+    .mac-pill.active {
+      background: rgba(10, 132, 255, 0.14);
+      border: 0.5px solid rgba(10, 132, 255, 0.28);
+      color: var(--mac-accent);
+      font-weight: 600;
+    }
+
+    .mac-pill:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.07);
+      color: #fff;
+    }
+
+    /* Center Content Area */
+    .mac-body-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      min-height: 250px;
+    }
+
+    /* Empty State (Identical to Left Screenshot) */
+    .mac-empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 0;
+      gap: 6px;
+    }
+
+    .mac-empty-icon {
+      color: #55585d;
+      margin-bottom: 4px;
+    }
+
+    .mac-empty-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8e8e93;
+    }
+
+    .mac-empty-subtitle {
+      font-size: 11px;
+      color: #636366;
+    }
+
+    /* Populated Items State (Single-line 32px items) */
+    .mac-populated-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 2px 0;
+    }
+
+    .mac-item-row {
+      display: flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 8px;
+      border-radius: 7px;
+      cursor: pointer;
+      gap: 7px;
+      transition: background 0.1s;
+      position: relative;
+    }
+
+    .mac-item-row:hover {
+      background: rgba(10, 132, 255, 0.09);
+    }
+
+    .mac-item-row:hover::before {
+      content: '';
+      position: absolute;
+      left: 2px;
+      width: 3px;
+      height: 16px;
+      background: var(--mac-accent);
+      border-radius: 1.5px;
+    }
+
+    .mac-item-icon {
+      font-size: 14px;
+      color: var(--mac-text-sec);
+      display: flex;
+      align-items: center;
+    }
+
+    .mac-item-text {
+      flex: 1;
+      font-size: 12.5px;
+      color: #e6edf3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mac-item-meta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--mac-text-ter);
+    }
+
+    .mac-item-actions {
+      display: none;
+      align-items: center;
+      gap: 3px;
+      margin-left: auto;
+    }
+
+    .mac-item-row:hover .mac-item-actions {
+      display: flex;
+    }
+
+    .mac-item-row:hover .mac-item-meta {
+      display: none;
+    }
+
+    .mac-action-icon-btn {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.07);
+      border: none;
+      color: rgba(255, 255, 255, 0.8);
+      cursor: pointer;
+      padding: 0;
+      transition: all 0.12s;
+    }
+
+    .mac-action-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .mac-download-icon-btn {
+      width: 18px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--mac-accent);
+      cursor: pointer;
+      padding: 0;
+      border-radius: 4px;
+      transition: all 0.12s;
+    }
+
+    .mac-download-icon-btn:hover {
+      background: rgba(10, 132, 255, 0.15);
+      transform: scale(1.08);
+    }
+
+    /* View All History Link */
+    .mac-view-all-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--mac-accent);
+      padding: 8px 0;
+      cursor: pointer;
+      margin-top: auto;
+      transition: opacity 0.15s;
+    }
+
+    .mac-view-all-link:hover {
+      opacity: 0.8;
+    }
+
+    /* Separator line */
+    .mac-divider-line {
+      height: 0.5px;
+      background: rgba(255, 255, 255, 0.08);
+      margin-top: 4px;
+      margin-bottom: 8px;
+    }
+
+    /* Footer Row (Identical to Left Screenshot) */
+    .mac-footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 30px;
+    }
+
+    .mac-footer-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mac-quick-btn {
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 0.5px solid rgba(255, 255, 255, 0.06);
+      color: var(--mac-text-sec);
+      font-size: 11px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .mac-quick-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    .mac-footer-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Bell & Blue Toggle Switch */
+    .mac-toggle-unit {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mac-bell-blue {
+      color: var(--mac-accent);
+      font-size: 12px;
+    }
+
+    .mac-switch-pill {
+      width: 28px;
+      height: 16px;
+      border-radius: 8px;
+      background: var(--mac-accent);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .mac-switch-pill.off {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .mac-switch-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      transition: transform 0.15s;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .mac-switch-pill.off .mac-switch-thumb {
+      transform: translateX(-12px);
+    }
+
+    .mac-v-divider {
+      width: 1px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .mac-footer-btn-text {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--mac-text-sec);
+      cursor: pointer;
+      background: transparent;
+      border: none;
+    }
+
+    .mac-footer-btn-text:hover {
+      color: #fff;
+    }
+
+    .mac-footer-icon-btn {
+      color: var(--mac-text-sec);
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      padding: 3px;
+    }
+
+    .mac-footer-icon-btn:hover {
+      color: #fff;
+    }
+
+    .mac-ellipsis-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      color: var(--mac-text-sec);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .mac-ellipsis-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    /* Version Label */
+    .mac-version-label {
+      font-size: 9px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 500;
+      color: var(--mac-text-ter);
+      text-align: right;
+      padding-top: 2px;
+    }
+
+
+    /* ========================================================================= */
+    /* 2. ANDROID & IOS REPLICAS (For Mobile view testing)                      */
+    /* ========================================================================= */
+    .mobile-frame-wrapper {
+      width: 380px;
+      height: 650px;
+      max-height: calc(100vh - 85px);
+      background: #000;
+      border-radius: 38px;
+      border: 8px solid #282d35;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mobile-frame-wrapper.ios {
+      border-radius: 44px;
+      border-width: 9px;
+    }
+
+    .mobile-notch {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 13px;
+      height: 13px;
+      background: #111;
+      border-radius: 50%;
+      z-index: 100;
+      border: 1px solid #222;
+    }
+
+    .mobile-frame-wrapper.ios .mobile-notch {
+      width: 110px;
+      height: 28px;
+      border-radius: 20px;
+      background: #000;
+      top: 11px;
+    }
+
+    /* App UI */
+    .app-inner-screen {
+      flex: 1;
+      background: #0f141c;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .mobile-status-bar {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e6edf3;
+      z-index: 20;
+    }
+
+    .mobile-appbar {
+      padding: 8px 16px 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .mobile-appbar-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .mobile-appbar-title img {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+    }
+
+    .mobile-app-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 270px;
+    }
+
+    .mobile-card {
+      background: #161c24;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+
+    .mobile-card:hover {
+      border-color: rgba(10, 132, 255, 0.4);
+    }
+
+    .mobile-bottom-nav {
+      display: none;
+    }
+
+    /* Virtual Keyboard */
+    .mobile-virtual-keyboard {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #181d24;
+      border-top: 1px solid #2d333b;
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+      z-index: 80;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(0);
+      transition: transform 0.22s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+
+    .mobile-virtual-keyboard.open {
+      transform: translateY(0);
+    }
+
+    .kbd-paste-strip {
+      background: #12161c;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .kbd-paste-strip::-webkit-scrollbar { display: none; }
+
+    .paste-badge-chip {
+      background: rgba(10, 132, 255, 0.12);
+      border: 1px solid rgba(10, 132, 255, 0.25);
+      color: #79c0ff;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    /* 3-Chip Suggestion Bar with Horizontal Sliding for 3+ more */
+    .kbd-suggestion-strip {
+      background: #181d24;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+    .kbd-suggestion-strip::-webkit-scrollbar { display: none; }
+
+    .kbd-suggest-chip {
+      background: #222832;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #e6edf3;
+      font-size: 13px;
+      padding: 5px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .kbd-suggest-chip:hover {
+      background: #2b333e;
+      color: #fff;
+    }
+    .kbd-suggest-chip.hero {
+      background: #1b3a4b;
+      border: 1px solid #00e5ff;
+      color: #00e5ff;
+      font-weight: 700;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+    }
+    .kbd-suggest-chip.user-word {
+      border-color: #37474f;
+      background: #263238;
+      color: #80cbc4;
+    }
+
+    .kbd-qwerty {
+      padding: 8px 4px 12px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .kbd-row-keys {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .k-btn {
+      background: #28303b;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 500;
+      height: 40px;
+      min-width: 30px;
+      flex: 1;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .k-btn:active { background: #3b4655; }
+    .k-btn.sp { background: #1f252d; font-size: 12px; color: #8b949e; flex: 1.3; }
+    .k-btn.spacebar {
+      flex: 4.5;
+      font-size: 13px;
+      font-weight: 600;
+      color: #58a6ff;
+      user-select: none;
+      touch-action: none;
+      transition: background 0.12s, box-shadow 0.12s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .k-btn.spacebar.dragging {
+      background: #1b3a4b !important;
+      color: #00e5ff !important;
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.45);
+      border: 1px solid rgba(0, 229, 255, 0.5);
+    }
+    .spacebar-arrow {
+      font-size: 10px;
+      opacity: 0.45;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    .k-btn.spacebar.dragging .spacebar-arrow {
+      opacity: 1;
+      color: #00e5ff;
+      transform: scale(1.25);
+    }
+    .k-btn.enter { background: #238636; flex: 1.6; font-size: 13px; font-weight: 600; }
+
+    /* ========================================================================= */
+    /* 3. WINDOWS 11 VIEW                                                        */
+    /* ========================================================================= */
+    .windows-window {
+      width: 820px;
+      height: 540px;
+      background: #181d24;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .win-bar {
+      height: 36px;
+      background: #12161c;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-left: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 12px;
+      color: #c9d1d9;
+    }
+
+    /* Toast */
+    .toast-msg {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #238636;
+      color: #fff;
+      padding: 9px 18px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 1000;
+      transition: transform 0.25s ease;
+    }
+
+    .toast-msg.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Studio Control Bar -->
+  <header class="studio-bar">
+    <div class="brand-group">
+      <img src="assets/logo.png" alt="Techuboard" class="brand-logo" onerror="this.src='assets/logo-square.png'">
+      <div class="brand-name">Techuboard</div>
+      <span class="brand-pill">Native Studio Preview</span>
+    </div>
+
+    <!-- Device Switchers -->
+    <div class="device-switcher">
+      <button class="dev-tab active" onclick="setDevice('macos')">
+        <span>🖥️</span> macOS Menu Bar
+      </button>
+      <button class="dev-tab" onclick="setDevice('android')">
+        <span>🤖</span> Android
+      </button>
+      <button class="dev-tab" onclick="setDevice('ios')">
+        <span>🍏</span> iPhone (iOS)
+      </button>
+      <button class="dev-tab" onclick="setDevice('windows')">
+        <span>🪟</span> Windows 11
+      </button>
+    </div>
+
+    <div class="studio-right-tools">
+      <!-- Direct Real Phone Testing Pill & QR Modal -->
+      <button class="phone-test-btn" onclick="openPhoneModal()" title="Open on Real Phone">
+        <span>📱</span> <b>Test on Phone</b> <span class="phone-ip-badge">192.168.10.78:8080</span>
+      </button>
+
+      <!-- Toggle between Empty state (screenshot match) and sample history -->
+      <button class="state-toggle-btn" id="stateToggleBtn" onclick="toggleHistoryState()">
+        <span id="stateIcon">🔄</span>
+        <span id="stateText">Show Sample History</span>
+      </button>
+      <span class="badge-live">localhost:8080</span>
+    </div>
+  </header>
+
+  <!-- Canvas Viewport -->
+  <main class="studio-viewport">
+
+    <!-- 1. MACOS MENU BAR & PANEL (1:1 PIXEL PERFECT WITH USER SCREENSHOT) -->
+    <div class="macos-desktop-canvas" id="canvasMac">
+      
+      <!-- Top macOS Menu Bar -->
+      <div class="mac-os-menubar">
+        <div class="mac-menubar-left">
+          <span style="font-size: 13px;"></span>
+          <span style="font-weight: 700;">Techuboard</span>
+          <span>File</span>
+          <span>Edit</span>
+          <span>View</span>
+          <span>Window</span>
+          <span>Help</span>
+        </div>
+        <div class="mac-menubar-right">
+          <!-- Exact green logo in menu bar as requested -->
+          <div class="mac-menubar-item" style="cursor:pointer; display:flex; align-items:center; padding: 2px 4px; border-radius: 4px;" onclick="toggleMacPanel()" title="Techuboard">
+            <img src="assets/logo-emblem.png" alt="Techuboard" style="height: 15px; width: auto; object-fit: contain;">
+          </div>
+          <span style="font-size: 13px;" title="Docker">🐳</span>
+          <span style="color: var(--mac-text-sec);">89%</span>
+          <span>🔋</span>
+          <span>A</span>
+          <span>U.S.</span>
+          <span>📶</span>
+          <span>🔍</span>
+          <span>Tue Oct 20 3:38 AM</span>
+        </div>
+      </div>
+
+      <!-- THE EXACT NATIVE MACOS PANEL (Identical to Left Screenshot) -->
+      <div class="mac-panel-wrapper" id="macPanelWrapper">
+        
+        <!-- Row 1: Search Field + Pin + Settings Gear -->
+        <div class="mac-top-bar">
+          <div class="mac-search-box">
+            <div class="mac-search-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
+            <input type="text" class="mac-search-input" id="macSearchInput" placeholder="Search clipboard and tools" oninput="onMacSearch(this.value)">
+            <span class="mac-shortcut-badge">⌘F</span>
+          </div>
+
+          <!-- Pin Button -->
+          <button class="mac-icon-btn" id="macPinBtn" title="Pin Panel" onclick="toggleMacPin(this)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="17" x2="12" y2="22"></line>
+              <path d="M5 17h14v-2l-2-3V5a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v7l-2 3v2z"></path>
+            </svg>
+          </button>
+
+          <!-- Settings Gear Button -->
+          <button class="mac-icon-btn" title="Preferences (⌘,)" onclick="showToastMsg('Preferences: Opened settings modal')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Row 2: Segmented Tabs (Clipboard, Snippets, Devices 0) -->
+        <div class="mac-tabs-container">
+          <button class="mac-tab-item active" id="tabBtnClip" onclick="setMacTab('clipboard', this)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+            </svg>
+            <span>Clipboard</span>
+          </button>
+
+          <button class="mac-tab-item" id="tabBtnSnip" onclick="setMacTab('snippets', this)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Snippets</span>
+          </button>
+
+          <button class="mac-tab-item" id="tabBtnDev" onclick="setMacTab('devices', this)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <span>Devices 0</span>
+          </button>
+        </div>
+
+        <!-- Row 3: Filter Pills (All, Text, Image, File, Rich Text) -->
+        <div class="mac-pills-row" id="macPillsRow">
+          <div class="mac-pill active" onclick="setMacPill(this, 'all')">All</div>
+          <div class="mac-pill" onclick="setMacPill(this, 'text')">Text</div>
+          <div class="mac-pill" onclick="setMacPill(this, 'image')">Image</div>
+          <div class="mac-pill" onclick="setMacPill(this, 'file')">File</div>
+          <div class="mac-pill" onclick="setMacPill(this, 'richtext')">Rich Text</div>
+        </div>
+
+        <!-- Body Content -->
+        <div class="mac-body-content" id="macBodyContent">
+          
+          <!-- State A: Empty State (IDENTICAL TO USER SCREENSHOT) -->
+          <div class="mac-empty-state" id="macEmptyState">
+            <div class="mac-empty-icon">
+              <!-- Outline clipboard icon -->
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+              </svg>
+            </div>
+            <div class="mac-empty-title">No History</div>
+            <div class="mac-empty-subtitle">Your copied content appears here.</div>
+
+            <!-- Quick Sample Clips (Click to Copy) -->
+            <div style="margin-top: 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <div style="font-size: 10px; font-weight: 600; color: var(--mac-text-ter);">Quick Sample Clips (Click to Copy):</div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;">
+                <button class="mac-sample-chip" onclick="copyText('আমি বাংলায় গান গাই')">
+                  <span style="font-size: 8.5px; font-weight: 800; color: #3fb950; background: rgba(63,185,80,0.15); padding: 1px 4px; border-radius: 3px;">TechuAvro</span>
+                  <span style="font-size: 10px; color: var(--mac-text-sec);">আমি বাংলায় গান গাই</span>
+                </button>
+                <button class="mac-sample-chip" onclick="copyText('https://github.com/techuboard/app')">
+                  <span style="font-size: 8.5px; font-weight: 800; color: #bc8cff; background: rgba(188,140,255,0.15); padding: 1px 4px; border-radius: 3px;">URL</span>
+                  <span style="font-size: 10px; color: var(--mac-text-sec);">https://github...</span>
+                </button>
+                <button class="mac-sample-chip" onclick="copyText('TECHUBOARD_KEY=9482f5b6')">
+                  <span style="font-size: 8.5px; font-weight: 800; color: #f0883e; background: rgba(240,136,62,0.15); padding: 1px 4px; border-radius: 3px;">Code</span>
+                  <span style="font-size: 10px; color: var(--mac-text-sec);">TECHUBOARD_KEY</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- State B: Populated List (Hidden by default, toggleable via top button) -->
+          <div class="mac-populated-list" id="macPopulatedList" style="display: none;">
+            <!-- Item 1: Screenshot / Image with Download Button next to thumbnail -->
+            <div class="mac-item-row" onmouseenter="showSidePreview('CleanShot 2026-10-20 at 04.14.png\n\nDimensions: 1920 × 1080 px\nFile Size: 2.4 MB\nFormat: PNG / Lossless JPEG export ready', 'Image', 'CleanShot X', 'Just now', true, 'assets/logo-square.png')" onmouseleave="hideSidePreview()" onclick="copyText('CleanShot 2026-10-20 at 04.14.png')">
+              <div style="position: relative; width: 38px; height: 26px; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
+                <img src="assets/logo-square.png" alt="Screenshot" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+                <button onclick="event.stopPropagation(); downloadSampleJpg();" title="Download High-Res JPG" style="position: absolute; bottom: 2px; right: 2px; width: 15px; height: 15px; border-radius: 50%; background: rgba(0,0,0,0.7); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="8 12 12 16 16 12"></polyline><line x1="12" y1="8" x2="12" y2="16"></line></svg>
+                </button>
+              </div>
+              <span class="mac-item-text">CleanShot 2026-10-20 at 04.14.png</span>
+              <div class="mac-item-meta">
+                <span style="font-size: 8.5px; font-weight: 700; color: #58a6ff; background: rgba(88,166,255,0.12); padding: 1px 4px; border-radius: 3px;">CleanShot</span>
+                <span>Just now</span>
+              </div>
+              <div class="mac-item-actions">
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); showToastMsg('Saved as Snippet');" title="Save as Snippet">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); copyText('CleanShot 2026-10-20 at 04.14.png');" title="Copy to Clipboard">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Item 2: TechuAvro -->
+            <div class="mac-item-row" onmouseenter="showSidePreview('আমি বাংলায় গান গাই, আমি বাংলার গান গাই\n\nPhonetic transliteration powered by TechuAvro engine.', 'TechuAvro', 'Text Editor', '1m ago')" onmouseleave="hideSidePreview()" onclick="copyText('আমি বাংলায় গান গাই, আমি বাংলার গান গাই')">
+              <span style="font-size: 8.5px; font-weight: 800; color: #3fb950; background: rgba(63,185,80,0.15); padding: 1px 4px; border-radius: 3px;">TechuAvro</span>
+              <span class="mac-item-text">আমি বাংলায় গান গাই, আমি বাংলার গান গাই</span>
+              <div class="mac-item-meta">
+                <span>1m ago</span>
+              </div>
+              <div class="mac-item-actions">
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); showToastMsg('Saved as Snippet');" title="Save as Snippet">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); copyText('আমি বাংলায় গান গাই, আমি বাংলার গান গাই');" title="Copy to Clipboard">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Item 3: URL -->
+            <div class="mac-item-row" onmouseenter="showSidePreview('https://github.com/techuboard/app\n\nOfficial repository with zero-cloud AES-GCM peer-to-peer sync architecture.', 'URL', 'Safari', '3m ago')" onmouseleave="hideSidePreview()" onclick="copyText('https://github.com/techuboard/app')">
+              <span style="font-size: 8.5px; font-weight: 800; color: #bc8cff; background: rgba(188,140,255,0.15); padding: 1px 4px; border-radius: 3px;">URL</span>
+              <span class="mac-item-text">https://github.com/techuboard/app</span>
+              <div class="mac-item-meta">
+                <span style="font-size: 8.5px; font-weight: 700; color: #bc8cff; background: rgba(188,140,255,0.12); padding: 1px 4px; border-radius: 3px;">Safari</span>
+                <span>3m ago</span>
+              </div>
+              <div class="mac-item-actions">
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); showToastMsg('Saved as Snippet');" title="Save as Snippet">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); copyText('https://github.com/techuboard/app');" title="Copy to Clipboard">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Item 4: Code -->
+            <div class="mac-item-row" onmouseenter="showSidePreview('TECHUBOARD_SECRET_KEY=9482f5b6e1a82d8c\n\nLocal 256-bit encryption key generated on device.', 'Code', 'Terminal', '12m ago')" onmouseleave="hideSidePreview()" onclick="copyText('TECHUBOARD_SECRET_KEY=9482f5b6e1a82d8c')">
+              <span style="font-size: 8.5px; font-weight: 800; color: #f0883e; background: rgba(240,136,62,0.15); padding: 1px 4px; border-radius: 3px;">Code</span>
+              <span class="mac-item-text" style="font-family: monospace;">TECHUBOARD_SECRET_KEY=9482f5b6e1a82d8c</span>
+              <div class="mac-item-meta">
+                <span>12m ago</span>
+              </div>
+              <div class="mac-item-actions">
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); showToastMsg('Saved as Snippet');" title="Save as Snippet">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button class="mac-action-icon-btn" onclick="event.stopPropagation(); copyText('TECHUBOARD_SECRET_KEY=9482f5b6e1a82d8c');" title="Copy to Clipboard">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- View All History Link (Exact match) -->
+          <div class="mac-view-all-link" onclick="showToastMsg('Opening full history search...')">
+            <span>View All History</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- NATIVE SIDE PREVIEW PANEL (Appears adjacent to main panel, no overlay inside) -->
+      <div class="mac-side-preview" id="macSidePreview">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px; margin-bottom: 12px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="prevBadge" style="font-size: 9px; font-weight: 800; color: #3fb950; background: rgba(63,185,80,0.15); padding: 2px 6px; border-radius: 4px;">TEXT</span>
+            <span id="prevSource" style="font-size: 11px; color: var(--mac-text-sec);">Google Chrome</span>
+          </div>
+          <span id="prevTime" style="font-size: 10px; color: var(--mac-text-ter);">Just now</span>
+        </div>
+        <div style="font-size: 11px; font-weight: 600; color: var(--mac-text-ter); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Full Details Context</div>
+        <div id="prevContent" style="flex:1; overflow-y:auto; font-size: 13px; line-height: 1.5; color: #e6edf3; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', monospace; white-space: pre-wrap; word-break: break-word;"></div>
+      </div>
+
+    </div>
+
+    <!-- 2. ANDROID & IOS REPLICAS -->
+    <div class="mobile-frame-wrapper" id="canvasMobile" style="display: none;">
+      <div class="mobile-notch" id="mobNotch"></div>
+      <div class="app-inner-screen">
+        <div class="mobile-status-bar">
+          <span id="mobClock">03:25</span>
+          <div>5G · 📶 · 🔋 92%</div>
+        </div>
+
+        <div class="mobile-appbar">
+          <div class="mobile-appbar-title">
+            <img src="assets/logo-square.png" alt="Techuboard" style="width: 26px; height: 26px; border-radius: 6px; object-fit: contain;">
+            <span>Techuboard</span>
+          </div>
+          <button style="background:none; border:none; color:#fff; font-size:16px; cursor:pointer;" onclick="toggleMobileKeyboard()">⌨️</button>
+        </div>
+
+        <div class="mobile-app-body">
+          <div style="font-size: 20px; font-weight: 700;">History</div>
+          <div style="font-size: 11px; color: #8e8e93;">Searchable local history and fast clipboard reuse</div>
+
+          <div class="mobile-card" onclick="copyText('আমি বাংলায় গান গাই')">
+            <div style="font-size: 10px; color: #3fb950; font-weight: 700; text-transform: uppercase;">TechuAvro</div>
+            <div style="font-size: 13px; margin-top: 4px;">আমি বাংলায় গান গাই, আমি বাংলার গান গাই</div>
+          </div>
+
+          <div class="mobile-card" onclick="copyText('https://github.com/techuboard/app')">
+            <div style="font-size: 10px; color: #bc8cff; font-weight: 700; text-transform: uppercase;">URL</div>
+            <div style="font-size: 13px; margin-top: 4px;">https://github.com/techuboard/app</div>
+          </div>
+        </div>
+
+        <div class="mobile-bottom-nav">
+          <button class="nav-btn active"><span>📋</span><span>History</span></button>
+          <button class="nav-btn"><span>📡</span><span>Devices</span></button>
+          <button class="nav-btn"><span>🔔</span><span>Alerts</span></button>
+          <button class="nav-btn"><span>⚙️</span><span>Settings</span></button>
+        </div>
+
+        <!-- TechuAvro Virtual Soft Keyboard -->
+        <div class="mobile-virtual-keyboard" id="mobKbd">
+          <!-- Live Composing & Field Preview -->
+          <div style="background: #14171d; padding: 6px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1; overflow: hidden;">
+              <span id="kbdModeBadge" style="font-size: 10px; font-weight: 700; background: rgba(0, 229, 255, 0.15); color: #00e5ff; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 229, 255, 0.3); flex-shrink: 0;">TechuAvro</span>
+              <span id="kbdCursorHint" style="font-size: 10px; color: #8e8e93; background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px; display: none; flex-shrink: 0;">Pos: 0</span>
+              <span id="kbdInputText" style="font-size: 14px; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></span>
+            </div>
+            <span style="font-size: 11px; color: #8e8e93; flex-shrink: 0;" id="kbdComposingRaw">(kemon)</span>
+          </div>
+
+          <!-- Row 1: 3-Chip Suggestion Bar with Horizontal Sliding for 3+ more candidates -->
+          <div class="kbd-suggestion-strip" id="kbdSuggestionStrip">
+            <div class="kbd-suggest-chip hero" id="sugChip0" onclick="applyKbdSuggestion('কেমন')">কেমন ★</div>
+            <div class="kbd-suggest-chip" id="sugChip1" onclick="applyKbdSuggestion('কেমন আছেন')">কেমন আছেন</div>
+            <div class="kbd-suggest-chip" id="sugChip2" onclick="applyKbdSuggestion('কেমন আছো')">কেমন আছো</div>
+            <!-- Slidable candidates (3+ more) -->
+            <div class="kbd-suggest-chip" id="sugChip3" onclick="applyKbdSuggestion('কেমনে')">কেমনে</div>
+            <div class="kbd-suggest-chip user-word" id="sugChip4" title="Learned from your personal typing" onclick="applyKbdSuggestion('ক্যামন')">ক্যামন (Learned)</div>
+            <div class="kbd-suggest-chip" id="sugChip5" onclick="applyKbdSuggestion('kemon')">kemon</div>
+          </div>
+
+          <!-- Row 2: Clipboard Quick Paste Strip -->
+          <div class="kbd-paste-strip">
+            <span style="font-size: 9px; color: #8b949e; font-weight: 700;">CLIPBOARD:</span>
+            <div class="paste-badge-chip" onclick="applyKbdPaste('আমি বাংলায় গান গাই')">আমি বাংলায় গান গাই</div>
+            <div class="paste-badge-chip" onclick="applyKbdPaste('Techuboard Key')">Techuboard Key</div>
+            <div class="paste-badge-chip" onclick="applyKbdPaste('https://github.com')">https://github...</div>
+          </div>
+
+          <!-- Row 3: Dynamic Keyboard Rows (QWERTY / ?123 Symbols / =\<) -->
+          <div class="kbd-qwerty" id="kbdRowsContainer"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 3. WINDOWS 11 VIEW -->
+    <div class="windows-window" id="canvasWin" style="display: none;">
+      <div class="win-bar" style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <img src="assets/logo-square.png" alt="Techuboard" style="width: 16px; height: 16px; object-fit: contain; border-radius: 3px;">
+          <span>Techuboard — Windows 11</span>
+        </div>
+        <div>──  ▢  ✕</div>
+      </div>
+      <div style="flex:1; padding: 24px;">
+        <div style="font-size: 18px; font-weight: 700;">Windows Clipboard History</div>
+        <div style="font-size: 12px; color: #8e8e93; margin-top: 4px;">Clean Apache 2.0 Win32 + Flutter Desktop Engine</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Interactive Toast Notification -->
+  <div class="toast-msg" id="toastMsg">Action confirmed</div>
+
+  <script>
+    // State management
+    let isHistoryPopulated = false;
+
+    // Switch between devices
+    function setDevice(dev) {
+      document.querySelectorAll('.dev-tab').forEach(b => b.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      const mac = document.getElementById('canvasMac');
+      const mob = document.getElementById('canvasMobile');
+      const win = document.getElementById('canvasWin');
+      const notch = document.getElementById('mobNotch');
+
+      mac.style.display = 'none';
+      mob.style.display = 'none';
+      win.style.display = 'none';
+
+      if (dev === 'macos') {
+        mac.style.display = 'flex';
+      } else if (dev === 'android') {
+        mob.style.display = 'flex';
+        mob.className = 'mobile-frame-wrapper';
+      } else if (dev === 'ios') {
+        mob.style.display = 'flex';
+        mob.className = 'mobile-frame-wrapper ios';
+      } else if (dev === 'windows') {
+        win.style.display = 'flex';
+      }
+    }
+
+    // Toggle Empty State vs Populated History (for macOS view)
+    // Side Preview Panel Logic (0 hover clutter inside list)
+    function showSidePreview(text, badge, source, time, isImage, imageSrc) {
+      const p = document.getElementById('macSidePreview');
+      if (!p) return;
+      const contentEl = document.getElementById('prevContent');
+      if (isImage && imageSrc) {
+        contentEl.innerHTML = `
+          <div style="position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <div style="position: relative; width: 100%; border-radius: 6px; overflow: hidden; background: #000;">
+              <img src="${imageSrc}" alt="Preview" style="width: 100%; height: auto; max-height: 180px; object-fit: contain; display: block;">
+              <button onclick="downloadSampleJpg()" style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 5px; background: rgba(20, 20, 24, 0.85); backdrop-filter: blur(10px); border: 0.5px solid rgba(255,255,255,0.15); color: var(--mac-accent); padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.15s;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="8 12 12 16 16 12"></polyline><line x1="12" y1="8" x2="12" y2="16"></line></svg>
+                <span>Download JPG</span>
+              </button>
+            </div>
+            <div style="font-size: 11px; color: var(--mac-text-sec); white-space: pre-wrap; width: 100%;">${text}</div>
+          </div>
+        `;
+      } else {
+        contentEl.textContent = text;
+      }
+      document.getElementById('prevBadge').textContent = badge;
+      document.getElementById('prevSource').textContent = source;
+      document.getElementById('prevTime').textContent = time;
+      p.style.display = 'flex';
+    }
+
+    function downloadSampleJpg() {
+      showToastMsg('High-resolution JPG saved to Downloads folder');
+      const a = document.createElement('a');
+      a.href = 'assets/logo-square.png';
+      a.download = 'Techuboard_' + new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14) + '.jpg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function hideSidePreview() {
+      const p = document.getElementById('macSidePreview');
+      if (p) p.style.display = 'none';
+    }
+
+    function toggleHistoryState() {
+      isHistoryPopulated = !isHistoryPopulated;
+      const emptyState = document.getElementById('macEmptyState');
+      const populatedList = document.getElementById('macPopulatedList');
+      const btnText = document.getElementById('stateText');
+
+      if (isHistoryPopulated) {
+        emptyState.style.display = 'none';
+        populatedList.style.display = 'flex';
+        btnText.innerText = 'Show Empty State (Screenshot)';
+        showToastMsg('Showing Sample History');
+      } else {
+        emptyState.style.display = 'flex';
+        populatedList.style.display = 'none';
+        btnText.innerText = 'Show Sample History';
+        showToastMsg('Showing Empty State (Matches your Mac)');
+      }
+    }
+
+    // macOS Tab Switcher
+    function setMacTab(tab, el) {
+      document.querySelectorAll('.mac-tab-item').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+
+      const pillsRow = document.getElementById('macPillsRow');
+      const bodyContent = document.getElementById('macBodyContent');
+
+      if (tab === 'clipboard') {
+        pillsRow.style.display = 'flex';
+        if (isHistoryPopulated) {
+          document.getElementById('macEmptyState').style.display = 'none';
+          document.getElementById('macPopulatedList').style.display = 'flex';
+        } else {
+          document.getElementById('macEmptyState').style.display = 'flex';
+          document.getElementById('macPopulatedList').style.display = 'none';
+        }
+      } else if (tab === 'snippets') {
+        pillsRow.style.display = 'none';
+        document.getElementById('macEmptyState').style.display = 'flex';
+        document.getElementById('macPopulatedList').style.display = 'none';
+        document.querySelector('.mac-empty-title').innerText = 'No Snippets';
+        document.querySelector('.mac-empty-subtitle').innerText = 'Create reusable text snippets with shortcuts.';
+      } else if (tab === 'devices') {
+        pillsRow.style.display = 'none';
+        document.getElementById('macEmptyState').style.display = 'flex';
+        document.getElementById('macPopulatedList').style.display = 'none';
+        document.querySelector('.mac-empty-title').innerText = 'No Devices Found';
+        document.querySelector('.mac-empty-subtitle').innerText = 'Connect other devices on the same Wi-Fi network.';
+      }
+    }
+
+    // macOS Filter Pills
+    function setMacPill(el, type) {
+      document.querySelectorAll('.mac-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      showToastMsg('Filtered by: ' + el.innerText);
+    }
+
+    // Pin toggle
+    function toggleMacPin(el) {
+      el.classList.toggle('active');
+      const isPinned = el.classList.contains('active');
+      showToastMsg(isPinned ? 'Panel Pinned (Will stay open)' : 'Panel Unpinned');
+    }
+
+    // Bell / Keep Awake toggle
+    function toggleMacSwitch(el) {
+      const pill = document.getElementById('macSwitchPill');
+      pill.classList.toggle('off');
+      const isOn = !pill.classList.contains('off');
+      showToastMsg(isOn ? 'Keep Awake: ON (Prevent Idle Sleep)' : 'Keep Awake: OFF');
+    }
+
+    // Search
+    function onMacSearch(val) {
+      if (val.trim().length > 0) {
+        document.getElementById('macEmptyState').style.display = 'none';
+        document.getElementById('macPopulatedList').style.display = 'flex';
+      } else {
+        if (!isHistoryPopulated) {
+          document.getElementById('macEmptyState').style.display = 'flex';
+          document.getElementById('macPopulatedList').style.display = 'none';
+        }
+      }
+    }
+
+    // Copy helper
+    function copyText(str) {
+      navigator.clipboard.writeText(str).catch(() => {});
+      showToastMsg('Copied to clipboard: "' + str.slice(0, 26) + '..."');
+    }
+
+    // Toast helper
+    function showToastMsg(txt) {
+      const toast = document.getElementById('toastMsg');
+      toast.innerText = txt;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    // Mobile Virtual Keyboard
+    function toggleMobileKeyboard() {
+      const kbd = document.getElementById('mobKbd');
+      kbd.classList.toggle('open');
+    }
+
+    // Keyboard State & Suggestions Engine
+    let kbdIsAvro = true;
+    let kbdIsShifted = false;
+    let kbdComposing = "";
+    let kbdFullSentence = "";
+
+    // =========================================================================
+    // COMPLETE AUTHENTIC TECHUAVRO PHONETIC ENGINE & LEXICON
+    // =========================================================================
+    const KBD_UNICODE_MAP = {
+      "o": "\u0985", "O": "\u0993", "a": "\u0986", "A": "\u0986",
+      "S": "\u09B6", "sh": "\u09B6", "s": "\u09B8", "Sh": "\u09B7",
+      "h": "\u09B9", "H": "\u09B9", "r": "\u09B0", "R": "\u09DC", "Rh": "\u09DD",
+      "k": "\u0995", "K": "\u0995", "q": "\u0995", "qq": "\u0981", "kh": "\u0996",
+      "g": "\u0997", "G": "\u0997", "gh": "\u0998", "Ng": "\u0999", "c": "\u099A",
+      "C": "\u099A", "ch": "\u099B", "j": "\u099C", "jh": "\u099D", "J": "\u099C",
+      "NG": "\u099E", "T": "\u099F", "Th": "\u09A0", "TH": "\u09CE", "f": "\u09AB",
+      "F": "\u09AB", "ph": "\u09AB", "i": "\u0987", "I": "\u0988", "e": "\u098F",
+      "E": "\u098F", "u": "\u0989", "U": "\u098A", "b": "\u09AC", "B": "\u09AC",
+      "w": "\u09AC", "bh": "\u09AD", "V": "\u09AD", "v": "\u09AD", "t": "\u09A4",
+      "th": "\u09A5", "d": "\u09A6", "dh": "\u09A7", "D": "\u09A1", "Dh": "\u09A2",
+      "n": "\u09A8", "N": "\u09A3", "z": "\u09AF", "Z": "\u09AF", "y": "\u09DF",
+      "l": "\u09B2", "L": "\u09B2", "m": "\u09AE", "M": "\u09AE", "P": "\u09AA",
+      "p": "\u09AA", "ng": "\u0982", "cb": "\u0981", "x": "\u0995\u09CD\u09B8",
+      "OU": "\u0994", "OI": "\u0990", "hs": "\u09CD", "nj": "\u099E\u09CD\u099C",
+      "nc": "\u099E\u09CD\u099A"
+    };
+
+    const KBD_KARS_MAP = {
+      "o": "", "a": "\u09BE", "A": "\u09BE", "e": "\u09C7", "E": "\u09C7",
+      "O": "\u09CB", "OI": "\u09C8", "OU": "\u09CC", "i": "\u09BF",
+      "I": "\u09C0", "u": "\u09C1", "U": "\u09C2", "oo": "\u09C1"
+    };
+
+    const KBD_JKT_MAP = {
+      "k": "kTtnNslw", "g": "gnNmlw", "ch": "w", "Ng": "gkm", "NG": "cj",
+      "G": "gnNmlw", "th": "w", "gh": "Nn", "c": "c", "j": "jw", "T": "T",
+      "D": "D", "R": "g", "N": "DNmw", "t": "tnmwN", "d": "wdm", "dh": "wn",
+      "n": "ndwmtsDT", "p": "plTtns", "f": "l", "ph": "l", "b": "jdbwl",
+      "v": "l", "bh": "l", "m": "npfwvmlb", "l": "lwmpkgTDf", "Sh": "kTNpmf",
+      "S": "clwnm", "sh": "clwnm", "s": "kTtnpfmlw", "h": "Nnmlw", "cb": "",
+      "jh": "", "TH": "", "qq": "", "ng": "", "kh": "", "gg": "", "dh": "", "Th": ""
+    };
+
+    const KBD_DJKT_MAP = {
+      "kh": "Ngs", "ch": "c", "Dh": "N", "ph": "mls", "dh": "gdnbl",
+      "bh": "dm", "Sh": "k", "th": "tns", "Th": "Nn", "jh": "j", "NG": "cj"
+    };
+
+    const KBD_DJKTT_MAP = {
+      "ch": "NG", "gh": "Ng", "Th": "Sh", "jh": "NG", "sh": "ch"
+    };
+
+    function kbdIsVowel(c) { return "AEIOUaeiou".indexOf(c) !== -1; }
+    function kbdIsConsonant(c) { return /[a-zA-Z]/.test(c) && !kbdIsVowel(c); }
+
+    function parseAvroWeb(engWord) {
+      if (!engWord) return "";
+      let st = [];
+      let carry = "", secondCarry = "", thirdCarry = "";
+      let jukta = false, prevJukta = false;
+
+      for (let i = 0; i < engWord.length; i++) {
+        let now = engWord[i];
+        if (!/[a-zA-Z0-9]/.test(now)) {
+          st.push(now);
+          carry = ""; secondCarry = ""; thirdCarry = "";
+          jukta = false; prevJukta = false;
+          continue;
+        }
+        if ("ABCEFPXKLMVYWQ".indexOf(now) !== -1) now = now.toLowerCase();
+        if (now === "H" && carry !== "T") now = "h";
+        if ((carry === "" || kbdIsVowel(carry)) && now === "w") now = "O";
+
+        if (kbdIsVowel(now)) {
+          if (carry === "r" && secondCarry === "r" && now === "i") {
+            if (thirdCarry === "") {
+              st.splice(Math.max(0, st.length - 2), 2);
+              st.push("\u098B");
+            } else {
+              st.splice(Math.max(0, st.length - 3), 3);
+              st.push("\u09C3");
+            }
+            carry = "i";
+            continue;
+          }
+
+          const dual = (secondCarry !== "") ? (KBD_KARS_MAP[carry + now] || null) : (KBD_UNICODE_MAP[carry + now] || null);
+
+          if (dual) {
+            if (carry !== "o") st.splice(Math.max(0, st.length - 1), 1);
+            if (kbdIsVowel(secondCarry)) {
+              st.push(KBD_UNICODE_MAP[carry] || "");
+              st.push(KBD_UNICODE_MAP[now] || "");
+            } else {
+              st.push(dual);
+            }
+          } else if (now === "o" && carry !== "") {
+            if (kbdIsVowel(carry)) {
+              st.push(KBD_UNICODE_MAP["O"] || "");
+            } else {
+              thirdCarry = secondCarry;
+              secondCarry = carry;
+              carry = now;
+              continue;
+            }
+          } else if (kbdIsVowel(carry) || carry === "") {
+            if (now === "a" && carry !== "") {
+              st.push(KBD_UNICODE_MAP["y"] || "");
+              st.push(KBD_KARS_MAP["a"] || "");
+            } else {
+              st.push(KBD_UNICODE_MAP[now] || "");
+            }
+          } else {
+            st.push(KBD_KARS_MAP[now] || "");
+          }
+        }
+
+        if (now === "y" || now === "Z" || now === "r") jukta = false;
+        const tempNoCarry = jukta && (KBD_UNICODE_MAP[carry + now] === undefined);
+
+        if (kbdIsConsonant(now) && kbdIsConsonant(carry) && !tempNoCarry) {
+          if (now === "y" || now === "Z") {
+            if (!(now === "y" && carry === "q" && secondCarry === "q")) now = "z";
+          }
+
+          if (carry === "g" && now === "g" && secondCarry !== "N" && secondCarry !== "n") {
+            st.splice(Math.max(0, st.length - 1), 1);
+            st.push("\u099C\u09CD\u099E");
+            prevJukta = jukta;
+            jukta = true;
+            secondCarry = "g";
+            continue;
+          }
+
+          if (secondCarry === "k" && carry === "k" && now === "h") carry = "S";
+
+          const dual = KBD_UNICODE_MAP[carry + now] || null;
+          if (dual) {
+            if (thirdCarry === "g" && secondCarry === "k" && carry === "S" && now === "h") {
+              jukta = false; prevJukta = false;
+            }
+            const firstOrAfter = kbdIsVowel(secondCarry) || secondCarry === "" || prevJukta;
+            const djkt = KBD_DJKT_MAP[carry + now];
+            const djktt = KBD_DJKTT_MAP[carry + now];
+            let sitsUnder = false;
+            if (secondCarry === "r" && thirdCarry === "r") sitsUnder = true;
+            else if (secondCarry !== "r") {
+              if (djkt && secondCarry && djkt.indexOf(secondCarry) !== -1) sitsUnder = true;
+              else if (djktt && djktt.indexOf(thirdCarry + secondCarry) !== -1) sitsUnder = true;
+            }
+
+            if (sitsUnder && !firstOrAfter) {
+              st.splice(Math.max(0, st.length - 1), 1);
+              if (secondCarry === "r" && thirdCarry === "r") st.splice(Math.max(0, st.length - 1), 1);
+              if (!jukta && secondCarry !== "" && !kbdIsVowel(secondCarry)) st.push("\u09CD");
+              st.push(dual);
+              prevJukta = jukta;
+              jukta = true;
+            } else {
+              if (jukta) st.splice(Math.max(0, st.length - 2), 2);
+              else st.splice(Math.max(0, st.length - 1), 1);
+
+              if (secondCarry === "g" && carry === "g" && now === "h") {
+                st.splice(Math.max(0, st.length - 1), 1);
+                st.push(KBD_UNICODE_MAP["g"] || "");
+              }
+              st.push(dual);
+              prevJukta = jukta;
+              jukta = false;
+            }
+          } else {
+            prevJukta = jukta;
+            jukta = false;
+
+            if (secondCarry !== "r" && carry === "r" && now === "z") {
+              st.push("\u200D\u09CD");
+            } else if (carry === "r" && secondCarry !== "r") {
+              // no ref
+            } else if (carry === "r" && secondCarry === "r" && kbdIsConsonant(thirdCarry)) {
+              // no ref
+            } else if (carry === "r" && secondCarry === "r" && (kbdIsVowel(thirdCarry) || thirdCarry === "")) {
+              st.splice(Math.max(0, st.length - 1), 1);
+              st.push("\u09CD");
+            } else {
+              let notJuk = false;
+              if (now !== "r" && now !== "z" && now !== "w") {
+                const dualJkt = KBD_JKT_MAP[secondCarry + carry];
+                if (dualJkt && dualJkt.indexOf(now) === -1) notJuk = true;
+                else {
+                  const jkt = KBD_JKT_MAP[carry];
+                  if (jkt && jkt.indexOf(now) === -1) notJuk = true;
+                }
+              }
+              if (!notJuk) {
+                st.push("\u09CD");
+                jukta = true;
+              }
+            }
+            st.push(KBD_UNICODE_MAP[now] || "");
+          }
+        } else if (kbdIsConsonant(now)) {
+          if (kbdIsVowel(carry) && now === "Z") st.push("\u09CD");
+          if (carry === "" && now === "x") st.push(KBD_UNICODE_MAP["e"] || "");
+          prevJukta = jukta;
+          jukta = false;
+          if (now === "w" && kbdIsConsonant(carry) && kbdIsConsonant(secondCarry)) {
+            st.push("\u09CD");
+            prevJukta = jukta;
+            jukta = true;
+          }
+          if (thirdCarry === "k" && secondCarry === "S" && carry === "h" && (now === "N" || now === "m")) {
+            st.push("\u09CD");
+            prevJukta = false;
+            jukta = true;
+          }
+          st.push(KBD_UNICODE_MAP[now] || "");
+        }
+
+        thirdCarry = secondCarry;
+        secondCarry = carry;
+        carry = now;
+      }
+      return st.join("");
+    }
+
+    const KBD_BANGLISH_LEXICON = {
+      // 1. ক্ষ (kkh / kh) Jukto-Borno
+      "khonosthai": ["ক্ষণস্থায়ী", "ক্ষণস্থায়ী"],
+      "khonosthayi": ["ক্ষণস্থায়ী", "ক্ষণস্থায়ী"],
+      "kkhonosthai": ["ক্ষণস্থায়ী", "ক্ষণস্থায়ী"],
+      "kkhonosthayi": ["ক্ষণস্থায়ী", "ক্ষণস্থায়ী"],
+      "khon": ["ক্ষণ", "ক্ষতি"],
+      "kkhon": ["ক্ষণ"],
+      "khoti": ["ক্ষতি"],
+      "kkhoti": ["ক্ষতি"],
+      "khoma": ["ক্ষমা"],
+      "kkhoma": ["ক্ষমা"],
+      "khoto": ["ক্ষত"],
+      "kkhoto": ["ক্ষত"],
+      "khuda": ["ক্ষুধা"],
+      "kkhuda": ["ক্ষুধা"],
+      "khudra": ["ক্ষুদ্র"],
+      "kkhudra": ["ক্ষুদ্র"],
+      "khetro": ["ক্ষেত্র"],
+      "kkhetro": ["ক্ষেত্র"],
+      "khomota": ["ক্ষমতা"],
+      "kkhomota": ["ক্ষমতা"],
+      "lokkhi": ["লক্ষ্মী", "লক্ষী"],
+      "lakkhi": ["লক্ষ্মী", "লক্ষী"],
+      "lokhi": ["লক্ষ্মী", "লক্ষী"],
+      "dokkhin": ["দক্ষিণ"],
+      "dokkho": ["দক্ষ"],
+      "lokkho": ["লক্ষ্য", "লক্ষ"],
+      "pokkhi": ["পক্ষী"],
+      "sakkhi": ["সাক্ষী"],
+      "shikkha": ["শিক্ষা"],
+      "sikkha": ["শিক্ষা"],
+      "shikkhok": ["শিক্ষক"],
+      "sikkhok": ["শিক্ষক"],
+      "shikkhito": ["শিক্ষিত"],
+      "sikkhito": ["শিক্ষিত"],
+      "porikkha": ["পরীক্ষা"],
+      "porikha": ["পরীক্ষা"],
+      "brikkho": ["বৃক্ষ"],
+      "brikho": ["বৃক্ষ"],
+      "bikkhob": ["বিক্ষোভ"],
+
+      // 2. স্থ / স্ত / ষ্ট / স্ট (sth / st / sht) Jukto-Borno
+      "obostha": ["অবস্থা"],
+      "obosta": ["অবস্থা"],
+      "oboshta": ["অবস্থা"],
+      "obosthan": ["অবস্থান"],
+      "byabostha": ["ব্যবস্থা"],
+      "bebostha": ["ব্যবস্থা"],
+      "shastho": ["স্বাস্থ্য"],
+      "sastho": ["স্বাস্থ্য"],
+      "sthan": ["স্থান"],
+      "sthaniyo": ["স্থানীয়"],
+      "sthapona": ["স্থাপনা"],
+      "sthir": ["স্থির"],
+      "sthiti": ["স্থিতি"],
+      "sthul": ["স্থূল"],
+      "prostab": ["প্রস্তাব"],
+      "prostut": ["প্রস্তুত"],
+      "prostuti": ["প্রস্তুতি"],
+      "bistar": ["বিস্তারিত", "বিস্তার"],
+      "bistarito": ["বিস্তারিত"],
+      "bistrito": ["বিস্তৃত"],
+      "bostu": ["বস্তু"],
+      "bosti": ["বস্তি"],
+      "dushto": ["দুষ্টু"],
+      "dusto": ["দুষ্টু"],
+      "sristi": ["সৃষ্টি"],
+      "shristi": ["সৃষ্টি"],
+      "dristi": ["দৃষ্টি"],
+      "drishti": ["দৃষ্টি"],
+      "bristi": ["বৃষ্টি"],
+      "brishti": ["বৃষ্টি"],
+      "kosto": ["কষ্ট"],
+      "koshto": ["কষ্ট"],
+      "nosto": ["নষ্ট"],
+      "noshto": ["নষ্ট"],
+      "misti": ["মিষ্টি"],
+      "mishti": ["মিষ্টি"],
+      "sposto": ["স্পষ্ট"],
+      "sposhto": ["স্পষ্ট"],
+      "chesta": ["চেষ্টা"],
+      "ceshta": ["চেষ্টা"],
+      "shreshtho": ["শ্রেষ্ঠ"],
+      "sreshtho": ["শ্রেষ্ঠ"],
+      "onushthan": ["অনুষ্ঠান"],
+      "onushtan": ["অনুষ্ঠান"],
+      "protisthan": ["প্রতিষ্ঠান"],
+      "prothisthan": ["প্রতিষ্ঠান"],
+      "rasta": ["রাস্তা"],
+      "skul": ["স্কুল"],
+      "school": ["স্কুল"],
+
+      // 3. ন্দ / ন্ত / ন্থ / ন্ধ / ণ্ড
+      "bondhu": ["বন্ধু", "বন্ধুরা", "বন্ধুর"],
+      "bondhutto": ["বন্ধুত্ব"],
+      "bondho": ["বন্ধ"],
+      "bondo": ["বন্ধ"],
+      "ondho": ["অন্ধ"],
+      "ondhokar": ["অন্ধকার"],
+      "shondha": ["সন্ধ্যা"],
+      "sondha": ["সন্ধ্যা"],
+      "shondhan": ["সন্ধান"],
+      "sondhan": ["সন্ধান"],
+      "shondesh": ["সন্দেশ"],
+      "sondesh": ["সন্দেশ"],
+      "anondo": ["আনন্দ"],
+      "anando": ["আনন্দ"],
+      "shundor": ["সুন্দর", "সুন্দরী"],
+      "sundor": ["সুন্দর"],
+      "chinta": ["চিন্তা"],
+      "shanti": ["শান্তি"],
+      "santi": ["শান্তি"],
+      "shanto": ["শান্ত"],
+      "santo": ["শান্ত"],
+      "klanto": ["ক্লান্ত"],
+      "kintu": ["কিন্তু"],
+      "shontan": ["সন্তান"],
+      "sontan": ["সন্তান"],
+      "ghonta": ["ঘণ্টা", "ঘন্টা"],
+      "thanda": ["ঠান্ডা", "ঠাণ্ডা"],
+      "kando": ["কাণ্ড"],
+
+      // 4. ম্প / ম্ব / ম্ভ / ম্ম
+      "shomporko": ["সম্পর্ক"],
+      "somporko": ["সম্পর্ক"],
+      "shompurno": ["সম্পূর্ণ"],
+      "sompurno": ["সম্পূর্ণ"],
+      "shomproti": ["সম্প্রতি"],
+      "somproti": ["সম্প্রতি"],
+      "shompotti": ["সম্পত্তি"],
+      "sompotti": ["সম্পত্তি"],
+      "shompod": ["সম্পদ"],
+      "sompod": ["সম্পদ"],
+      "lomba": ["লম্বা"],
+      "kombol": ["কম্বল"],
+      "shombhob": ["সম্ভব"],
+      "sombhob": ["সম্ভব"],
+      "shombhabona": ["সম্ভাবনা"],
+      "sombhabona": ["সম্ভাবনা"],
+      "shomman": ["সম্মান"],
+      "somman": ["সম্মান"],
+      "shommelon": ["সম্মেলন"],
+      "sommelon": ["সম্মেলন"],
+
+      // 5. ক্ত / প্ত / ব্ধ / ব্দ
+      "rokto": ["রক্ত", "রক্তাক্ত"],
+      "shokti": ["শক্তি"],
+      "sokti": ["শক্তি"],
+      "mukti": ["মুক্তি", "মুক্তিযুদ্ধ", "মুক্তিযোদ্ধা"],
+      "bhokti": ["ভক্তি"],
+      "jukto": ["যুক্ত"],
+      "jukti": ["যুক্তি"],
+      "bektigoto": ["ব্যক্তিগত", "ব্যক্তি"],
+      "byakti": ["ব্যক্তি"],
+      "shobdo": ["শব্দ"],
+      "sobdo": ["শব্দ"],
+
+      // 6. ত্ত / ত্থ / দ্দ / দ্ধ
+      "sotto": ["সত্য", "সত্যি"],
+      "shotto": ["সত্য"],
+      "mittha": ["মিথ্যা"],
+      "uttor": ["উত্তর"],
+      "utsob": ["উৎসব"],
+      "buddhi": ["বুদ্ধি"],
+      "budhhi": ["বুদ্ধি"],
+      "juddho": ["যুদ্ধ"],
+      "juddh": ["যুদ্ধ"],
+      "shuddho": ["শুদ্ধ"],
+      "suddho": ["শুদ্ধ"],
+      "briddhi": ["বৃদ্ধি"],
+      "baddho": ["বাধ্য"],
+      "boddho": ["বদ্ধ"],
+
+      // 7. শ্ব / স্ব / স্ম / স্ন
+      "biswas": ["বিশ্বাস"],
+      "bisshash": ["বিশ্বাস"],
+      "bishwas": ["বিশ্বাস"],
+      "bisshas": ["বিশ্বাস"],
+      "bisso": ["বিশ্ব"],
+      "bishwo": ["বিশ্ব"],
+      "bissho": ["বিশ্ব"],
+      "bisshobiddaloy": ["বিশ্ববিদ্যালয়"],
+      "shadhinota": ["স্বাধীনতা"],
+      "sadhinota": ["স্বাধীনতা"],
+      "shadhin": ["স্বাধীন"],
+      "sadhin": ["স্বাধীন"],
+      "swagotom": ["স্বাগতম"],
+      "sagotom": ["স্বাগতম"],
+      "shagotom": ["স্বাগতম"],
+      "swartho": ["স্বার্থ"],
+      "shartho": ["স্বার্থ"],
+      "smriti": ["স্মৃতি"],
+      "smoron": ["স্মরণ"],
+
+      // 8. প্র / গ্র / ভ্র / ত্র / শ্র / দ্র
+      "prothom": ["প্রথম"],
+      "prodhan": ["প্রধান"],
+      "prokash": ["প্রকাশ"],
+      "prokriti": ["প্রকৃতি"],
+      "prokrito": ["প্রকৃত"],
+      "proshno": ["প্রশ্ন"],
+      "prosno": ["প্রশ্ন"],
+      "gram": ["গ্রাম"],
+      "prem": ["প্রেম"],
+      "priyo": ["প্রিয়", "প্রিয়"],
+      "pran": ["প্রাণ"],
+      "chatro": ["ছাত্র"],
+      "chhatro": ["ছাত্র"],
+      "shrom": ["শ্রম"],
+      "srom": ["শ্রম"],
+      "sroddha": ["শ্রদ্ধা"],
+      "druto": ["দ্রুত"],
+      "bhodro": ["ভদ্র"],
+
+      // 9. জ্ঞ / ঞ্চ / ঞ্জ / ঙ্গ / ঙ্ক
+      "gyan": ["জ্ঞান"],
+      "bignan": ["বিজ্ঞান"],
+      "biggapon": ["বিজ্ঞাপন"],
+      "jongol": ["জঙ্গল"],
+      "shongram": ["সংগ্রাম"],
+      "songram": ["সংগ্রাম"],
+      "shongbidhan": ["সংবিধান"],
+      "songbidhan": ["সংবিধান"],
+      "shongshad": ["সংসদ"],
+      "songsad": ["সংসদ"],
+      "shongbad": ["সংবাদ"],
+      "songbad": ["সংবাদ"],
+      "shongothon": ["সংগঠন"],
+      "songothon": ["সংগঠন"],
+      "shongskriti": ["সংস্কৃতি"],
+      "songskriti": ["সংস্কৃতি"],
+      "shongshar": ["সংসার"],
+      "songsar": ["সংসার"],
+      "shongkha": ["সংখ্যা"],
+      "sonkha": ["সংখ্যা"],
+      "songkha": ["সংখ্যা"],
+      "shongkhepe": ["সংক্ষেপে"],
+      "songkhepe": ["সংক্ষেপে"],
+      "bongo": ["বঙ্গ", "বাংলা", "বাংলাদেশ"],
+
+      // 10. দ্ম / ত্ম / ন্ম
+      "podma": ["পদ্মা"],
+      "padma": ["পদ্মা"],
+      "attiyo": ["আত্মীয়"],
+      "atiyo": ["আত্মীয়"],
+      "atto": ["আত্মা"],
+      "attobishwas": ["আত্মবিশ্বাস"],
+      "jonmo": ["জন্ম", "জন্মদিন"],
+      "jonmodin": ["জন্মদিন"],
+
+      // 11. ল্ল / চ্চ / চ্ছ / জ্জ
+      "ullash": ["উল্লাস"],
+      "palla": ["পাল্লা"],
+      "uccho": ["উচ্চ"],
+      "uchharon": ["উচ্চারণ"],
+      "iccha": ["ইচ্ছা"],
+      "accha": ["আচ্ছা"],
+      "guccho": ["গুচ্ছ"],
+      "lojja": ["লজ্জা"],
+      "ujjol": ["উজ্জ্বল"],
+
+      // 12. ন্য / ধ্য / ব্য / ত্য
+      "onno": ["অন্য", "অন্যরকম"],
+      "kalyan": ["কল্যাণ"],
+      "kollan": ["কল্যাণ"],
+      "mullo": ["মূল্য"],
+      "moddhe": ["মধ্যে"],
+      "modhye": ["মধ্যে"],
+      "byartho": ["ব্যর্থ"],
+      "byabohar": ["ব্যবহার"],
+      "biddaloy": ["বিদ্যালয়"],
+      "bortoman": ["বর্তমান"],
+      "bhobisshot": ["ভবিষ্যৎ"],
+      "otit": ["অতীত"],
+
+      // Core Lexicon
+      "kemon": ["কেমন", "কেমনে"],
+      "acho": ["আছো", "আছ"],
+      "achen": ["আছেন"],
+      "achi": ["আছি"],
+      "bhalo": ["ভালো", "ভালোই", "ভালোবাসা", "ভালোবাসি"],
+      "valo": ["ভালো", "ভালোই", "ভালোবাসা", "ভালোবাসি"],
+      "dhonnobad": ["ধন্যবাদ"],
+      "thik": ["ঠিক", "ঠিকঠাক", "ঠিকানা", "ঠিকই"],
+      "shob": ["সব", "সবাই", "সবকিছু"],
+      "sob": ["সব", "সবাই", "সবকিছু"],
+      "shobai": ["সবাই"],
+      "sobai": ["সবাই"],
+      "shokal": ["সকাল", "শুভ সকাল"],
+      "sokal": ["সকাল"],
+      "somoy": ["সময়"],
+      "somossa": ["সমস্যা", "সমাধান"],
+      "shomossha": ["সমস্যা"],
+      "somossha": ["সমস্যা"],
+      "khobor": ["খবর"],
+      "basha": ["বাসা"],
+      "basa": ["বাসা"],
+      "bari": ["বাড়ি", "বাড়ি"],
+      "ghor": ["ঘর"],
+      "rasta": ["রাস্তা"],
+      "skul": ["স্কুল"],
+      "school": ["স্কুল"],
+      "college": ["কলেজ"],
+      "ami": ["আমি", "আমরা", "আমাকে", "আমার", "আমায়"],
+      "amar": ["আমার"],
+      "amra": ["আমরা"],
+      "amader": ["আমাদের"],
+      "amake": ["আমাকে"],
+      "tumi": ["তুমি", "তোমরা", "তোমাকে", "তোমার"],
+      "tomar": ["তোমার"],
+      "tomra": ["তোমরা"],
+      "tomader": ["তোমাদের"],
+      "tomake": ["তোমাকে"],
+      "apni": ["আপনি", "আপনারা", "আপনাকে", "আপনার"],
+      "apnar": ["আপনার"],
+      "apnara": ["আপনারা"],
+      "apnader": ["আপনাদের"],
+      "apnake": ["আপনাকে"],
+      "ki": ["কি", "কী"],
+      "keno": ["কেন"],
+      "kokhon": ["কখন"],
+      "kothay": ["কোথায়"],
+      "kothai": ["কোথায়"],
+      "korbo": ["করব", "করবো"],
+      "korchi": ["করছি"],
+      "korlam": ["করলাম"],
+      "korechi": ["করেছি"],
+      "korben": ["করবেন"],
+      "korun": ["করুন"],
+      "bolbo": ["বলব", "বলবো"],
+      "bolchi": ["বলছি"],
+      "bollam": ["বললাম"],
+      "bolechi": ["বলেছি"],
+      "bolben": ["বলবেন"],
+      "bolun": ["বলুন"],
+      "dekhbo": ["দেখব", "দেখবো"],
+      "dekhchi": ["দেখছি"],
+      "dekhlam": ["দেখলাম"],
+      "dekhechi": ["দেখেছি"],
+      "dekhun": ["দেখুন"],
+      "khabo": ["খাব", "খাবো"],
+      "khacchi": ["খাচ্ছি"],
+      "khelam": ["খেলাম"],
+      "kheyechi": ["খেয়েছি"],
+      "jabo": ["যাব", "যাবো"],
+      "jacchi": ["যাচ্ছি"],
+      "gelam": ["গেলাম"],
+      "giyechi": ["গিয়েছি"],
+      "asbo": ["আসব", "আসবো"],
+      "ashbo": ["আসব", "আসবো"],
+      "aschi": ["আসছি"],
+      "ashchi": ["আসছি"],
+      "thakbo": ["থাকব", "থাকবো"],
+      "thekechi": ["থেকেছি"],
+      "parbo": ["পারব", "পারবো"],
+      "perechi": ["পেরেছি"],
+      "jani": ["জানি"],
+      "janina": ["জানিনা"],
+      "hobe": ["হবে"],
+      "manush": ["মানুষ", "মানুষের", "মানুষকে"],
+      "manus": ["মানুষ"],
+      "bondhu": ["বন্ধু", "বন্ধুরা"],
+      "bhai": ["ভাই"],
+      "bon": ["বোন"],
+      "baba": ["বাবা"],
+      "ma": ["মা"],
+      "bangla": ["বাংলা", "বাংলাদেশ", "বাঙালি"],
+      "bangladesh": ["বাংলাদেশ"],
+      "desh": ["দেশ", "দেশের", "দেশে"],
+      "onek": ["অনেক"],
+      "kichu": ["কিছু"],
+      "khub": ["খুব"],
+      "shathe": ["সাথে"],
+      "sathe": ["সাথে"],
+      "ar": ["আর"],
+      "na": ["না"],
+      "ha": ["হ্যাঁ"],
+      "gan": ["গান"],
+      "gaan": ["গান"],
+      "chai": ["চাই"],
+      "inshallah": ["ইনশাল্লাহ"],
+      "techuboard": ["টেকুবোর্ড"],
+      "avro": ["অভ্র"],
+      "keyboard": ["কিবোর্ড"]
+    };
+
+    function getWebBanglaSuggestions(query) {
+      if (!query) return ["কেমন আছেন?", "ভালো আছি", "ধন্যবাদ", "ঠিক আছে", "ইনশাল্লাহ", "শুভ সকাল"];
+      const q = query.toLowerCase();
+      const candidates = [];
+
+      // 1. Direct Banglish Lexicon match
+      if (KBD_BANGLISH_LEXICON[q]) {
+        for (const w of KBD_BANGLISH_LEXICON[q]) {
+          if (!candidates.includes(w)) candidates.push(w);
+        }
+      }
+
+      // 2. Strict Avro Engine Transliteration on lowercased query
+      const avroLower = parseAvroWeb(q);
+      if (avroLower && !candidates.includes(avroLower)) {
+        candidates.push(avroLower);
+      }
+
+      if (query !== q && query !== query.toUpperCase()) {
+        const avroRaw = parseAvroWeb(query);
+        if (avroRaw && !candidates.includes(avroRaw)) {
+          candidates.push(avroRaw);
+        }
+      }
+
+      // 3. Prefix matching in Banglish Lexicon
+      for (const [k, v] of Object.entries(KBD_BANGLISH_LEXICON)) {
+        if (k.startsWith(q) && k !== q) {
+          for (const w of v) {
+            if (!candidates.includes(w)) candidates.push(w);
+          }
+        }
+        if (candidates.length >= 8) break;
+      }
+
+      return candidates.slice(0, 8);
+    }
+
+    const kbdEnglishLexicon = {
+      "hel": ["hello", "help", "held", "hello there", "helicopter", "hel"],
+      "how": ["how", "how are you", "however", "how is it", "how much", "how"],
+      "tha": ["thanks", "thank you", "that", "than", "thank", "tha"],
+      "goo": ["good", "good morning", "good night", "google", "goodbye", "goo"],
+      "tech": ["tech", "technology", "techuboard", "technical", "techu", "tech"]
+    };
+
+    function renderKbdSuggestions() {
+      const strip = document.getElementById('kbdSuggestionStrip');
+      const modeBadge = document.getElementById('kbdModeBadge');
+      const modeBtn = document.getElementById('kbdModeBtn');
+
+      if (modeBadge) modeBadge.innerText = kbdIsAvro ? "TechuAvro" : "English";
+      if (modeBtn) modeBtn.innerText = kbdIsAvro ? "TechuAvro" : "ENG";
+
+      let suggestions = [];
+      if (kbdIsAvro) {
+        suggestions = getWebBanglaSuggestions(kbdComposing);
+      } else {
+        const query = kbdComposing.toLowerCase();
+        if (kbdEnglishLexicon[query]) {
+          suggestions = kbdEnglishLexicon[query];
+        } else if (query.length > 0) {
+          suggestions = [query, query + "s", query + "ed", query + "ing"];
+        } else {
+          suggestions = ["How are you?", "Thank you", "All good", "Hello", "Great", "See you"];
+        }
+      }
+
+      // Render 3 primary + 3+ slide-to-reveal chips
+      strip.innerHTML = "";
+      suggestions.forEach((word, idx) => {
+        const isHero = (idx === 0 && kbdComposing.length > 0);
+        const chip = document.createElement("div");
+        chip.className = "kbd-suggest-chip" + (isHero ? " hero" : "");
+        chip.innerText = word + (isHero ? " ★" : "");
+        chip.onclick = () => applyKbdSuggestion(word);
+        strip.appendChild(chip);
+      });
+
+      // Update Input display with cursor position
+      updateKbdInputView();
+
+      // Scroll to start on new input
+      strip.scrollLeft = 0;
+    }
+
+    // Audio Tactile Micro-Haptic Click
+    let audioCtx = null;
+    function playTactileClick() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.012);
+        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.012);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.012);
+        if (navigator.vibrate) navigator.vibrate(6);
+      } catch(e) {}
+    }
+
+    function escapeKbdHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    let kbdCursorIndex = -1;
+
+    function getKbdDisplayString() {
+      let hero = "";
+      if (kbdIsAvro) {
+        if (kbdComposing) {
+          const sugs = getWebBanglaSuggestions(kbdComposing);
+          hero = sugs[0] || parseAvroWeb(kbdComposing) || kbdComposing;
+        }
+      } else {
+        hero = kbdComposing;
+      }
+      if (!kbdFullSentence && !hero) {
+        return `<span style="color:#57606a;">${kbdIsAvro ? 'TechuAvro: টাইপ করুন...' : 'English: Type here...'}</span>`;
+      }
+      return (kbdFullSentence ? kbdFullSentence + " " : "") + hero;
+    }
+
+    function updateKbdInputView() {
+      const inputEl = document.getElementById('kbdInputText');
+      const rawEl = document.getElementById('kbdComposingRaw');
+      const hintEl = document.getElementById('kbdCursorHint');
+      if (!inputEl) return;
+
+      const fullStr = getKbdDisplayString();
+      if (kbdCursorIndex === -1 || kbdCursorIndex > fullStr.length) {
+        kbdCursorIndex = fullStr.length;
+      }
+
+      const before = fullStr.slice(0, kbdCursorIndex);
+      const after = fullStr.slice(kbdCursorIndex);
+
+      inputEl.innerHTML = `${escapeKbdHtml(before)}<span id="kbdBlinkCursor" style="display:inline-block; width:2px; height:15px; background:#00e5ff; margin:0 1px; vertical-align:middle; animation:blinkCursor 1s infinite;"></span>${escapeKbdHtml(after)}`;
+      if (rawEl) {
+        rawEl.innerText = kbdComposing ? "(" + kbdComposing + ")" : "";
+      }
+      if (hintEl) {
+        hintEl.style.display = 'inline-block';
+        hintEl.innerText = `Pos: ${kbdCursorIndex}/${fullStr.length}`;
+      }
+    }
+
+    function attachSpacebarCursorSwipe(spaceBtn) {
+      let startX = 0;
+      let isDragging = false;
+      let lastDispatchedStep = 0;
+      const stepThresholdPx = 14;
+
+      function onPointerDown(e) {
+        const pageX = (e.touches && e.touches[0]) ? e.touches[0].pageX : e.pageX;
+        startX = pageX;
+        isDragging = false;
+        lastDispatchedStep = 0;
+        spaceBtn.classList.add('dragging');
+        playTactileClick();
+
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+        window.addEventListener('touchmove', onPointerMove, { passive: false });
+        window.addEventListener('touchend', onPointerUp);
+      }
+
+      function onPointerMove(e) {
+        const pageX = (e.touches && e.touches[0]) ? e.touches[0].pageX : e.pageX;
+        const deltaX = pageX - startX;
+
+        if (!isDragging && Math.abs(deltaX) > 8) {
+          isDragging = true;
+          if (e.cancelable) e.preventDefault();
+        }
+
+        if (isDragging) {
+          if (e.cancelable) e.preventDefault();
+          const currentStep = Math.trunc(deltaX / stepThresholdPx);
+          if (currentStep !== lastDispatchedStep) {
+            const stepDiff = currentStep - lastDispatchedStep;
+            lastDispatchedStep = currentStep;
+
+            const fullStr = getKbdDisplayString();
+            if (kbdCursorIndex === -1 || kbdCursorIndex > fullStr.length) {
+              kbdCursorIndex = fullStr.length;
+            }
+            kbdCursorIndex = Math.max(0, Math.min(fullStr.length, kbdCursorIndex + stepDiff));
+            playTactileClick();
+            updateKbdInputView();
+          }
+        }
+      }
+
+      function onPointerUp(e) {
+        window.removeEventListener('mousemove', onPointerMove);
+        window.removeEventListener('mouseup', onPointerUp);
+        window.removeEventListener('touchmove', onPointerMove);
+        window.removeEventListener('touchend', onPointerUp);
+
+        spaceBtn.classList.remove('dragging');
+
+        if (isDragging) {
+          isDragging = false;
+        } else {
+          pressKbdSpace();
+        }
+      }
+
+      spaceBtn.addEventListener('mousedown', onPointerDown);
+      spaceBtn.addEventListener('touchstart', onPointerDown, { passive: false });
+    }
+
+    function pressKbdKey(char) {
+      playTactileClick();
+      const c = kbdIsShifted ? char.toUpperCase() : char;
+      kbdComposing += c;
+      kbdCursorIndex = -1;
+      renderKbdSuggestions();
+    }
+
+    function pressKbdBackspace() {
+      playTactileClick();
+      if (kbdComposing.length > 0) {
+        kbdComposing = kbdComposing.slice(0, -1);
+      } else if (kbdFullSentence.length > 0) {
+        const words = kbdFullSentence.trim().split(" ");
+        words.pop();
+        kbdFullSentence = words.join(" ");
+      }
+      kbdCursorIndex = -1;
+      renderKbdSuggestions();
+    }
+
+    function pressKbdSpace() {
+      playTactileClick();
+      if (kbdComposing.length > 0) {
+        const sugs = kbdIsAvro ? getWebBanglaSuggestions(kbdComposing) : [kbdComposing];
+        const top = sugs[0] || kbdComposing;
+        applyKbdSuggestion(top);
+      } else {
+        kbdFullSentence += " ";
+        kbdCursorIndex = -1;
+        renderKbdSuggestions();
+      }
+    }
+
+    function pressKbdShift() {
+      playTactileClick();
+      kbdIsShifted = !kbdIsShifted;
+      renderWebKbdKeys();
+    }
+
+    function toggleKbdMode() {
+      playTactileClick();
+      kbdIsAvro = !kbdIsAvro;
+      renderKbdSuggestions();
+      renderWebKbdKeys();
+      showToastMsg(kbdIsAvro ? "Switched to TechuAvro (Bangla)" : "Switched to English");
+    }
+
+    function applyKbdSuggestion(word) {
+      playTactileClick();
+      const clean = word.replace(" ★", "").replace(" (Learned)", "").replace(" (User)", "");
+      kbdFullSentence = (kbdFullSentence ? kbdFullSentence + " " : "") + clean;
+      kbdComposing = "";
+      kbdCursorIndex = -1;
+      renderKbdSuggestions();
+      showToastMsg('Selected: "' + clean + '"');
+    }
+
+    function applyKbdPaste(txt) {
+      playTactileClick();
+      kbdFullSentence = (kbdFullSentence ? kbdFullSentence + " " : "") + txt;
+      kbdComposing = "";
+      kbdCursorIndex = -1;
+      renderKbdSuggestions();
+      showToastMsg('Pasted: "' + txt.slice(0, 22) + '..."');
+    }
+
+    // Dynamic Keyboard Rows: QWERTY vs ?123 Symbols vs =\<
+    let kbdIsSymbols = false;
+    let kbdIsSecondarySymbols = false;
+    let kbdIsBanglaNumerals = true;
+
+    function renderWebKbdKeys() {
+      const container = document.getElementById('kbdRowsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!kbdIsSymbols) {
+        // QWERTY Layout
+        const r1 = ['q','w','e','r','t','y','u','i','o','p'];
+        const r2 = ['a','s','d','f','g','h','j','k','l'];
+        const r3 = ['z','x','c','v','b','n','m'];
+
+        let row1El = document.createElement('div');
+        row1El.className = 'kbd-row-keys';
+        r1.forEach(k => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = kbdIsShifted ? k.toUpperCase() : k;
+          b.onclick = () => pressKbdKey(k);
+          row1El.appendChild(b);
+        });
+        container.appendChild(row1El);
+
+        let row2El = document.createElement('div');
+        row2El.className = 'kbd-row-keys';
+        r2.forEach(k => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = kbdIsShifted ? k.toUpperCase() : k;
+          b.onclick = () => pressKbdKey(k);
+          row2El.appendChild(b);
+        });
+        container.appendChild(row2El);
+
+        let row3El = document.createElement('div');
+        row3El.className = 'kbd-row-keys';
+        let shiftBtn = document.createElement('div');
+        shiftBtn.className = 'k-btn sp';
+        shiftBtn.style.color = kbdIsShifted ? '#00e5ff' : '#fff';
+        shiftBtn.innerText = '⇧';
+        shiftBtn.onclick = pressKbdShift;
+        row3El.appendChild(shiftBtn);
+
+        r3.forEach(k => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = kbdIsShifted ? k.toUpperCase() : k;
+          b.onclick = () => pressKbdKey(k);
+          row3El.appendChild(b);
+        });
+
+        let backspaceBtn = document.createElement('div');
+        backspaceBtn.className = 'k-btn sp';
+        backspaceBtn.innerText = '⌫';
+        backspaceBtn.onclick = pressKbdBackspace;
+        row3El.appendChild(backspaceBtn);
+        container.appendChild(row3El);
+
+        let row4El = document.createElement('div');
+        row4El.className = 'kbd-row-keys';
+
+        let symBtn = document.createElement('div');
+        symBtn.className = 'k-btn sp';
+        symBtn.innerText = '?123';
+        symBtn.onclick = () => { playTactileClick(); kbdIsSymbols = true; kbdIsSecondarySymbols = false; renderWebKbdKeys(); };
+        row4El.appendChild(symBtn);
+
+        let modeBtn = document.createElement('div');
+        modeBtn.className = 'k-btn sp';
+        modeBtn.style.fontSize = '11px';
+        modeBtn.style.fontWeight = '700';
+        modeBtn.style.color = '#00e5ff';
+        modeBtn.innerText = kbdIsAvro ? 'TechuAvro' : 'ENG';
+        modeBtn.onclick = toggleKbdMode;
+        row4El.appendChild(modeBtn);
+
+        let commaBtn = document.createElement('div');
+        commaBtn.className = 'k-btn';
+        commaBtn.style.flex = '0.6';
+        commaBtn.innerText = ',';
+        commaBtn.onclick = () => pressKbdKey(',');
+        row4El.appendChild(commaBtn);
+
+        let spaceBtn = document.createElement('div');
+        spaceBtn.className = 'k-btn spacebar';
+        spaceBtn.innerHTML = `<span class="spacebar-arrow">◂</span><span>${kbdIsAvro ? 'TechuAvro' : 'Space'}</span><span class="spacebar-arrow">▸</span>`;
+        attachSpacebarCursorSwipe(spaceBtn);
+        row4El.appendChild(spaceBtn);
+
+        let periodBtn = document.createElement('div');
+        periodBtn.className = 'k-btn';
+        periodBtn.style.flex = '0.6';
+        periodBtn.innerText = kbdIsAvro ? '। ' : '. ';
+        periodBtn.onclick = () => pressKbdKey(kbdIsAvro ? '। ' : '. ');
+        row4El.appendChild(periodBtn);
+
+        let enterBtn = document.createElement('div');
+        enterBtn.className = 'k-btn enter';
+        enterBtn.innerText = 'Done';
+        enterBtn.onclick = () => { playTactileClick(); toggleMobileKeyboard(); };
+        row4El.appendChild(enterBtn);
+
+        container.appendChild(row4El);
+      } else if (!kbdIsSecondarySymbols) {
+        // Primary Symbols Page (?123)
+        const digits = kbdIsBanglaNumerals
+          ? ['১','২','৩','৪','৫','৬','৭','৮','৯','০']
+          : ['1','2','3','4','5','6','7','8','9','0'];
+        const r2 = ['৳','@','#','$','%','&','*','-','+','(',')'];
+        const r3 = ['!','"',"'",':',';','/','?','।'];
+
+        let row1El = document.createElement('div');
+        row1El.className = 'kbd-row-keys';
+        digits.forEach(d => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = d;
+          b.onclick = () => insertKbdDirect(d);
+          row1El.appendChild(b);
+        });
+        container.appendChild(row1El);
+
+        let row2El = document.createElement('div');
+        row2El.className = 'kbd-row-keys';
+        r2.forEach(s => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          if (s === '৳') {
+            b.style.color = '#00e5ff';
+            b.style.fontWeight = '700';
+          }
+          b.innerText = s;
+          b.onclick = () => insertKbdDirect(s);
+          row2El.appendChild(b);
+        });
+        container.appendChild(row2El);
+
+        let row3El = document.createElement('div');
+        row3El.className = 'kbd-row-keys';
+
+        let secToggle = document.createElement('div');
+        secToggle.className = 'k-btn sp';
+        secToggle.innerText = '=\\<';
+        secToggle.style.color = '#00e5ff';
+        secToggle.onclick = () => { playTactileClick(); kbdIsSecondarySymbols = true; renderWebKbdKeys(); };
+        row3El.appendChild(secToggle);
+
+        r3.forEach(s => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = s;
+          b.onclick = () => insertKbdDirect(s);
+          row3El.appendChild(b);
+        });
+
+        let backspaceBtn = document.createElement('div');
+        backspaceBtn.className = 'k-btn sp';
+        backspaceBtn.innerText = '⌫';
+        backspaceBtn.onclick = pressKbdBackspace;
+        row3El.appendChild(backspaceBtn);
+        container.appendChild(row3El);
+
+        let row4El = document.createElement('div');
+        row4El.className = 'kbd-row-keys';
+
+        let abcBtn = document.createElement('div');
+        abcBtn.className = 'k-btn sp';
+        abcBtn.style.color = '#00e5ff';
+        abcBtn.innerText = 'ABC';
+        abcBtn.onclick = () => { playTactileClick(); kbdIsSymbols = false; kbdIsSecondarySymbols = false; renderWebKbdKeys(); };
+        row4El.appendChild(abcBtn);
+
+        let scriptToggle = document.createElement('div');
+        scriptToggle.className = 'k-btn sp';
+        scriptToggle.style.fontSize = '12px';
+        scriptToggle.style.color = '#80cbc4';
+        scriptToggle.innerText = kbdIsBanglaNumerals ? '১২৩' : '123';
+        scriptToggle.onclick = () => { playTactileClick(); kbdIsBanglaNumerals = !kbdIsBanglaNumerals; renderWebKbdKeys(); };
+        row4El.appendChild(scriptToggle);
+
+        let spaceBtn = document.createElement('div');
+        spaceBtn.className = 'k-btn spacebar';
+        spaceBtn.innerHTML = `<span class="spacebar-arrow">◂</span><span>Space</span><span class="spacebar-arrow">▸</span>`;
+        attachSpacebarCursorSwipe(spaceBtn);
+        row4El.appendChild(spaceBtn);
+
+        let dotBtn = document.createElement('div');
+        dotBtn.className = 'k-btn';
+        dotBtn.style.flex = '0.6';
+        dotBtn.innerText = '.';
+        dotBtn.onclick = () => insertKbdDirect('.');
+        row4El.appendChild(dotBtn);
+
+        let enterBtn = document.createElement('div');
+        enterBtn.className = 'k-btn enter';
+        enterBtn.innerText = 'Done';
+        enterBtn.onclick = () => { playTactileClick(); toggleMobileKeyboard(); };
+        row4El.appendChild(enterBtn);
+
+        container.appendChild(row4El);
+      } else {
+        // Secondary Math & Rare Symbols Page (=\<)
+        const r1 = ['~','`','|','•','√','π','÷','×','§','∆'];
+        const r2 = ['£','€','¥','¢','^','°','=','{','}','\\'];
+        const r3 = ['%','<','>','[',']','©','®','™'];
+
+        let row1El = document.createElement('div');
+        row1El.className = 'kbd-row-keys';
+        r1.forEach(s => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = s;
+          b.onclick = () => insertKbdDirect(s);
+          row1El.appendChild(b);
+        });
+        container.appendChild(row1El);
+
+        let row2El = document.createElement('div');
+        row2El.className = 'kbd-row-keys';
+        r2.forEach(s => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = s;
+          b.onclick = () => insertKbdDirect(s);
+          row2El.appendChild(b);
+        });
+        container.appendChild(row2El);
+
+        let row3El = document.createElement('div');
+        row3El.className = 'kbd-row-keys';
+
+        let primToggle = document.createElement('div');
+        primToggle.className = 'k-btn sp';
+        primToggle.innerText = '?123';
+        primToggle.style.color = '#00e5ff';
+        primToggle.onclick = () => { playTactileClick(); kbdIsSecondarySymbols = false; renderWebKbdKeys(); };
+        row3El.appendChild(primToggle);
+
+        r3.forEach(s => {
+          let b = document.createElement('div');
+          b.className = 'k-btn';
+          b.innerText = s;
+          b.onclick = () => insertKbdDirect(s);
+          row3El.appendChild(b);
+        });
+
+        let backspaceBtn = document.createElement('div');
+        backspaceBtn.className = 'k-btn sp';
+        backspaceBtn.innerText = '⌫';
+        backspaceBtn.onclick = pressKbdBackspace;
+        row3El.appendChild(backspaceBtn);
+        container.appendChild(row3El);
+
+        let row4El = document.createElement('div');
+        row4El.className = 'kbd-row-keys';
+
+        let abcBtn = document.createElement('div');
+        abcBtn.className = 'k-btn sp';
+        abcBtn.style.color = '#00e5ff';
+        abcBtn.innerText = 'ABC';
+        abcBtn.onclick = () => { playTactileClick(); kbdIsSymbols = false; kbdIsSecondarySymbols = false; renderWebKbdKeys(); };
+        row4El.appendChild(abcBtn);
+
+        let spaceBtn = document.createElement('div');
+        spaceBtn.className = 'k-btn spacebar';
+        spaceBtn.innerHTML = `<span class="spacebar-arrow">◂</span><span>Space</span><span class="spacebar-arrow">▸</span>`;
+        attachSpacebarCursorSwipe(spaceBtn);
+        row4El.appendChild(spaceBtn);
+
+        let enterBtn = document.createElement('div');
+        enterBtn.className = 'k-btn enter';
+        enterBtn.innerText = 'Done';
+        enterBtn.onclick = () => { playTactileClick(); toggleMobileKeyboard(); };
+        row4El.appendChild(enterBtn);
+
+        container.appendChild(row4El);
+      }
+    }
+
+    function insertKbdDirect(char) {
+      playTactileClick();
+      kbdFullSentence = (kbdFullSentence ? kbdFullSentence : "") + char;
+      kbdCursorIndex = -1;
+      renderKbdSuggestions();
+    }
+
+    // Initial render
+    setTimeout(() => {
+      renderKbdSuggestions();
+      renderWebKbdKeys();
+    }, 300);
+
+    // Clock
+    function updateClock() {
+      const d = new Date();
+      let h = d.getHours();
+      let m = d.getMinutes();
+      h = h < 10 ? '0' + h : h;
+      m = m < 10 ? '0' + m : m;
+      const el = document.getElementById('mobClock');
+      if (el) el.innerText = h + ':' + m;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function openPhoneModal() {
+      document.getElementById('phoneQrModal').style.display = 'flex';
+    }
+    function closePhoneModal() {
+      document.getElementById('phoneQrModal').style.display = 'none';
+    }
+  </script>
+
+  <!-- QR Modal for Real Phone Testing -->
+  <div id="phoneQrModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#161c24; border:1px solid #30363d; border-radius:18px; width:360px; padding:24px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,0.8); position:relative;">
+      <button onclick="closePhoneModal()" style="position:absolute; top:14px; right:14px; background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer;">✕</button>
+      <div style="font-size:28px; margin-bottom:6px;">📱</div>
+      <div style="font-size:17px; font-weight:700; color:#fff;">Test on Real Phone</div>
+      <div style="font-size:12px; color:#8b949e; margin-top:4px; line-height:1.4;">আপনার ফোনকে একই Wi-Fi-তে কানেক্ট করে নিচের QR কোডটি স্ক্যান করুন অথবা লিংকে যান:</div>
+      
+      <div style="background:#fff; padding:12px; border-radius:12px; display:inline-block; margin:16px auto;">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://192.168.10.78:8080/mobile" alt="QR Code" style="width:160px; height:160px; display:block;">
+      </div>
+
+      <div style="background:#0d1117; border:1px solid #30363d; padding:10px 14px; border-radius:8px; display:flex; align-items:center; justify-content:space-between; margin-top:10px;">
+        <span style="font-family:monospace; font-size:13px; color:#00e5ff; font-weight:600;">http://192.168.10.78:8080</span>
+        <button onclick="navigator.clipboard.writeText('http://192.168.10.78:8080'); showToastMsg('Copied URL!')" style="background:#21262d; border:1px solid #30363d; color:#c9d1d9; font-size:11px; padding:4px 8px; border-radius:4px; cursor:pointer;">Copy</button>
+      </div>
+
+      <div style="margin-top:16px;">
+        <a href="/mobile" target="_blank" style="color:#58a6ff; font-size:12px; text-decoration:none;">Open Fullscreen Mobile View in New Tab ↗</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

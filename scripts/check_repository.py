@@ -32,8 +32,8 @@ SECRET_PATTERNS = (
 EMAIL_PATTERN = re.compile(rb'[A-Za-z0-9_.+%-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})')
 EXAMPLE_EMAIL_DOMAINS = {b'example.com', b'example.org', b'example.net'}
 SNIPPET_SOURCE_PREFIXES = (
-    'clipy_macos/Sources/Snippets/',
-    'clipy_macos/Sources/UI/Snippets/',
+    'techuboard_macos/Sources/Snippets/',
+    'techuboard_macos/Sources/UI/Snippets/',
 )
 
 

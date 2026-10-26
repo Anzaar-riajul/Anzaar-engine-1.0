@@ -1,0 +1,40 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: techuboard-relay-alerts
+  namespace: techuboard-prod
+  labels:
+    role: alert-rules
+    app: techuboard-relay
+spec:
+  groups:
+  - name: techuboard.alerts
+    rules:
+    - alert: RelayHighHandshakeFailureRate
+      expr: rate(relay_handshake_failures_total[5m]) / rate(relay_handshake_attempts_total[5m]) > 0.05
+      for: 2m
+      labels:
+        severity: critical
+        pager: on-call
+      annotations:
+        summary: "Techuboard Relay Handshake Failure Rate > 5%"
+        description: "High cryptographic handshake failure rate detected on relay server pods. Possible MITM or TLS degradation."
+
+    - alert: RelayDeliverySLOBreach
+      expr: (sum(rate(relay_delivery_success_total[5m])) / sum(rate(relay_delivery_total[5m]))) < 0.999
+      for: 5m
+      labels:
+        severity: warning
+        pager: sre-team
+      annotations:
+        summary: "Sync Delivery Success Rate dropped below 99.9% SLO"
+        description: "Clipboard and packet relay delivery success rate is degrading."
+
+    - alert: RelayMemoryPressure
+      expr: container_memory_working_set_bytes{container="relay"} / container_spec_memory_limit_bytes{container="relay"} > 0.85
+      for: 3m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Relay container memory usage > 85%"
+        description: "Pod memory reaching limits. HPA should scale or investigated for leaks."

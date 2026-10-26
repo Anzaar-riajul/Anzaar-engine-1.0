@@ -376,12 +376,17 @@ extension SyncReliabilityMethods on SyncManager {
     final hash = sha256.convert(utf8.encode(content)).toString();
     final payload = _encrypt(content);
     if (payload == null) return false;
+
+    final seq = (_lastSentSeqNum[peerId] ?? 0) + 1;
+    _lastSentSeqNum[peerId] = seq;
+
     final env = SyncEnvelope.make(
       type: SyncType.historyDirect,
       peerId: this.peerId,
       name: displayName,
       hash: hash,
       payload: payload,
+      seqNum: seq,
     );
     final data = syncEncodeFrame(env);
     if (data == null) return false;

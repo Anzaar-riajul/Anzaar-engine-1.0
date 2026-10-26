@@ -25,6 +25,8 @@ import 'notification_manager.dart';
 import 'storage_paths.dart';
 import 'features/transfers/transfer_notifications.dart';
 import 'sync/crypto.dart';
+import 'sync/peer_identity.dart';
+import 'sync/session_crypto.dart';
 import 'sync/text_delivery_receipts.dart';
 import 'sync/relay_client.dart';
 import 'sync/diagnostics.dart';
@@ -33,7 +35,7 @@ import 'sync/run_lifecycle.dart';
 import 'sync/discovery_scan.dart';
 import 'sync/discovery_refresh.dart';
 import 'sync/session_policy.dart';
-import 'sync/file_receive_flow_control.dart';
+import 'utils/secure_storage_manager.dart';
 
 export 'sync/protocol.dart' show SyncEnvelope, SyncType;
 
@@ -153,6 +155,7 @@ class _Session {
   StreamSubscription<List<int>>? subscription;
   final bool isClient;
   final bool inbound;
+  RekeyableSessionCrypto? sessionCrypto;
 
   _Session({
     required this.peerId,
@@ -249,6 +252,7 @@ class SyncManager with WidgetsBindingObserver {
   SyncRelayClient? _relay;
   ServerSocket? _server;
   final Map<String, _Session> _sessions = {};
+  final Map<String, int> _lastSentSeqNum = {};
   final Set<Socket> _handshakeSockets = {};
   final List<_PendingFrame> _pendingQueue = [];
   final Map<String, double> _reconnectBackoffSec = {};
@@ -367,6 +371,12 @@ class SyncManager with WidgetsBindingObserver {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Migrate sensitive data to SecureStorage
+    await SecureStorageManager.migrate('peerId');
+    await SecureStorageManager.migrate('techuboard.sync.pairingSecret');
+    await SecureStorageManager.migrate('syncRelayToken');
+
     // Discard only old encoded ciphertext from private-key builds, once.
     if (prefs.getInt('lanDefaultKeyVersion') != 1) {
       await PendingSyncRepository.instance.clearAll();
@@ -374,7 +384,7 @@ class SyncManager with WidgetsBindingObserver {
     }
     isEnabled = prefs.getBool('syncEnabled') ?? false;
     port = prefs.getInt('syncPort') ?? 5566;
-    peerId = prefs.getString('peerId') ?? '';
+    peerId = await SecureStorageManager.read('peerId') ?? '';
     _installNativeCryptoHook();
     // Regenerate if empty OR not a canonical UUID. Protocol-v1 stored peerId as
     // "Android-<8hex>" / "iOS-<8hex>"; those legacy values revive verbatim and
@@ -388,7 +398,7 @@ class SyncManager with WidgetsBindingObserver {
         await _pruneLegacyAuthorizedPeerIds(prefs, oldPeerId: peerId);
       }
       peerId = const Uuid().v4();
-      await prefs.setString('peerId', peerId);
+      await SecureStorageManager.write('peerId', peerId);
     }
     displayName =
         prefs.getString('deviceName') ??

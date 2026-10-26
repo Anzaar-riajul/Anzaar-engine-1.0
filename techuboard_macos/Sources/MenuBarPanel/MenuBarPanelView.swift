@@ -2365,7 +2365,7 @@ private struct MenuBarPanelSnippetsTab: View {
                             Text(snippet.content)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                                .lineLimit(3)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())

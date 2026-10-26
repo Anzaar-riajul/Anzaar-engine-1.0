@@ -17,6 +17,7 @@ class SyncEnvelope {
   final String? hash;
   final String? payload;
   final String? sessionPolicy;
+  final int? seqNum;
 
   SyncEnvelope({
     required this.v,
@@ -29,6 +30,7 @@ class SyncEnvelope {
     this.hash,
     this.payload,
     this.sessionPolicy,
+    this.seqNum,
   });
 
   factory SyncEnvelope.make({
@@ -39,6 +41,7 @@ class SyncEnvelope {
     String? hash,
     String? payload,
     String? sessionPolicy,
+    int? seqNum,
   }) {
     return SyncEnvelope(
       v: version,
@@ -51,6 +54,7 @@ class SyncEnvelope {
       hash: hash,
       payload: payload,
       sessionPolicy: sessionPolicy,
+      seqNum: seqNum,
     );
   }
 
@@ -66,6 +70,7 @@ class SyncEnvelope {
       hash: json['hash'] as String?,
       payload: json['payload'] as String?,
       sessionPolicy: json['sessionPolicy'] as String?,
+      seqNum: json['seqNum'] as int?,
     );
   }
 
@@ -80,6 +85,7 @@ class SyncEnvelope {
     if (hash != null) 'hash': hash,
     if (payload != null) 'payload': payload,
     if (sessionPolicy != null) 'sessionPolicy': sessionPolicy,
+    if (seqNum != null) 'seqNum': seqNum,
   };
 }
 
@@ -111,6 +117,11 @@ class SyncType {
   static const fileMeta = 'file.meta';
   static const fileChunk = 'file.chunk';
   static const fileAck = 'file.ack';
+
+  /// v4 secure handshake types (Phase 1 P0-1/P0-2 fix)
+  static const handshakeInitiator = 'handshake.initiator';
+  static const handshakeResponder = 'handshake.responder';
+  static const handshakeComplete = 'handshake.complete';
 }
 
 /// Max JSON body size (excluding 4-byte length prefix).

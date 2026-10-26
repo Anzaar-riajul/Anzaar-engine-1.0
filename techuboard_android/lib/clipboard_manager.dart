@@ -198,42 +198,19 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
     }
   }
 
-  Future<void> _storeWindowsImage(
-    Uint8List bytes, {
-    required String sourceApp,
-  }) async {
-    final hash = sha256.convert(bytes).toString();
-    final root = Directory(
-      p.join(
-        (await StoragePaths.appStorageDirectory()).path,
-        'clipboard-images',
-      ),
-    );
-    await root.create(recursive: true);
-    final file = File(p.join(root.path, '$hash.png'));
-    if (!await file.exists()) {
-      final temporary = File(
-        '${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
-      );
-      await temporary.writeAsBytes(bytes, flush: true);
-      try {
-        if (!await file.exists()) {
-          await temporary.rename(file.path);
-        }
-      } finally {
-        if (await temporary.exists()) {
-          await temporary.delete();
-        }
-      }
-    }
-    await _addToHistory(
-      HistoryEntry(
-        item: HistoryItem(type: 'image', value: file.path),
-        date: DateTime.now(),
-        sourceApp: sourceApp,
-        contentHash: hash,
-      ),
-    );
+import 'sync/sync_policy.dart'; // নতুন পলিসি ইমপোর্ট
+
+// ... (ClipboardManager ক্লাসের ভেতরে)
+
+  Future<void> _processClipboardImage(Uint8List bytes, String sourceApp) async {
+    final policy = await SyncPolicy.imageSyncPolicy;
+    if (policy == SyncNetworkPolicy.disabled) return;
+    
+    // TODO: Wi-Fi চেক যোগ করা (Connectivity package)
+    
+    await _storeWindowsImage(bytes, sourceApp: sourceApp);
+    // নতুন ইমেজ সিঙ্ক ট্রিগার করা
+    unawaited(SyncManager.instance.sendFileToPeer(File(bytes.toString()), peerId: 'all'));
   }
 
   Future<void> startMonitoring() async {
@@ -461,7 +438,7 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
     final effectiveHash = hash.isNotEmpty
         ? hash
         : (_contentHashForItem(HistoryItem(type: 'text', value: text)) ??
-              text.hashCode.toString());
+              sha256.convert(utf8.encode(text)).toString());
 
     try {
       final latest = await ClipboardRepository.instance.latestEntry();
@@ -574,7 +551,7 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
       final effectiveHash = item.hash.isNotEmpty
           ? item.hash
           : (_contentHashForItem(HistoryItem(type: 'text', value: item.text)) ??
-                item.text.hashCode.toString());
+                sha256.convert(utf8.encode(item.text)).toString());
       normalized.add((text: item.text, hash: effectiveHash));
     }
     if (normalized.isEmpty) return;

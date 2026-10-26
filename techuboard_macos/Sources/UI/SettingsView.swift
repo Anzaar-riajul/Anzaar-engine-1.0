@@ -31,11 +31,11 @@ struct SettingsView: View {
   @State private var notificationSyncTargets: Set<String> = Set(
     PreferencesManager.shared.notificationSyncPeerIds)
   @State private var isRefreshingDevices = false
-  // Manual peers (host:port) for cross-band / cross-subnet discovery.
-  @State private var manualPeers: [String] = PreferencesManager.shared.manualSyncPeers
-  @State private var showAddManualPeer = false
-  @State private var manualPeerHost = ""
-  @State private var manualPeerPort = "5566"
+  @StateObject private var relayGroups = SyncRelayGroups()
+  @State private var showEnterPhoneCode = false
+  @State private var phoneCodeInput = ""
+  @State private var copiedPairingCode = false
+  @State private var showPairingSection = false
   @State private var isReencryptingHistory = false
 
   init() {
@@ -209,94 +209,157 @@ struct SettingsView: View {
             .onChange(of: autoImageSync) { newValue in
               PreferencesManager.shared.isAutoImageSyncEnabled = newValue
             }
-          Text("চালু থাকলে কপি করা ছবি, স্ক্রিনশট এবং ফাইল স্বয়ংক্রিয়ভাবে আপনার অন্য সব ডিভাইসে (Mac, Android, Windows) সিঙ্ক হবে। বন্ধ থাকলে মেনু থেকে ম্যানুয়ালি 'Send to Device' করতে পারবেন।")
+          Text("চালু থাকলে কপি করা ছবি, স্ক্রিনশট এবং ফাইল স্বয়ংক্রিয়ভাবে আপনার ফোনে সিঙ্ক হবে।")
             .font(AppFont.caption)
             .foregroundStyle(.secondary)
         }
 
-        Section("কানেক্টেড ডিভাইস (Connected Devices)") {
+        Section("ডিভাইস সংযোগ ও সিঙ্ক (Device Connection & Sync)") {
           Toggle("ডিভাইস সিঙ্ক চালু রাখুন (Enable Sync)", isOn: $syncEnabled)
             .onChange(of: syncEnabled) { newValue in
               PreferencesManager.shared.isSyncEnabled = newValue
               if newValue {
                 SyncManager.shared.start()
+                ensureRelaySetup()
               } else {
                 SyncManager.shared.stop()
               }
             }
 
-          HStack {
-            Text("একই নেটওয়ার্কে থাকা আপনার অন্যান্য ডিভাইস স্বয়ংক্রিয়ভাবে নিচে দেখাবে।")
-              .font(AppFont.caption)
-              .foregroundStyle(.secondary)
-            Spacer()
-            Button {
-              guard !isRefreshingDevices else { return }
-              isRefreshingDevices = true
-              SyncManager.shared.refreshDiscovery(pruneCache: true, scanFullSubnet: true)
-              DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                availablePeers = SyncManager.shared.availablePeers
-                isRefreshingDevices = false
-              }
-            } label: {
-              HStack {
-                if isRefreshingDevices {
-                  ProgressView().controlSize(.small)
-                } else {
-                  Image(systemName: "arrow.clockwise")
-                }
-                Text("রিফ্রেশ")
-              }
-            }
-            .disabled(!syncEnabled || isRefreshingDevices)
-          }
+          let remoteMembers = relayGroups.members.filter { ($0["device"] as? String) != relayGroups.device }
+          let isConnected = !remoteMembers.isEmpty || !availablePeers.isEmpty
 
-          let authDeviceRows = Self.authDeviceRows(
-            availablePeers: availablePeers,
-            clipboard: clipboardSyncTargets,
-            notification: notificationSyncTargets
-          )
-          if authDeviceRows.isEmpty {
-            Text(L10n.t(.noDevicesFound))
-              .foregroundStyle(.secondary)
-              .font(AppFont.caption)
-              .padding(.vertical, 4)
-          } else {
-            ForEach(authDeviceRows, id: \.peerId) { row in
-              VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                  Image(systemName: row.displayName.lowercased().contains("phone") || row.displayName.lowercased().contains("android") ? "iphone" : "laptopcomputer")
+          if isConnected {
+            VStack(alignment: .leading, spacing: 12) {
+              ForEach(remoteMembers.indices, id: \.self) { idx in
+                let m = remoteMembers[idx]
+                let devName = m["name"] as? String ?? "Android Phone"
+                HStack(spacing: 12) {
+                  Image(systemName: "iphone")
+                    .font(.title2)
                     .foregroundStyle(.blue)
-                  Text(row.displayName)
-                    .fontWeight(.medium)
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(devName)
+                      .fontWeight(.semibold)
+                    HStack(spacing: 6) {
+                      Circle().fill(Color.green).frame(width: 8, height: 8)
+                      Text("কানেক্টেড · লাইভ সিঙ্ক চালু")
+                        .font(AppFont.caption)
+                        .foregroundStyle(.green)
+                    }
+                  }
                   Spacer()
-                  Text(row.isOnline ? "অনলাইন" : "অফলাইন")
-                    .font(AppFont.caption)
-                    .foregroundStyle(row.isOnline ? .green : .secondary)
+                  Button(role: .destructive) {
+                    relayGroups.perform {
+                      try await relayGroups.exitGroup(disband: false)
+                    }
+                  } label: {
+                    Text("ডিসকানেক্ট")
+                  }
+                  .buttonStyle(.bordered)
+                  .controlSize(.small)
                 }
-                Toggle(
-                  isOn: Binding(
-                    get: { clipboardSyncTargets.contains(row.peerId) },
-                    set: { enabled in
-                      if enabled {
-                        clipboardSyncTargets.insert(row.peerId)
-                      } else {
-                        clipboardSyncTargets.remove(row.peerId)
-                      }
-                      PreferencesManager.shared.setClipboardSync(
-                        peerId: row.peerId, enabled: enabled)
-                      if enabled {
-                        SyncManager.shared.refreshPendingDelivery(for: row.peerId)
+                .padding(12)
+                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+              }
+
+              ForEach(availablePeers, id: \.peerId) { peer in
+                if !remoteMembers.contains(where: { ($0["device"] as? String) == peer.peerId }) {
+                  HStack(spacing: 12) {
+                    Image(systemName: peer.displayName.lowercased().contains("phone") || peer.displayName.lowercased().contains("android") ? "iphone" : "laptopcomputer")
+                      .font(.title2)
+                      .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                      Text(peer.displayName)
+                        .fontWeight(.semibold)
+                      HStack(spacing: 6) {
+                        Circle().fill(peer.isOnline ? Color.green : Color.secondary).frame(width: 8, height: 8)
+                        Text(peer.isOnline ? "অনলাইন · লাইভ সিঙ্ক চালু" : "অফলাইন")
+                          .font(AppFont.caption)
+                          .foregroundStyle(peer.isOnline ? .green : .secondary)
                       }
                     }
-                  )
-                ) {
-                  Text("ক্লিপবোর্ড সিঙ্ক")
-                    .font(AppFont.caption)
+                    Spacer()
+                  }
+                  .padding(12)
+                  .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
                 }
               }
-              .padding(.vertical, 4)
+
+              Button {
+                showPairingSection.toggle()
+              } label: {
+                Label(showPairingSection ? "পেয়ারিং QR কোড লুকান" : "অন্য ডিভাইস যুক্ত করুন (Pair Another Device)", systemImage: "qrcode")
+              }
+              .buttonStyle(.link)
+              .padding(.top, 4)
             }
+          }
+
+          if !isConnected || showPairingSection {
+            VStack(alignment: .leading, spacing: 14) {
+              Text("QR কোড বা পিন দিয়ে সহজে যুক্ত হোন")
+                .font(.headline)
+              Text("আপনার Android ফোনে Techuboard অ্যাপে 'Scan Mac QR Code' বাটনে ট্যাপ করে এই কোডটি স্ক্যান করুন:")
+                .font(AppFont.caption)
+                .foregroundStyle(.secondary)
+
+              if let inv = relayGroups.invitation,
+                 let code = try? SyncRelayGroups.encode(inv),
+                 let image = qrImage(for: code) {
+                HStack(alignment: .center, spacing: 20) {
+                  Image(nsImage: image)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 170, height: 170)
+                    .padding(10)
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+
+                  VStack(alignment: .leading, spacing: 12) {
+                    Text("অথবা ৬-ডিজিটের কোড ব্যবহার করুন:")
+                      .font(AppFont.caption)
+                      .foregroundStyle(.secondary)
+
+                    let pin = shortPin(from: inv)
+                    HStack(spacing: 10) {
+                      Text(pin)
+                        .font(.system(size: 22, weight: .bold, design: .monospaced))
+                        .textSelection(.enabled)
+                      Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(code, forType: .string)
+                        copiedPairingCode = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                          copiedPairingCode = false
+                        }
+                      } label: {
+                        Image(systemName: copiedPairingCode ? "checkmark" : "doc.on.doc")
+                      }
+                      .buttonStyle(.bordered)
+                      .help("কোড কপি করুন")
+                    }
+
+                    Button("ফোনের কোড দিয়ে যুক্ত হোন") {
+                      showEnterPhoneCode = true
+                    }
+                    .buttonStyle(.link)
+                  }
+                }
+              } else {
+                HStack {
+                  ProgressView().controlSize(.small)
+                  Text("পেয়ারিং কোড প্রস্তুত হচ্ছে...")
+                    .font(AppFont.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 16)
+              }
+            }
+            .padding(14)
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
           }
         }
       }
@@ -359,46 +422,46 @@ struct SettingsView: View {
       availablePeers = SyncManager.shared.availablePeers
       clipboardSyncTargets = Set(PreferencesManager.shared.clipboardSyncPeerIds)
       notificationSyncTargets = Set(PreferencesManager.shared.notificationSyncPeerIds)
-      manualPeers = PreferencesManager.shared.manualSyncPeers
-      // Dial authorized cache only — do not prune or /24-scan on open.
+      for peer in availablePeers {
+        PreferencesManager.shared.setClipboardSync(peerId: peer.peerId, enabled: true)
+      }
       if PreferencesManager.shared.isSyncEnabled {
         SyncManager.shared.triggerCrossBandDiscovery()
+        ensureRelaySetup()
       }
     }
-    .sheet(isPresented: $showAddManualPeer) {
-      VStack(spacing: 16) {
-        Text(L10n.t(.syncAddManualDevice)).font(.headline)
-        TextField(L10n.t(.syncManualDeviceHost), text: $manualPeerHost)
+    .sheet(isPresented: $showEnterPhoneCode) {
+      VStack(alignment: .leading, spacing: 16) {
+        Text("ফোনের পেয়ারিং কোড প্রবেশ করান")
+          .font(.headline)
+        Text("আপনার Android ফোনে Techuboard-এ 'Show My Phone QR / Code' থেকে পাওয়া কোডটি এখানে লিখুন বা পেস্ট করুন।")
+          .font(AppFont.caption)
+          .foregroundStyle(.secondary)
+        TextField("যেমন: common-relay://... বা ৭৪৯ ২১৫", text: $phoneCodeInput)
           .textFieldStyle(.roundedBorder)
         HStack {
-          Text(L10n.t(.syncManualDevicePort))
-          TextField("5566", text: $manualPeerPort)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 100)
-        }
-        HStack {
-          Button(L10n.t(.cancel)) { showAddManualPeer = false }
-            .keyboardShortcut(.cancelAction)
+          Button("বাতিল") {
+            showEnterPhoneCode = false
+            phoneCodeInput = ""
+          }
+          .keyboardShortcut(.cancelAction)
           Spacer()
-          Button(L10n.t(.syncAdd)) {
-            let host = manualPeerHost.trimmingCharacters(in: .whitespaces)
-            let port = Int(manualPeerPort) ?? PreferencesManager.shared.syncPort
-            guard Self.isValidIPv4(host), (1...65535).contains(port) else { return }
-            let entry = "\(host):\(port)"
-            guard !PreferencesManager.shared.manualSyncPeers.contains(entry) else {
-              showAddManualPeer = false
-              return
+          Button("কানেক্ট করুন") {
+            let code = phoneCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !code.isEmpty else { return }
+            showEnterPhoneCode = false
+            phoneCodeInput = ""
+            relayGroups.perform {
+              let macName = Host.current().localizedName ?? "Mac"
+              try await relayGroups.join(text: code, name: macName)
             }
-            PreferencesManager.shared.addManualPeer(entry)
-            manualPeers = PreferencesManager.shared.manualSyncPeers
-            showAddManualPeer = false
-            SyncManager.shared.triggerCrossBandDiscovery()
           }
           .keyboardShortcut(.defaultAction)
+          .buttonStyle(.borderedProminent)
         }
       }
       .padding(20)
-      .frame(width: 340)
+      .frame(width: 440)
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
@@ -479,6 +542,54 @@ struct SettingsView: View {
     guard newName != PreferencesManager.shared.deviceName else { return }
     PreferencesManager.shared.deviceName = newName
     SyncManager.shared.restartService()
+  }
+
+  private func qrImage(for text: String) -> NSImage? {
+    guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+    filter.setValue(Data(text.utf8), forKey: "inputMessage")
+    filter.setValue("M", forKey: "inputCorrectionLevel")
+    guard let outputImage = filter.outputImage else { return nil }
+    let transform = CGAffineTransform(scaleX: 8, y: 8)
+    let scaled = outputImage.transformed(by: transform)
+    let rep = NSCIImageRep(ciImage: scaled)
+    let nsImage = NSImage(size: rep.size)
+    nsImage.addRepresentation(rep)
+    return nsImage
+  }
+
+  private func shortPin(from invitation: [String: Any]?) -> String {
+    guard let inv = invitation, let id = inv["id"] as? String, id.count >= 6 else {
+      return "749 215"
+    }
+    let hex = String(id.prefix(6))
+    if let num = Int(hex, radix: 16) {
+      let pin = (num % 900000) + 100000
+      let s = "\(pin)"
+      return "\(s.prefix(3)) \(s.suffix(3))"
+    }
+    return "749 215"
+  }
+
+  private func ensureRelaySetup() {
+    relayGroups.perform {
+      try await relayGroups.refresh()
+      if !relayGroups.enrolled && !relayGroups.creationPending {
+        let macName = Host.current().localizedName ?? "Mac"
+        try await relayGroups.createGroup(title: "Techuboard", name: macName)
+      }
+      if relayGroups.invitation == nil && relayGroups.manager {
+        relayGroups.automaticJoin = true
+        try await relayGroups.createInvitation()
+      }
+      for m in relayGroups.members {
+        if let devId = m["device"] as? String, devId != relayGroups.device {
+          PreferencesManager.shared.setClipboardSync(peerId: devId, enabled: true)
+        }
+      }
+      for peer in availablePeers {
+        PreferencesManager.shared.setClipboardSync(peerId: peer.peerId, enabled: true)
+      }
+    }
   }
 }
 

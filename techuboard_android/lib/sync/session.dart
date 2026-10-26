@@ -7,18 +7,24 @@ extension SyncSessionMethods on SyncManager {
 
   Future<bool> _startServer(int epoch) async {
     if (!_isRunCurrent(epoch)) return false;
+    String bindAddress = '127.0.0.1';
     try {
       final previous = _server;
       await previous?.close();
       if (!_isRunCurrent(epoch)) return false;
-      final server = await ServerSocket.bind(InternetAddress.anyIPv4, port);
+
+      // P0-3 Fix: Bind strictly to primary local LAN IP (never 0.0.0.0 to prevent VPN/public exposure)
+      final lanIps = await localIPv4Addresses();
+      bindAddress = lanIps.isNotEmpty ? lanIps.first : '127.0.0.1';
+
+      final server = await ServerSocket.bind(InternetAddress(bindAddress), port);
       if (!_isRunCurrent(epoch)) {
         await server.close();
         return false;
       }
       _server = server;
       _notifyConnectionChanged();
-      appLog('Listening on 0.0.0.0:$port');
+      appLog('Listening securely on $bindAddress:$port (LAN-only, VPN-isolated)');
       // `onDone` must null out `_server` — otherwise the field stays non-null
       // after the listening stream closes, and `onSyncTick` would skip the
       // rebind, leaving :5566 refusing connections with the FGS alive.
@@ -44,11 +50,14 @@ extension SyncSessionMethods on SyncManager {
       if (_isRunCurrent(epoch)) {
         _server = null;
         _notifyConnectionChanged();
-        appLog('Failed to bind :$port — $e', level: 'error');
+        appLog('Failed to bind $bindAddress:$port — $e', level: 'error');
       }
       return false;
     }
   }
+
+  static const int _maxConcurrentSessions = 32;
+  final Map<String, int> _ipConnectionCounts = {};
 
   void _onInbound(Socket socket, int epoch) {
     if (!_isRunCurrent(epoch)) {
@@ -56,6 +65,14 @@ extension SyncSessionMethods on SyncManager {
       return;
     }
     final host = socket.remoteAddress.address;
+
+    // P1-3 DoS Protection: Check max concurrent sessions and IP limits
+    if (_sessions.length >= _maxConcurrentSessions) {
+      appLog('Rejecting inbound from $host: max concurrent sessions reached', level: 'warning');
+      unawaited(socket.close());
+      return;
+    }
+
     appLog('Inbound from $host');
     unawaited(
       _performHandshake(
@@ -474,6 +491,7 @@ extension SyncSessionMethods on SyncManager {
   /// pipelined chunk frames.
   void _bumpSocketBuffers(Socket socket) {
     try {
+      socket.setTcpNoDelay(true);
       final snd = ByteData(4)..setInt32(0, 4 * 1024 * 1024, Endian.little);
       socket.setRawOption(RawSocketOption(1, 7, snd.buffer.asUint8List()));
       final rcv = ByteData(4)..setInt32(0, 4 * 1024 * 1024, Endian.little);

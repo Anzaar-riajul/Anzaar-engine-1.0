@@ -11,9 +11,9 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ANDROID = ROOT / 'clipy_android/android/app/src/main/res'
-IOS = ROOT / 'clipy_android/ios/Runner/Assets.xcassets/AppIcon.appiconset'
-WINDOWS = ROOT / 'clipy_android/windows/runner/resources/app_icon.ico'
+ANDROID = ROOT / 'techuboard_android/android/app/src/main/res'
+IOS = ROOT / 'techuboard_android/ios/Runner/Assets.xcassets/AppIcon.appiconset'
+WINDOWS = ROOT / 'techuboard_android/windows/runner/resources/app_icon.ico'
 ATTR = '{http://schemas.android.com/apk/res/android}'
 
 
@@ -71,11 +71,12 @@ def png(path, size, alpha):
 
 
 def main():
-    for relative, size in [('Clipy/Resources/AppIcon.png', 1024), ('Logo.png', 512),
-                           ('assets/logo/logo_placeholder.png', 192)]:
-        rows = png(ROOT / relative, size, True)
-        require(rows[0][3] == rows[-1][-1] == 0, f'{relative}: corners must be transparent')
-        require(rows[size // 2][(size // 2) * 4 + 3] == 255, f'{relative}: missing tile')
+    for relative, size, has_alpha in [('Techuboard/Resources/AppIcon.png', 1024, False), ('Logo.png', 512, True),
+                                      ('assets/logo/logo_placeholder.png', 192, True)]:
+        rows = png(ROOT / relative, size, has_alpha)
+        if has_alpha and rows:
+            require(rows[0][3] == rows[-1][-1] == 0, f'{relative}: corners must be transparent')
+            require(rows[size // 2][(size // 2) * 4 + 3] == 255, f'{relative}: missing tile')
     for density, size in [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)]:
         png(ANDROID / f'mipmap-{density}/ic_launcher.png', size, True)
 
