@@ -367,7 +367,7 @@ struct SettingsView: View {
         Section("Android অ্যাপ ডাউনলোড ও ইনস্টল (Download Android App)") {
           VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 18) {
-              if let qr = qrImage(for: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
+              if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest/download/Techuboard-Android-v1.0.apk") {
                 VStack(spacing: 8) {
                   Image(nsImage: qr)
                     .interpolation(.none)
