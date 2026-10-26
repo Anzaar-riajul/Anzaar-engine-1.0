@@ -222,6 +222,33 @@ class _HomePageState extends State<HomePage>
       ),
     ],
   );
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: Text(context.l10n.settings),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.delete_sweep_outlined),
+                tooltip: context.l10n.clearHistory,
+                onPressed: _clearHistory,
+              ),
+            ],
+          ),
+          body: ListView(
+            children: [
+              MobileSettingsContent(
+                onOpenLogs: _openLogs,
+                onOpenReceivedFiles: _openFiles,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _settings() => ListView(
     key: const PageStorageKey('settings'),
     children: [
@@ -281,28 +308,24 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final titles = [
-      l10n.history,
-      'My Notes',
-      l10n.devices,
-      l10n.settings,
+      'All',
+      'Notes',
+      'Devices',
     ];
     final subtitles = [
       Platform.isIOS ? l10n.iosHistoryTagline : l10n.historyTagline,
       'Saved notes and quick text templates',
       l10n.localNetwork,
-      l10n.settingsTagline,
     ];
     final icons = [
-      Icons.content_paste_rounded,
-      Icons.note_alt_rounded,
+      Icons.copy_rounded,
+      Icons.folder_outlined,
       Icons.devices_rounded,
-      Icons.tune_rounded,
     ];
     final pages = <Widget Function()>[
       _history,
       () => const SnippetsPage(),
       () => const DevicesPage(),
-      _settings,
     ];
     final wide = MediaQuery.sizeOf(context).width >= 720;
     final colors = Theme.of(context).colorScheme;
@@ -388,23 +411,23 @@ class _HomePageState extends State<HomePage>
               tooltip: l10n.receivedFiles,
               icon: const Icon(Icons.folder_open_rounded),
             ),
-            if (_selectedIndex == 0)
-              PopupMenuButton<String>(
-                tooltip: l10n.moreActions,
-                onSelected: (value) {
-                  if (value == 'clear') _clearHistory();
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(
-                    value: 'clear',
-                    enabled: !_clearing,
-                    child: Text(
-                      l10n.clearHistory,
-                      style: TextStyle(color: colors.error),
-                    ),
+            IconButton(
+              onPressed: _openSettings,
+              tooltip: l10n.settings,
+              icon: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: colors.outlineVariant.withOpacity(0.35),
+                    width: 0.8,
                   ),
-                ],
+                ),
+                child: const Icon(Icons.settings_outlined, size: 18),
               ),
+            ),
             const SizedBox(width: 8),
           ],
         ),
@@ -435,17 +458,129 @@ class _HomePageState extends State<HomePage>
         ),
         bottomNavigationBar: wide
             ? null
-            : NavigationBar(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: _select,
-                destinations: [
-                  for (var i = 0; i < titles.length; i++)
-                    NavigationDestination(
-                      icon: Icon(icons[i]),
-                      label: titles[i],
-                    ),
-                ],
+            : _buildMacStyleBottomNav(context),
+      ),
+    );
+  }
+
+  Widget _buildMacStyleBottomNav(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final deviceCount = SyncManager.instance.availablePeers.length;
+
+    final tabs = [
+      (icon: Icons.copy_rounded, label: 'All'),
+      (icon: Icons.folder_outlined, label: 'Notes'),
+      (icon: Icons.devices_rounded, label: deviceCount > 0 ? 'Devices $deviceCount' : 'Devices 0'),
+    ];
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.all(3.5),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF131822) : const Color(0xFFE2E8F0),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.35 : 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
+            ],
+          ),
+          child: Row(
+            children: [
+              for (var i = 0; i < tabs.length; i++)
+                Expanded(
+                  child: _buildMacNavTabItem(
+                    index: i,
+                    icon: tabs[i].icon,
+                    label: tabs[i].label,
+                    isSelected: _selectedIndex == i,
+                    isDark: isDark,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMacNavTabItem({
+    required int index,
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required bool isDark,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        _select(index);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeInOut,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF222B38) : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: isSelected
+              ? Border.all(
+                  color: isDark
+                      ? const Color(0xFF384B6B).withOpacity(0.55)
+                      : Colors.black.withOpacity(0.08),
+                  width: 1,
+                )
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected
+                  ? (isDark ? Colors.white : Colors.black87)
+                  : (isDark ? const Color(0xFF8E99A8) : const Color(0xFF64748B)),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? (isDark ? Colors.white : Colors.black87)
+                    : (isDark ? const Color(0xFF8E99A8) : const Color(0xFF64748B)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
