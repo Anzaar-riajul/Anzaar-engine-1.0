@@ -38,6 +38,76 @@ class _HomePageState extends State<HomePage>
   StreamSubscription? _progressSubscription;
   final Map<String, FileProgress> _activeTransfers = {};
   bool _clearing = false;
+  DeviceFilterMode _deviceFilter = DeviceFilterMode.all;
+  DiscoveredPeer? _selectedPeer;
+
+  String get _historyTabLabel {
+    switch (_deviceFilter) {
+      case DeviceFilterMode.all:
+        return 'All';
+      case DeviceFilterMode.thisPhone:
+        return 'This Phone';
+      case DeviceFilterMode.peer:
+        return _selectedPeer?.displayName ?? 'Device';
+      case DeviceFilterMode.noDevices:
+        return 'Devices';
+    }
+  }
+
+  IconData get _historyTabIcon {
+    switch (_deviceFilter) {
+      case DeviceFilterMode.all:
+        return Icons.copy_rounded;
+      case DeviceFilterMode.thisPhone:
+        return Icons.smartphone_rounded;
+      case DeviceFilterMode.peer:
+        final name = _selectedPeer?.displayName.toLowerCase() ?? '';
+        if (name.contains('mac') || name.contains('apple')) {
+          return Icons.laptop_mac_rounded;
+        } else if (name.contains('win') || name.contains('pc')) {
+          return Icons.laptop_windows_rounded;
+        }
+        return Icons.devices_rounded;
+      case DeviceFilterMode.noDevices:
+        return Icons.portable_wifi_off_rounded;
+    }
+  }
+
+  void _cycleDeviceFilter() {
+    final peers = SyncManager.instance.availablePeers;
+    setState(() {
+      switch (_deviceFilter) {
+        case DeviceFilterMode.all:
+          _deviceFilter = DeviceFilterMode.thisPhone;
+          _selectedPeer = null;
+          break;
+        case DeviceFilterMode.thisPhone:
+          if (peers.isEmpty) {
+            _deviceFilter = DeviceFilterMode.noDevices;
+            _selectedPeer = null;
+          } else {
+            _deviceFilter = DeviceFilterMode.peer;
+            _selectedPeer = peers.first;
+          }
+          break;
+        case DeviceFilterMode.peer:
+          if (_selectedPeer != null) {
+            final idx = peers.indexWhere((p) => p.peerId == _selectedPeer!.peerId);
+            if (idx != -1 && idx + 1 < peers.length) {
+              _selectedPeer = peers[idx + 1];
+              break;
+            }
+          }
+          _deviceFilter = DeviceFilterMode.all;
+          _selectedPeer = null;
+          break;
+        case DeviceFilterMode.noDevices:
+          _deviceFilter = DeviceFilterMode.all;
+          _selectedPeer = null;
+          break;
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -213,6 +283,17 @@ class _HomePageState extends State<HomePage>
         ),
       Expanded(
         child: PaginatedClipboardHistoryList(
+          deviceFilter: _deviceFilter,
+          selectedPeer: _selectedPeer,
+          onReturnToAll: () {
+            setState(() {
+              _deviceFilter = DeviceFilterMode.all;
+              _selectedPeer = null;
+            });
+          },
+          onOpenDevicesTab: () {
+            _select(2);
+          },
           onFileTap: (entry) => _openFolder(
             entry.item.type == 'fileURLs'
                 ? (entry.item.value as List<String>).first
@@ -469,7 +550,7 @@ class _HomePageState extends State<HomePage>
     final deviceCount = SyncManager.instance.availablePeers.length;
 
     final tabs = [
-      (icon: Icons.copy_rounded, label: 'All'),
+      (icon: _historyTabIcon, label: _historyTabLabel),
       (icon: Icons.folder_outlined, label: 'Notes'),
       (icon: Icons.devices_rounded, label: deviceCount > 0 ? 'Devices $deviceCount' : 'Devices 0'),
     ];
@@ -526,8 +607,18 @@ class _HomePageState extends State<HomePage>
       behavior: HitTestBehavior.opaque,
       onTap: () {
         HapticFeedback.lightImpact();
-        _select(index);
+        if (index == 0 && _selectedIndex == 0) {
+          _cycleDeviceFilter();
+        } else {
+          _select(index);
+        }
       },
+      onLongPress: index == 0
+          ? () {
+              HapticFeedback.mediumImpact();
+              _showDeviceFilterPoplist(context);
+            }
+          : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeInOut,
@@ -579,6 +670,267 @@ class _HomePageState extends State<HomePage>
                     : (isDark ? const Color(0xFF8E99A8) : const Color(0xFF64748B)),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeviceFilterPoplist(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).colorScheme;
+    final peers = SyncManager.instance.availablePeers;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161C26) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.6 : 0.15),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colors.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.devices_rounded, color: colors.primary, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Filter by Device',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Select a source to filter clipboard history',
+                            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildFilterPoplistItem(
+                  icon: Icons.copy_rounded,
+                  title: 'All Clips',
+                  subtitle: 'Show clips from all connected sources',
+                  isSelected: _deviceFilter == DeviceFilterMode.all,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _deviceFilter = DeviceFilterMode.all;
+                      _selectedPeer = null;
+                    });
+                  },
+                  isDark: isDark,
+                  colors: colors,
+                ),
+                const SizedBox(height: 8),
+                _buildFilterPoplistItem(
+                  icon: Icons.smartphone_rounded,
+                  title: 'This Phone',
+                  subtitle: 'Only clips copied on this Android phone',
+                  isSelected: _deviceFilter == DeviceFilterMode.thisPhone,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _deviceFilter = DeviceFilterMode.thisPhone;
+                      _selectedPeer = null;
+                    });
+                  },
+                  isDark: isDark,
+                  colors: colors,
+                ),
+                if (peers.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Text(
+                      'CONNECTED DEVICES',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: colors.onSurfaceVariant.withOpacity(0.8),
+                      ),
+                    ),
+                  ),
+                  for (final peer in peers) ...[
+                    const SizedBox(height: 6),
+                    _buildFilterPoplistItem(
+                      icon: peer.displayName.toLowerCase().contains('mac')
+                          ? Icons.laptop_mac_rounded
+                          : Icons.laptop_windows_rounded,
+                      title: peer.displayName,
+                      subtitle: '${peer.host} • Online Mesh',
+                      isOnline: true,
+                      isSelected: _deviceFilter == DeviceFilterMode.peer && _selectedPeer?.peerId == peer.peerId,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _deviceFilter = DeviceFilterMode.peer;
+                          _selectedPeer = peer;
+                        });
+                      },
+                      isDark: isDark,
+                      colors: colors,
+                    ),
+                  ],
+                ] else ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E2633) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.portable_wifi_off_rounded, color: Colors.orange, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'No other device connected right now.',
+                            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _select(2); // Jump to Devices tab
+                          },
+                          child: const Text('Pair Device'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterPoplistItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isDark,
+    required ColorScheme colors,
+    bool isOnline = false,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colors.primary.withOpacity(0.12)
+              : (isDark ? const Color(0xFF1E2633) : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? colors.primary.withOpacity(0.6)
+                : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06)),
+            width: isSelected ? 1.2 : 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? colors.primary.withOpacity(0.2)
+                    : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04)),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 18, color: isSelected ? colors.primary : colors.onSurfaceVariant),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          color: isSelected ? colors.primary : null,
+                        ),
+                      ),
+                      if (isOnline) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Colors.greenAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 11.5, color: colors.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: colors.primary, size: 20)
+            else
+              Icon(Icons.chevron_right_rounded, color: colors.onSurfaceVariant.withOpacity(0.5), size: 18),
           ],
         ),
       ),

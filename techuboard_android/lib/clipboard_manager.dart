@@ -626,6 +626,16 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteEntries(List<HistoryEntry> entries) async {
+    await ClipboardRepository.instance.deleteEntries(entries);
+    onHistoryChanged?.call();
+    notifyListeners();
+  }
+
+  Future<void> deleteEntry(HistoryEntry entry) async {
+    await deleteEntries([entry]);
+  }
+
   Future<void> updateHistoryLimit(int limit) async {
     _historyLimit = limit;
     final prefs = await SharedPreferences.getInstance();

@@ -137,9 +137,19 @@ class AppUpdaterService {
       }
 
       final remoteBuild = _extractBuildNumber(rawTag);
-      final isNewer = (remoteBuild > 0 && currentBuildNumber > 0)
-          ? remoteBuild > currentBuildNumber
-          : _isVersionGreater(rawTag, currentVersionName);
+      int normalizedCurrent = currentBuildNumber;
+      if (normalizedCurrent > 10000 && remoteBuild < 1000) {
+        // Handle legacy pubspec 12284 offset: e.g. 12284 -> 84
+        normalizedCurrent = normalizedCurrent % 1000;
+      }
+      int normalizedRemote = remoteBuild;
+      if (normalizedRemote > 10000 && normalizedCurrent < 1000) {
+        normalizedRemote = normalizedRemote % 1000;
+      }
+
+      final isBuildNewer = normalizedRemote > 0 && normalizedRemote > normalizedCurrent;
+      final isVerNewer = _isVersionGreater(rawTag, currentVersionName);
+      final isNewer = isBuildNewer || isVerNewer;
 
       final displayLatest = rawTag.isNotEmpty ? rawTag : 'v$currentVersionName';
 
@@ -235,18 +245,20 @@ class AppUpdaterService {
 
   bool _isVersionGreater(String remote, String current) {
     if (remote.isEmpty) return false;
-    final remoteClean = remote.split('-').first.replaceAll(RegExp(r'[^0-9.]'), '');
-    final currentClean = current.split('-').first.replaceAll(RegExp(r'[^0-9.]'), '');
+    final rMatch = RegExp(r'(\d+)\.(\d+)(?:[-.](\d+))?').firstMatch(remote);
+    final cMatch = RegExp(r'(\d+)\.(\d+)(?:[-.](\d+))?').firstMatch(current);
+    if (rMatch == null || cMatch == null) return false;
 
-    final rParts = remoteClean.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-    final cParts = currentClean.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final rMajor = int.tryParse(rMatch.group(1) ?? '0') ?? 0;
+    final rMinor = int.tryParse(rMatch.group(2) ?? '0') ?? 0;
+    final rPatch = int.tryParse(rMatch.group(3) ?? '0') ?? 0;
 
-    for (int i = 0; i < 3; i++) {
-      final r = i < rParts.length ? rParts[i] : 0;
-      final c = i < cParts.length ? cParts[i] : 0;
-      if (r > c) return true;
-      if (r < c) return false;
-    }
-    return false;
+    final cMajor = int.tryParse(cMatch.group(1) ?? '0') ?? 0;
+    final cMinor = int.tryParse(cMatch.group(2) ?? '0') ?? 0;
+    final cPatch = int.tryParse(cMatch.group(3) ?? '0') ?? 0;
+
+    if (rMajor != cMajor) return rMajor > cMajor;
+    if (rMinor != cMinor) return rMinor > cMinor;
+    return rPatch > cPatch;
   }
 }

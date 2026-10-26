@@ -9,13 +9,29 @@ import '../models.dart';
 import '../sync_manager.dart';
 import 'app_components.dart';
 
+enum DeviceFilterMode {
+  all,
+  thisPhone,
+  peer,
+  noDevices,
+}
+
 class PaginatedClipboardHistoryList extends StatefulWidget {
   final void Function(HistoryEntry entry)? onFileTap;
   final HistoryFeedController? controller;
+  final DeviceFilterMode deviceFilter;
+  final DiscoveredPeer? selectedPeer;
+  final VoidCallback? onReturnToAll;
+  final VoidCallback? onOpenDevicesTab;
+
   const PaginatedClipboardHistoryList({
     super.key,
     this.onFileTap,
     this.controller,
+    this.deviceFilter = DeviceFilterMode.all,
+    this.selectedPeer,
+    this.onReturnToAll,
+    this.onOpenDevicesTab,
   });
 
   @override
@@ -32,6 +48,8 @@ class _PaginatedClipboardHistoryListState
   Timer? _searchTimer;
   Timer? _copiedTimer;
   HistoryEntry? _copied;
+  bool _isSelectMode = false;
+  final Set<HistoryEntry> _selectedEntries = {};
 
   @override
   void initState() {
@@ -84,6 +102,335 @@ class _PaginatedClipboardHistoryListState
     _refreshTimer = Timer(
       const Duration(milliseconds: 300),
       () => _feed.refresh(),
+    );
+  }
+
+  List<HistoryEntry> get _filteredEntries {
+    final entries = _feed.entries;
+    switch (widget.deviceFilter) {
+      case DeviceFilterMode.all:
+        return entries;
+      case DeviceFilterMode.thisPhone:
+        final peers = SyncManager.instance.availablePeers;
+        return entries.where((e) {
+          final app = e.sourceApp ?? '';
+          return app != 'Remote Sync' &&
+              app != 'Mac' &&
+              app != 'Windows' &&
+              !peers.any((p) => p.displayName == app);
+        }).toList();
+      case DeviceFilterMode.peer:
+        final peerName = widget.selectedPeer?.displayName.toLowerCase() ?? '';
+        return entries.where((e) {
+          final app = (e.sourceApp ?? '').toLowerCase();
+          return app == 'remote sync' || (peerName.isNotEmpty && app.contains(peerName));
+        }).toList();
+      case DeviceFilterMode.noDevices:
+        return const [];
+    }
+  }
+
+  void _toggleSelectAll() {
+    final visible = _filteredEntries;
+    setState(() {
+      if (_selectedEntries.length == visible.length && visible.isNotEmpty) {
+        _selectedEntries.clear();
+      } else {
+        _selectedEntries.addAll(visible);
+      }
+    });
+  }
+
+  Future<void> _confirmDeleteSingle(HistoryEntry entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 36),
+        title: const Text('Delete Clipboard Item?'),
+        content: const Text(
+          'Are you sure you want to delete this clipboard item? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await ClipboardManager.instance.deleteEntry(entry);
+      setState(() => _selectedEntries.remove(entry));
+      if (mounted) showTechuMessage(context, 'Item deleted');
+      _feed.refresh();
+    }
+  }
+
+  Future<void> _confirmDeleteSelected() async {
+    if (_selectedEntries.isEmpty) return;
+    final count = _selectedEntries.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 36),
+        title: Text('Delete $count Selected Item${count > 1 ? "s" : ""}?'),
+        content: Text(
+          'Are you sure you want to delete $count selected items from clipboard history? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await ClipboardManager.instance.deleteEntries(_selectedEntries.toList());
+      setState(() {
+        _selectedEntries.clear();
+        _isSelectMode = false;
+      });
+      if (mounted) showTechuMessage(context, '$count items deleted');
+      _feed.refresh();
+    }
+  }
+
+  Future<void> _confirmClearAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 36),
+        title: const Text('Clear All History?'),
+        content: const Text(
+          'Are you sure you want to clear all unpinned clipboard history? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await ClipboardManager.instance.clearHistory();
+      setState(() {
+        _selectedEntries.clear();
+        _isSelectMode = false;
+      });
+      if (mounted) showTechuMessage(context, 'History cleared');
+      _feed.refresh();
+    }
+  }
+
+  Widget _buildSelectionActionBar(ColorScheme colors, bool isDark) {
+    final visible = _filteredEntries;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2633) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.black12, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: _toggleSelectAll,
+            child: Row(
+              children: [
+                Icon(
+                  _selectedEntries.length == visible.length && visible.isNotEmpty
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                  size: 18,
+                  color: colors.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _selectedEntries.length == visible.length && visible.isNotEmpty
+                      ? 'Deselect All'
+                      : 'Select All',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '(${_selectedEntries.length})',
+            style: TextStyle(fontSize: 11.5, color: colors.onSurfaceVariant),
+          ),
+          const Spacer(),
+          if (_selectedEntries.isNotEmpty)
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.redAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+              onPressed: _confirmDeleteSelected,
+              icon: const Icon(Icons.delete_outline_rounded, size: 15),
+              label: Text(
+                'Delete (${_selectedEntries.length})',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.redAccent.withOpacity(0.85),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+            onPressed: _confirmClearAll,
+            child: const Text('Clear All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoDeviceView(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).colorScheme;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.portable_wifi_off_rounded,
+                size: 38,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'No Device Connected',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Connect with your Mac or PC to sync clips instantly:',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => widget.onOpenDevicesTab?.call(),
+                    child: Container(
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1B2330) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Icon(Icons.laptop_mac_rounded, size: 22, color: Colors.green),
+                              Icon(Icons.arrow_forward_ios_rounded, size: 11, color: colors.onSurfaceVariant),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'MacBook / Mac',
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Scan QR code or enter PIN to sync',
+                            style: TextStyle(fontSize: 10.5, color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => widget.onOpenDevicesTab?.call(),
+                    child: Container(
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1B2330) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Icon(Icons.laptop_windows_rounded, size: 22, color: Colors.blue),
+                              Icon(Icons.arrow_forward_ios_rounded, size: 11, color: colors.onSurfaceVariant),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Windows / PC',
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Connect via LAN or Relay PIN',
+                            style: TextStyle(fontSize: 10.5, color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () => widget.onReturnToAll?.call(),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text('Return to All History'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -311,7 +658,9 @@ class _PaginatedClipboardHistoryListState
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Column(
       children: [
         Padding(
@@ -362,12 +711,62 @@ class _PaginatedClipboardHistoryListState
                     showCheckmark: false,
                   ),
                 ),
+              const SizedBox(width: 4),
+              InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () {
+                  setState(() {
+                    _isSelectMode = !_isSelectMode;
+                    if (!_isSelectMode) _selectedEntries.clear();
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _isSelectMode
+                        ? colors.primary.withOpacity(0.18)
+                        : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _isSelectMode
+                          ? colors.primary.withOpacity(0.6)
+                          : (isDark ? Colors.white12 : Colors.black12),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isSelectMode ? Icons.check_circle_rounded : Icons.checklist_rounded,
+                        size: 14,
+                        color: _isSelectMode ? colors.primary : colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _isSelectMode ? 'Done' : 'Select',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _isSelectMode ? colors.primary : colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-        Expanded(
-          child: _feed.entries.isEmpty
-              ? (_feed.loading
+        if (widget.deviceFilter == DeviceFilterMode.noDevices)
+          Expanded(child: _buildNoDeviceView(context))
+        else ...[
+          if (_isSelectMode) _buildSelectionActionBar(colors, isDark),
+          Expanded(
+            child: () {
+              final visibleEntries = _filteredEntries;
+              if (visibleEntries.isEmpty) {
+                return _feed.loading
                     ? const Center(child: CircularProgressIndicator())
                     : TechuEmptyState(
                         icon: _feed.failed
@@ -393,204 +792,262 @@ class _PaginatedClipboardHistoryListState
                                 child: Text(l10n.retry),
                               )
                             : null,
-                      ))
-              : RefreshIndicator(
-                  onRefresh: _feed.refresh,
-                  child: ListView.builder(
-                    key: const PageStorageKey('clipboard-history'),
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                    itemCount: _feed.entries.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == _feed.entries.length) {
-                        if (_feed.failed) {
-                          return Center(
-                            child: TextButton(
-                              onPressed: _feed.refresh,
-                              child: Text(l10n.retry),
-                            ),
-                          );
-                        }
-                        return _feed.loading
-                            ? const Padding(
-                                padding: EdgeInsets.all(20),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            : const SizedBox(height: 8);
+                      );
+              }
+
+              return RefreshIndicator(
+                onRefresh: _feed.refresh,
+                child: ListView.builder(
+                  key: const PageStorageKey('clipboard-history'),
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  itemCount: visibleEntries.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == visibleEntries.length) {
+                      if (_feed.failed) {
+                        return Center(
+                          child: TextButton(
+                            onPressed: _feed.refresh,
+                            child: Text(l10n.retry),
+                          ),
+                        );
                       }
-                      final entry = _feed.entries[index];
-                      final isFile =
-                          entry.item.type == 'fileURL' ||
-                          entry.item.type == 'fileURLs';
-                      final isText = entry.item.type == 'text';
-                      final uri = isText
-                          ? Uri.tryParse(entry.item.value.toString().trim())
-                          : null;
-                      final isLink =
-                          uri?.scheme == 'http' || uri?.scheme == 'https';
-                      final icon = isFile
-                          ? Icons.description_outlined
-                          : isLink
-                          ? Icons.link_rounded
-                          : isText
-                          ? Icons.notes_rounded
-                          : Icons.image_outlined;
-                      final label = _dateLabel(entry.date);
-                      final showDate =
-                          index == 0 ||
-                          _dateLabel(_feed.entries[index - 1].date) != label;
-                      final title = entry.item.title;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (showDate)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 12, 4, 12),
-                              child: Text(
-                                label,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(color: colors.onSurfaceVariant),
+                      return _feed.loading
+                          ? const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Center(
+                                child: CircularProgressIndicator(),
                               ),
-                            ),
+                            )
+                          : const SizedBox(height: 8);
+                    }
+                    final entry = visibleEntries[index];
+                    final isFile =
+                        entry.item.type == 'fileURL' ||
+                        entry.item.type == 'fileURLs';
+                    final isText = entry.item.type == 'text';
+                    final uri = isText
+                        ? Uri.tryParse(entry.item.value.toString().trim())
+                        : null;
+                    final isLink =
+                        uri?.scheme == 'http' || uri?.scheme == 'https';
+                    final icon = isFile
+                        ? Icons.description_outlined
+                        : isLink
+                        ? Icons.link_rounded
+                        : isText
+                        ? Icons.notes_rounded
+                        : Icons.image_outlined;
+                    final label = _dateLabel(entry.date);
+                    final showDate =
+                        index == 0 ||
+                        _dateLabel(visibleEntries[index - 1].date) != label;
+                    final title = entry.item.title;
+                    final isSelected = _selectedEntries.contains(entry);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (showDate)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Card(
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(24),
-                                onTap: () {
-                                  if (isFile) {
-                                    widget.onFileTap?.call(entry);
-                                  } else if (isText) {
-                                    _copy(entry);
-                                  } else {
-                                    _preview(entry);
-                                  }
-                                },
-                                onLongPress: () => _preview(entry),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(18),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
+                            padding: const EdgeInsets.fromLTRB(4, 12, 4, 12),
+                            child: Text(
+                              label,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(color: colors.onSurfaceVariant),
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Card(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(24),
+                              onTap: () {
+                                if (_isSelectMode) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedEntries.remove(entry);
+                                    } else {
+                                      _selectedEntries.add(entry);
+                                    }
+                                  });
+                                } else if (isFile) {
+                                  widget.onFileTap?.call(entry);
+                                } else if (isText) {
+                                  _copy(entry);
+                                } else {
+                                  _preview(entry);
+                                }
+                              },
+                              onLongPress: () {
+                                if (_isSelectMode) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedEntries.remove(entry);
+                                    } else {
+                                      _selectedEntries.add(entry);
+                                    }
+                                  });
+                                } else {
+                                  _preview(entry);
+                                }
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Row(
+                                  children: [
+                                    if (_isSelectMode) ...[
+                                      Icon(
+                                        isSelected
+                                            ? Icons.check_circle_rounded
+                                            : Icons.circle_outlined,
+                                        size: 22,
+                                        color: isSelected
+                                            ? colors.primary
+                                            : colors.onSurfaceVariant.withOpacity(0.4),
+                                      ),
+                                      const SizedBox(width: 14),
+                                    ],
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Icon(
-                                            icon,
-                                            size: 18,
-                                            color: colors.primary,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              entry.sourceApp ?? 'Techuboard',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelMedium
-                                                  ?.copyWith(
-                                                    color:
-                                                        colors.onSurfaceVariant,
-                                                  ),
-                                            ),
-                                          ),
-                                          Text(
-                                            MaterialLocalizations.of(
-                                              context,
-                                            ).formatTimeOfDay(
-                                              TimeOfDay.fromDateTime(
-                                                entry.date,
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                icon,
+                                                size: 18,
+                                                color: colors.primary,
                                               ),
-                                            ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  entry.sourceApp ?? 'Techuboard',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelMedium
+                                                      ?.copyWith(
+                                                        color:
+                                                            colors.onSurfaceVariant,
+                                                      ),
+                                                ),
+                                              ),
+                                              Text(
+                                                MaterialLocalizations.of(
+                                                  context,
+                                                ).formatTimeOfDay(
+                                                  TimeOfDay.fromDateTime(
+                                                    entry.date,
+                                                  ),
+                                                ),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color:
+                                                          colors.onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            title,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
                                             style: Theme.of(context)
                                                 .textTheme
-                                                .labelSmall
-                                                ?.copyWith(
-                                                  color:
-                                                      colors.onSurfaceVariant,
+                                                .bodyLarge
+                                                ?.copyWith(height: 1.45),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  isFile
+                                                      ? (entry.item.type ==
+                                                                'fileURLs'
+                                                            ? (entry.item.value
+                                                                      as List<
+                                                                        String
+                                                                      >)
+                                                                  .first
+                                                            : entry.item.value
+                                                                  .toString())
+                                                      : isText
+                                                      ? l10n.tapToCopy
+                                                      : l10n.preview,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color:
+                                                            colors.onSurfaceVariant,
+                                                      ),
                                                 ),
+                                              ),
+                                              if (!_isSelectMode) ...[
+                                                InkWell(
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  onTap: () => _confirmDeleteSingle(entry),
+                                                  child: const Padding(
+                                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    child: Icon(
+                                                      Icons.delete_outline_rounded,
+                                                      size: 18,
+                                                      color: Colors.redAccent,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                              ],
+                                              AnimatedSwitcher(
+                                                duration:
+                                                    MediaQuery.disableAnimationsOf(
+                                                      context,
+                                                    )
+                                                    ? Duration.zero
+                                                    : const Duration(
+                                                        milliseconds: 180,
+                                                      ),
+                                                child: Icon(
+                                                  _copied == entry
+                                                      ? Icons.check_rounded
+                                                      : isFile
+                                                      ? Icons.folder_open_rounded
+                                                      : isText
+                                                      ? Icons.copy_rounded
+                                                      : Icons.open_in_full_rounded,
+                                                  key: ValueKey(_copied == entry),
+                                                  size: 18,
+                                                  color: colors.primary,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        title,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyLarge
-                                            ?.copyWith(height: 1.45),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              isFile
-                                                  ? (entry.item.type ==
-                                                            'fileURLs'
-                                                        ? (entry.item.value
-                                                                  as List<
-                                                                    String
-                                                                  >)
-                                                              .first
-                                                        : entry.item.value
-                                                              .toString())
-                                                  : isText
-                                                  ? l10n.tapToCopy
-                                                  : l10n.preview,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    color:
-                                                        colors.onSurfaceVariant,
-                                                  ),
-                                            ),
-                                          ),
-                                          AnimatedSwitcher(
-                                            duration:
-                                                MediaQuery.disableAnimationsOf(
-                                                  context,
-                                                )
-                                                ? Duration.zero
-                                                : const Duration(
-                                                    milliseconds: 180,
-                                                  ),
-                                            child: Icon(
-                                              _copied == entry
-                                                  ? Icons.check_rounded
-                                                  : isFile
-                                                  ? Icons.folder_open_rounded
-                                                  : isText
-                                                  ? Icons.copy_rounded
-                                                  : Icons.open_in_full_rounded,
-                                              key: ValueKey(_copied == entry),
-                                              size: 18,
-                                              color: colors.primary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
-                        ],
-                      );
-                    },
-                  ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-        ),
+              );
+            }(),
+          ),
+        ],
       ],
     );
   }

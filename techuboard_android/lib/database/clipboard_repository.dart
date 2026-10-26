@@ -212,6 +212,31 @@ class ClipboardRepository {
     await _deleteOwnedImages(images);
   }
 
+  Future<void> deleteEntries(List<HistoryEntry> entries) async {
+    if (entries.isEmpty) return;
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (final entry in entries) {
+        if (entry.contentHash != null && entry.contentHash!.isNotEmpty) {
+          await txn.delete(
+            'clipboard_history',
+            where: 'content_hash = ?',
+            whereArgs: [entry.contentHash],
+          );
+        } else {
+          final val = entry.item.type == 'fileURLs'
+              ? jsonEncode(entry.item.value)
+              : entry.item.value.toString();
+          await txn.delete(
+            'clipboard_history',
+            where: 'created_at = ? AND item_value = ?',
+            whereArgs: [entry.date.millisecondsSinceEpoch, val],
+          );
+        }
+      }
+    });
+  }
+
   Future<void> _deleteOwnedImages(List<Map<String, Object?>> rows) async {
     if (!Platform.isWindows) return;
     final root = Directory(

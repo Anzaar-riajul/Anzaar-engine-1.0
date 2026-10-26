@@ -57,7 +57,9 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
       final info = await AppUpdaterService.instance.checkForUpdate();
       if (!mounted) return;
       if (info.hasUpdate) {
-        _showUpdateDialog(info);
+        _showUpdateDialog(info, isForced: false);
+      } else if (info.downloadUrl != null) {
+        _showUpdateDialog(info, isForced: true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -76,7 +78,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
     }
   }
 
-  void _showUpdateDialog(UpdateInfo info) {
+  void _showUpdateDialog(UpdateInfo info, {bool isForced = false}) {
     double progress = 0.0;
     bool isDownloading = false;
 
@@ -89,11 +91,16 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
             return AlertDialog(
               title: Row(
                 children: [
-                  const Icon(Icons.system_update, color: Colors.blueAccent),
+                  Icon(
+                    isForced ? Icons.check_circle_outline_rounded : Icons.system_update_rounded,
+                    color: isForced ? Colors.green : Colors.blueAccent,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('Update Available: v${info.latestVersion}',
-                        style: const TextStyle(fontSize: 18)),
+                    child: Text(
+                      isForced ? 'Techuboard is Up to Date' : 'Update Available: ${info.latestVersion}',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -101,10 +108,14 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('A newer version of Techuboard is ready to install.'),
+                  Text(
+                    isForced
+                        ? 'Current Version: ${info.currentVersion}\nLatest on GitHub: ${info.latestVersion}\n\nYou can reinstall the latest release APK if needed.'
+                        : 'A newer version of Techuboard (${info.latestVersion}) is ready to install.',
+                  ),
                   if (info.releaseNotes.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    const Text('Changes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Release Notes:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 120),
@@ -128,7 +139,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                 if (!isDownloading)
                   TextButton(
                     onPressed: () => Navigator.pop(dialogCtx),
-                    child: const Text('Later'),
+                    child: Text(isForced ? 'Close' : 'Later'),
                   ),
                 FilledButton.icon(
                   icon: isDownloading
@@ -138,7 +149,11 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.download),
-                  label: Text(isDownloading ? 'Downloading...' : 'Update Now'),
+                  label: Text(
+                    isDownloading
+                        ? 'Downloading...'
+                        : (isForced ? 'Reinstall Latest APK' : 'Update Now'),
+                  ),
                   onPressed: isDownloading || info.downloadUrl == null
                       ? null
                       : () async {

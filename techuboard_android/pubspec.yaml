@@ -1,7 +1,7 @@
 name: techuboard_android
 description: Clipboard history, encrypted LAN sync, floating paste hub, notes, notification mirroring, and file transfer for Techuboard.
 publish_to: none
-version: 1.0.32+12284
+version: 1.0.33+12385
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
