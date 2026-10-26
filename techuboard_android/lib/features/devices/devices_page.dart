@@ -282,7 +282,11 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
     });
 
     try {
-      await TechuRelayGroups.exitGroup(disband: false);
+      try {
+        await TechuRelayGroups.exitGroup(disband: false);
+      } catch (err) {
+        debugPrint('[DevicesPage] Remote exitGroup notice failed, proceeding with local unpair: $err');
+      }
       await TechuRelayGroups.clearEnrollment();
       await SyncManager.instance.updateRelaySettings(
         enabled: false,

@@ -104,6 +104,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  csslib:
+    dependency: transitive
+    description:
+      name: csslib
+      sha256: "09bad715f418841f976c77db72d5398dc1253c21fb9c0c7f0b0b985860b2d58e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.2"
   dbus:
     dependency: transitive
     description:
@@ -244,6 +252,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.4"
+  html:
+    dependency: transitive
+    description:
+      name: html
+      sha256: "6d1264f2dffa1b1101c25a91dff0dc2daee4c18e87cd8538729773c073dbf602"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.15.6"
   http:
     dependency: transitive
     description:
@@ -529,6 +545,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.3"
+  sodium_libs:
+    dependency: "direct main"
+    description:
+      name: sodium_libs
+      sha256: ddcbebf920053bdd2aa2e2d84880e026eceb6fa14bce8b72e5f0de070d7a24f7
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.4.0+1"
   source_span:
     dependency: transitive
     description:
