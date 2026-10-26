@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:common_relay/common_relay.dart' as cr;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:sodium/sodium.dart';
 import 'sodium_helper.dart';
@@ -25,12 +26,24 @@ class PeerIdentity {
   static Future<PeerIdentity> create() async {
     final sodium = await initSodium();
     final keyPair = sodium.crypto.box.keyPair();
-    final publicKeyHex = sodium.toHex(keyPair.publicKey);
+    final publicKeyHex = cr.hex(keyPair.publicKey);
+    final secretKeyHex = cr.hex(keyPair.secretKey.extractBytes());
+    
+    final storage = const FlutterSecureStorage();
+    await storage.write(
+      key: _storageKey,
+      value: jsonEncode({
+        'publicKey': publicKeyHex,
+        'secretKey': secretKeyHex,
+      }),
+    );
+    await storage.write(key: _publicKeyHexKey, value: publicKeyHex);
+
     return PeerIdentity._(
       publicKey: SecureKey.fromList(sodium, keyPair.publicKey),
       secretKey: keyPair.secretKey,
       publicKeyHex: publicKeyHex,
-    ).._persist();
+    );
   }
 
   /// Load existing identity from secure storage, or generate if none exists.
@@ -40,12 +53,14 @@ class PeerIdentity {
     final existing = await storage.read(key: _storageKey);
     if (existing != null) {
       try {
-        final decoded = sodium.fromHex(existing);
-        if (decoded.length == sodium.crypto.box.publicKeyBytes) {
+        final map = jsonDecode(existing) as Map<String, dynamic>;
+        final pubBytes = cr.unhex(map['publicKey'] as String);
+        final secBytes = cr.unhex(map['secretKey'] as String);
+        if (pubBytes.length == sodium.crypto.box.publicKeyBytes) {
           return PeerIdentity._(
-            publicKey: SecureKey.fromList(sodium, decoded),
-            secretKey: SecureKey.fromList(sodium, decoded),
-            publicKeyHex: existing,
+            publicKey: SecureKey.fromList(sodium, pubBytes),
+            secretKey: SecureKey.fromList(sodium, secBytes),
+            publicKeyHex: map['publicKey'] as String,
           );
         }
       } catch (_) {
@@ -57,12 +72,6 @@ class PeerIdentity {
 
   /// Get the public key hex for sharing with peers during handshake.
   String get hex => publicKeyHex;
-
-  void _persist() async {
-    final storage = const FlutterSecureStorage();
-    await storage.write(key: _storageKey, value: publicKeyHex);
-    await storage.write(key: _publicKeyHexKey, value: publicKeyHex);
-  }
 
   void dispose() {
     publicKey.dispose();
