@@ -65,17 +65,35 @@ final class SyncRelayGroups: ObservableObject {
     }
     private var zh: Bool { PreferencesManager.shared.appLanguage == .zh }
     func t(_ cn: String,_ en: String) -> String { zh ? cn : en }
-    private static func query(_ account: String) -> [String:Any] { [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:"com.techuboard.relay-groups",kSecAttrAccount as String:account] }
-    private static func read(_ account: String) throws -> [String:Any]? {
-        var q = query(account);q[kSecReturnData as String] = true;q[kSecMatchLimit as String] = kSecMatchLimitOne;var value: CFTypeRef?
-        let status = SecItemCopyMatching(q as CFDictionary,&value);if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let bytes = value as? Data, let object = try JSONSerialization.jsonObject(with:bytes) as? [String:Any] else { throw RelayError.invalid("Keychain") };return object
+    private static var storageDirectory: URL {
+        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Techuboard", isDirectory: true)
+            .appendingPathComponent("relay_groups", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        return url
     }
-    private static func write(_ account: String,_ value: [String:Any]?) throws {
-        let q = query(account);guard let value else { let s = SecItemDelete(q as CFDictionary);guard s == errSecSuccess || s == errSecItemNotFound else { throw RelayError.invalid("Keychain") };return }
-        let data = try JSONSerialization.data(withJSONObject:value);var status = SecItemUpdate(q as CFDictionary,[kSecValueData as String:data] as CFDictionary)
-        if status == errSecItemNotFound { var add = q;add[kSecValueData as String] = data;add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;status = SecItemAdd(add as CFDictionary,nil) }
-        guard status == errSecSuccess else { throw RelayError.invalid("Keychain") }
+
+    private static func fileURL(for account: String) -> URL {
+        let safeName = account.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? account
+        return storageDirectory.appendingPathComponent("\(safeName).json")
+    }
+
+    private static func read(_ account: String) throws -> [String:Any]? {
+        let url = fileURL(for: account)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        return try JSONSerialization.jsonObject(with: data) as? [String:Any]
+    }
+
+    private static func write(_ account: String, _ value: [String:Any]?) throws {
+        let url = fileURL(for: account)
+        guard let value else {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted])
+        try data.write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
     static func load() throws -> RelayGroups {
         let raw = SyncRelaySettings.token();var c = raw.isEmpty ? [:] : (try JSONSerialization.jsonObject(with:Data(raw.utf8)) as? [String:Any] ?? [:])
