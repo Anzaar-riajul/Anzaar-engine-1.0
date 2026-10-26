@@ -22,7 +22,7 @@ subprojects {
             val androidExt = project.extensions.findByName("android")
             if (androidExt is com.android.build.gradle.BaseExtension) {
                 if (androidExt.compileSdkVersion == null) {
-                    androidExt.compileSdkVersion(36)
+                    androidExt.compileSdkVersion(35)
                 }
             }
         }

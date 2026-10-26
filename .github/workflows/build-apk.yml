@@ -31,10 +31,10 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Setup Android SDK 36 and Accept Licenses
+      - name: Setup Android SDK 35 and Accept Licenses
         run: |
           yes | flutter doctor --android-licenses 2>/dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" 2>/dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" 2>/dev/null || true
 
       - name: Flutter Dependencies
         working-directory: techuboard_android
@@ -72,6 +72,8 @@ jobs:
       - name: Output Error Summary
         if: failure()
         run: |
+          echo "=== BUILD LOG DUMP ==="
+          cat /tmp/build.log 2>/dev/null || true
           echo "## ❌ Build Failure Details" >> $GITHUB_STEP_SUMMARY
           echo '```text' >> $GITHUB_STEP_SUMMARY
           tail -n 80 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
