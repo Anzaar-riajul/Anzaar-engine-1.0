@@ -581,7 +581,7 @@ struct MenuBarPanelView: View {
             } else {
                 // Download APK Tab
                 VStack(spacing: 8) {
-                    if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                    if let qr = qrImage(for: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                         Image(nsImage: qr)
                             .interpolation(.none)
                             .resizable()
@@ -608,7 +608,7 @@ struct MenuBarPanelView: View {
                                 if let window = NSApp.keyWindow {
                                     picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
                                 }
-                            } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                            } else if let github = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                                 NSWorkspace.shared.open(github)
                             }
                         } label: {

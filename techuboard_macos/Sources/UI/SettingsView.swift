@@ -367,7 +367,7 @@ struct SettingsView: View {
         Section("Android অ্যাপ ডাউনলোড ও ইনস্টল (Download Android App)") {
           VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 18) {
-              if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+              if let qr = qrImage(for: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                 VStack(spacing: 8) {
                   Image(nsImage: qr)
                     .interpolation(.none)
@@ -396,7 +396,7 @@ struct SettingsView: View {
                   Button {
                     if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
                       NSWorkspace.shared.activateFileViewerSelecting([url])
-                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                    } else if let github = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                       NSWorkspace.shared.open(github)
                     }
                   } label: {
@@ -410,7 +410,7 @@ struct SettingsView: View {
                       if let window = NSApp.keyWindow {
                         picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
                       }
-                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                    } else if let github = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                       NSWorkspace.shared.open(github)
                     }
                   } label: {
@@ -420,7 +420,7 @@ struct SettingsView: View {
 
                   Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString("https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases", forType: .string)
+                    NSPasteboard.general.setString("https://anzaar-riajul.github.io/Anzaar-engine-1.0/", forType: .string)
                     copiedDownloadLink = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                       copiedDownloadLink = false
