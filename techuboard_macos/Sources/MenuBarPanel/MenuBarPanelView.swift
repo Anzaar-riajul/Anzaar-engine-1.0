@@ -955,7 +955,7 @@ struct MenuBarPanelView: View {
             } else {
                 // Download APK Tab
                 VStack(spacing: 8) {
-                    if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest/download/Techuboard-Android-v1.0.apk") {
+                    if let qr = qrImage(for: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                         Image(nsImage: qr)
                             .interpolation(.none)
                             .resizable()
@@ -970,7 +970,7 @@ struct MenuBarPanelView: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.primary)
 
-                        Text("Android APK সরাসরি ডাউনলোড করতে")
+                        Text("সর্বশেষ Techuboard Android APK ডাউনলোড করতে")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -982,11 +982,22 @@ struct MenuBarPanelView: View {
                                 if let window = NSApp.keyWindow {
                                     picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
                                 }
-                            } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest/download/Techuboard-Android-v1.0.apk") {
-                                NSWorkspace.shared.open(github)
+                            } else if let landingPage = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
+                                NSWorkspace.shared.open(landingPage)
                             }
                         } label: {
                             Label("AirDrop / Share APK", systemImage: "square.and.arrow.up")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            if let landingPage = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
+                                NSWorkspace.shared.open(landingPage)
+                            }
+                        } label: {
+                            Label("ডাউনলোড পেজ", systemImage: "globe")
                                 .font(.system(size: 11))
                         }
                         .buttonStyle(.bordered)

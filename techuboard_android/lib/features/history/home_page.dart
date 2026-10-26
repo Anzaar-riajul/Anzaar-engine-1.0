@@ -16,6 +16,7 @@ import '../transfers/shared_files_page.dart';
 import '../logs/log_page.dart';
 import '../settings/mobile_settings_content.dart';
 import '../snippets/snippets_page.dart';
+import '../../services/app_updater_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -112,6 +113,9 @@ class _HomePageState extends State<HomePage>
   @override
   void initState() {
     super.initState();
+    if (Platform.isAndroid) {
+      AppUpdaterService.instance.startAutoCheck();
+    }
     if (Platform.isAndroid || Platform.isIOS) {
       WidgetsBinding.instance.addObserver(this);
       _incomingShares = IncomingShareCoordinator(
@@ -492,22 +496,57 @@ class _HomePageState extends State<HomePage>
               tooltip: l10n.receivedFiles,
               icon: const Icon(Icons.folder_open_rounded),
             ),
-            IconButton(
-              onPressed: _openSettings,
-              tooltip: l10n.settings,
-              icon: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest.withOpacity(0.55),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: colors.outlineVariant.withOpacity(0.35),
-                    width: 0.8,
-                  ),
-                ),
-                child: const Icon(Icons.settings_outlined, size: 18),
-              ),
+            ValueListenableBuilder<UpdateInfo?>(
+              valueListenable: AppUpdaterService.instance.updateNotifier,
+              builder: (context, updateInfo, child) {
+                final hasUpdate = updateInfo != null && updateInfo.hasUpdate;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      onPressed: _openSettings,
+                      tooltip: l10n.settings,
+                      icon: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: colors.surfaceContainerHighest.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: colors.outlineVariant.withOpacity(0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: const Icon(Icons.settings_outlined, size: 18),
+                      ),
+                    ),
+                    if (hasUpdate)
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF3B30),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.surface,
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF3B30).withOpacity(0.4),
+                                blurRadius: 4,
+                                spreadRadius: 0.5,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(width: 8),
           ],

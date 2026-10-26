@@ -148,8 +148,18 @@ class AppUpdaterService {
       }
 
       if (rawTag.isEmpty) {
-        rawTag = 'android-v1.0-85';
-        apkUrl = 'https://github.com/$repoOwner/$repoName/releases/latest/download/Techuboard-Android-v1.0.apk';
+        final info = UpdateInfo(
+          hasUpdate: false,
+          latestVersion: 'v$currentVersionName',
+          currentVersion: 'v$currentVersionName (Build $currentBuildNumber)',
+          latestBuildNumber: currentBuildNumber,
+          currentBuildNumber: currentBuildNumber,
+          releaseNotes: '',
+          downloadUrl: null,
+          apkName: apkName,
+        );
+        updateNotifier.value = info;
+        return info;
       }
 
       final remoteBuild = _extractBuildNumber(rawTag);

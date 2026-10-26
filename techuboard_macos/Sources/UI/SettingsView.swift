@@ -367,7 +367,7 @@ struct SettingsView: View {
         Section("Android অ্যাপ ডাউনলোড ও ইনস্টল (Download Android App)") {
           VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 18) {
-              if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest/download/Techuboard-Android-v1.0.apk") {
+              if let qr = qrImage(for: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
                 VStack(spacing: 8) {
                   Image(nsImage: qr)
                     .interpolation(.none)
@@ -388,7 +388,7 @@ struct SettingsView: View {
               VStack(alignment: .leading, spacing: 10) {
                 Text("ফোনে Techuboard অ্যাপ নেই? এখনই ইনস্টল করুন")
                   .font(.headline)
-                Text("আপনার Android ফোনের সাধারণ ক্যামেরা দিয়ে পাশের QR কোডটি স্ক্যান করলে সরাসরি APK ডাউনলোড করতে পারবেন। অথবা নিচের বিকল্পগুলো ব্যবহার করুন:")
+                Text("আপনার Android ফোনের সাধারণ ক্যামেরা দিয়ে পাশের QR কোডটি স্ক্যান করলে সরাসরি সর্বশেষ APK ডাউনলোড করতে পারবেন। অথবা নিচের বিকল্পগুলো ব্যবহার করুন:")
                   .font(AppFont.caption)
                   .foregroundStyle(.secondary)
 
@@ -396,8 +396,8 @@ struct SettingsView: View {
                   Button {
                     if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
                       NSWorkspace.shared.activateFileViewerSelecting([url])
-                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest/download/Techuboard-Android-v1.0.apk") {
-                      NSWorkspace.shared.open(github)
+                    } else if let landingPage = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
+                      NSWorkspace.shared.open(landingPage)
                     }
                   } label: {
                     Label("APK ফাইল দেখুন", systemImage: "arrow.down.doc")
@@ -410,8 +410,8 @@ struct SettingsView: View {
                       if let window = NSApp.keyWindow {
                         picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
                       }
-                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest/download/Techuboard-Android-v1.0.apk") {
-                      NSWorkspace.shared.open(github)
+                    } else if let landingPage = URL(string: "https://anzaar-riajul.github.io/Anzaar-engine-1.0/") {
+                      NSWorkspace.shared.open(landingPage)
                     }
                   } label: {
                     Label("AirDrop / শেয়ার করুন", systemImage: "square.and.arrow.up")

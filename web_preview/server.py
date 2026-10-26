@@ -8,6 +8,31 @@ import socket
 PORT = 8080
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 
+def get_latest_apk():
+    repo_root = os.path.abspath(os.path.join(DIRECTORY, ".."))
+    search_dirs = [
+        os.path.join(repo_root, "dist"),
+        os.path.join(repo_root, "Techu Complete Versions", "Android"),
+        os.path.join(repo_root, "techuboard_android", "build", "app", "outputs", "flutter-apk"),
+        os.path.join(repo_root, "techuboard_android"),
+        repo_root,
+    ]
+    candidate_apks = []
+    for d in search_dirs:
+        if os.path.isdir(d):
+            for entry in os.listdir(d):
+                if entry.endswith('.apk'):
+                    full_p = os.path.join(d, entry)
+                    if os.path.isfile(full_p):
+                        try:
+                            candidate_apks.append((os.path.getmtime(full_p), full_p, entry))
+                        except Exception:
+                            pass
+    if candidate_apks:
+        candidate_apks.sort(key=lambda x: x[0], reverse=True)
+        return candidate_apks[0][1], candidate_apks[0][2]
+    return None, "Techuboard-Android-Latest.apk"
+
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -32,17 +57,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         is_mobile_ua = any(m in ua for m in ['mobile', 'android', 'iphone', 'ipod', 'ipad', 'silk', 'harmony'])
 
-        if path_only in ['/apk', '/download-apk', '/Techuboard-Android.apk']:
-            apk_path = os.path.abspath(os.path.join(DIRECTORY, "..", "Techu Complete Versions", "Android", "Techuboard-Android-v1.0.apk"))
-            if os.path.exists(apk_path):
+        if path_only in ['/apk', '/download-apk', '/Techuboard-Android.apk'] or path_only.endswith('.apk'):
+            apk_path, apk_filename = get_latest_apk()
+            if apk_path and os.path.exists(apk_path):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/vnd.android.package-archive')
-                self.send_header('Content-Disposition', 'attachment; filename="Techuboard-Android-v1.0.apk"')
+                self.send_header('Content-Disposition', f'attachment; filename="{apk_filename}"')
                 self.send_header('Content-Length', str(os.path.getsize(apk_path)))
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 with open(apk_path, 'rb') as f:
-                    self.wfile.write(f.read())
+                    while True:
+                        chunk = f.read(65536)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
                 return
             else:
                 self.send_error(404, "APK not found")

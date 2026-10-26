@@ -49,6 +49,33 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
 
   bool _timerWidgetPinned = false;
   bool _isCheckingUpdate = false;
+  bool _isInlineDownloading = false;
+  double _inlineDownloadProgress = 0.0;
+  String? _inlineDownloadError;
+
+  Future<void> _handleInlineUpdate(UpdateInfo info) async {
+    if (_isInlineDownloading || info.downloadUrl == null) return;
+    setState(() {
+      _isInlineDownloading = true;
+      _inlineDownloadProgress = 0.0;
+      _inlineDownloadError = null;
+    });
+    try {
+      await AppUpdaterService.instance.downloadAndInstall(
+        downloadUrl: info.downloadUrl!,
+        onProgress: (p, received, total) {
+          if (mounted) setState(() => _inlineDownloadProgress = p);
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInlineDownloading = false;
+          _inlineDownloadError = 'Update failed: $e';
+        });
+      }
+    }
+  }
 
   Future<void> _handleCheckUpdate() async {
     if (_isCheckingUpdate) return;
@@ -200,6 +227,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
     if (Platform.isAndroid) {
       _refreshPinned();
       _refreshFloatingHubStatus();
+      AppUpdaterService.instance.checkForUpdate();
     }
     SharedPreferences.getInstance().then((prefs) {
       if (mounted) {
@@ -584,17 +612,115 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _isCheckingUpdate ? null : _handleCheckUpdate,
-                  icon: _isCheckingUpdate
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.sync, size: 18),
-                  label: Text(_isCheckingUpdate ? 'Checking...' : 'Check for Updates'),
+                ValueListenableBuilder<UpdateInfo?>(
+                  valueListenable: AppUpdaterService.instance.updateNotifier,
+                  builder: (context, updateInfo, _) {
+                    final hasUpdate = updateInfo != null && updateInfo.hasUpdate;
+                    if (hasUpdate) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 14),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFFF3B30),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'নতুন সংস্করণ উপলব্ধ: ${updateInfo.latestVersion}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF3B30).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    'UPDATE',
+                                    style: TextStyle(
+                                      color: Color(0xFFFF3B30),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (updateInfo.releaseNotes.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                updateInfo.releaseNotes,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                            if (_isInlineDownloading) ...[
+                              const SizedBox(height: 12),
+                              LinearProgressIndicator(value: _inlineDownloadProgress > 0 ? _inlineDownloadProgress : null),
+                              const SizedBox(height: 6),
+                              Text(
+                                'ডাউনলোড হচ্ছে: ${(_inlineDownloadProgress * 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            ],
+                            if (_inlineDownloadError != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                _inlineDownloadError!,
+                                style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: _isInlineDownloading ? null : () => _handleInlineUpdate(updateInfo),
+                              icon: _isInlineDownloading
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.download, size: 18),
+                              label: Text(_isInlineDownloading ? 'ডাউনলোড হচ্ছে...' : 'এখনই সরাসরি আপডেট করুন'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: OutlinedButton.icon(
+                        onPressed: _isCheckingUpdate ? null : _handleCheckUpdate,
+                        icon: _isCheckingUpdate
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.sync, size: 18),
+                        label: Text(_isCheckingUpdate ? 'যাচাই করা হচ্ছে...' : 'আপডেট চেক করুন (Check for Updates)'),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
