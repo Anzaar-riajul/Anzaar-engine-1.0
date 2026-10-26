@@ -125,12 +125,13 @@ final class SyncCryptoV4 {
 
 extension Data {
     init?(hex: String) {
-        var len = hex.count
+        let len = hex.count
         var data = Data(capacity: len / 2)
         var ptr = hex.utf8.makeIterator()
         while let c1 = ptr.next(), let c2 = ptr.next() {
-            guard let v1 = UnicodeScalar(c1)?.value, let v2 = UnicodeScalar(c2)?.value,
-                  let d1 = DecimalDigit(v1), let d2 = DecimalDigit(v2) else { return nil }
+            let v1 = UnicodeScalar(c1).value
+            let v2 = UnicodeScalar(c2).value
+            guard let d1 = DecimalDigit(v1), let d2 = DecimalDigit(v2) else { return nil }
             data.append(UInt8(d1 * 16 + d2))
         }
         self = data

@@ -9,6 +9,7 @@ struct DiscoveredPeer {
     let endpoint: NWEndpoint
     let host: String
     let port: UInt16
+    var isOnline: Bool { true }
 }
 
 struct DeviceEntry {
