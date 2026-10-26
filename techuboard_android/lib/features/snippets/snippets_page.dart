@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import '../../database/snippet_repository.dart';
 import '../../models.dart';
+import '../../sync_manager.dart';
 
 class SnippetsPage extends StatefulWidget {
   const SnippetsPage({super.key});
@@ -46,11 +47,58 @@ class _SnippetsPageState extends State<SnippetsPage> {
     }
   }
 
+  String _selectedDeviceFilter = 'all';
+  bool _isSyncing = false;
+
+  Future<void> _syncNotesNow() async {
+    setState(() => _isSyncing = true);
+    try {
+      await SyncManager.instance.requestSnippetsFetch();
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await _loadSnippets();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text('Notes synchronized with connected devices!'),
+              ],
+            ),
+            backgroundColor: Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isSyncing = false);
+  }
+
   List<SnippetFolderItem> get _filteredFolders {
-    if (_searchQuery.trim().isEmpty) return _folders;
+    var list = _folders;
+
+    if (_selectedDeviceFilter != 'all') {
+      if (_selectedDeviceFilter == 'this_device') {
+        list = list.where((f) {
+          final d = (f.deviceName ?? '').toLowerCase();
+          return d.isEmpty || d.contains('this') || d.contains('phone') || d.contains('android') || d == 'local';
+        }).toList();
+      } else if (_selectedDeviceFilter == 'mac') {
+        list = list.where((f) {
+          final d = (f.deviceName ?? '').toLowerCase();
+          return d.contains('mac') || d.contains('desktop') || d.contains('laptop') || d.contains('apple');
+        }).toList();
+      } else {
+        list = list.where((f) => (f.deviceName ?? '').toLowerCase() == _selectedDeviceFilter).toList();
+      }
+    }
+
+    if (_searchQuery.trim().isEmpty) return list;
     final q = _searchQuery.toLowerCase();
     final result = <SnippetFolderItem>[];
-    for (final folder in _folders) {
+    for (final folder in list) {
       final matchesFolder = folder.title.toLowerCase().contains(q);
       final matchingSnippets = folder.snippets.where((s) {
         return s.title.toLowerCase().contains(q) ||
@@ -223,6 +271,50 @@ class _SnippetsPageState extends State<SnippetsPage> {
     );
   }
 
+  Widget _buildDeviceTabChip(String key, String label, IconData icon) {
+    final colors = Theme.of(context).colorScheme;
+    final isSelected = _selectedDeviceFilter == key;
+    return InkWell(
+      onTap: () => setState(() => _selectedDeviceFilter = key),
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colors.primary.withOpacity(0.18)
+              : colors.surfaceContainerHighest.withOpacity(0.4),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? colors.primary.withOpacity(0.6)
+                : colors.outlineVariant.withOpacity(0.25),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? colors.primary : colors.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? colors.primary : colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -234,29 +326,69 @@ class _SnippetsPageState extends State<SnippetsPage> {
     final displayFolders = _filteredFolders;
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCreateOrEditFolderDialog(),
+        icon: const Icon(Icons.create_new_folder_outlined),
+        label: const Text('New Folder'),
+      ),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: SearchBar(
-                controller: _searchController,
-                hintText: 'Search notes...',
-                leading: const Icon(Icons.search_rounded),
-                trailing: [
-                  if (_searchQuery.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.clear_rounded),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                      },
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SearchBar(
+                      controller: _searchController,
+                      hintText: 'Search notes...',
+                      leading: const Icon(Icons.search_rounded),
+                      trailing: [
+                        if (_searchQuery.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear_rounded),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          ),
+                      ],
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      elevation: const WidgetStatePropertyAll(0),
+                      backgroundColor:
+                          WidgetStatePropertyAll(colors.surfaceContainerLow),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    onPressed: _isSyncing ? null : _syncNotesNow,
+                    tooltip: 'Sync Notes with Mac',
+                    icon: _isSyncing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync_rounded),
+                  ),
                 ],
-                onChanged: (val) => setState(() => _searchQuery = val),
-                elevation: const WidgetStatePropertyAll(0),
-                backgroundColor:
-                    WidgetStatePropertyAll(colors.surfaceContainerLow),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Container(
+              height: 42,
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _buildDeviceTabChip('all', 'All Notes', Icons.folder_copy_outlined),
+                  const SizedBox(width: 8),
+                  _buildDeviceTabChip('mac', 'Mac', Icons.laptop_mac_rounded),
+                  const SizedBox(width: 8),
+                  _buildDeviceTabChip('this_device', 'This Device', Icons.smartphone_rounded),
+                ],
               ),
             ),
           ),
@@ -531,11 +663,6 @@ class _SnippetsPageState extends State<SnippetsPage> {
               ),
             ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateOrEditFolderDialog(),
-        icon: const Icon(Icons.create_new_folder_rounded),
-        label: const Text('New Folder'),
       ),
     );
   }

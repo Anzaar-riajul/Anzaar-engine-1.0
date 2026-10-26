@@ -179,6 +179,7 @@ class SnippetManager {
                 registerHotKeys()
             }
             onSnippetsChanged?(folders)
+            SyncManager.shared.broadcastSnippets()
         } catch {
             NSLog("SnippetManager: failed to save snippets — \(error.localizedDescription)")
         }
@@ -311,6 +312,79 @@ class SnippetManager {
             folders[fIndex].snippets[sIndex].content = content
             saveSnippets()
         }
+    }
+
+    /// Serializes snippet folders to JSON payload compatible with Android and cross-platform sync.
+    func exportJSONPayload() -> String? {
+        var list: [[String: Any]] = []
+        for f in folders {
+            var fDict: [String: Any] = [
+                "id": f.id.uuidString,
+                "title": f.title,
+                "isEnabled": f.isEnabled,
+                "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                "sortOrder": 0,
+                "deviceName": "Mac"
+            ]
+            var snips: [[String: Any]] = []
+            for s in f.snippets {
+                snips.append([
+                    "id": s.id.uuidString,
+                    "folderId": f.id.uuidString,
+                    "title": s.title,
+                    "content": s.content,
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "sortOrder": 0,
+                    "deviceName": "Mac"
+                ])
+            }
+            fDict["snippets"] = snips
+            list.append(fDict)
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: list) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Merges remote snippet folders received from another device.
+    func mergeRemoteFolders(_ remoteData: [[String: Any]]) -> Bool {
+        var changed = false
+        for folderDict in remoteData {
+            guard let title = folderDict["title"] as? String else { continue }
+            let idStr = folderDict["id"] as? String ?? UUID().uuidString
+            let folderId = UUID(uuidString: idStr) ?? UUID()
+            let isEnabled = (folderDict["isEnabled"] as? Bool) ?? true
+            let snippetsRaw = folderDict["snippets"] as? [[String: Any]] ?? []
+
+            var targetSnippets: [Snippet] = []
+            for sDict in snippetsRaw {
+                guard let sTitle = sDict["title"] as? String,
+                      let sContent = sDict["content"] as? String else { continue }
+                let sIdStr = sDict["id"] as? String ?? UUID().uuidString
+                let sId = UUID(uuidString: sIdStr) ?? UUID()
+                targetSnippets.append(Snippet(id: sId, title: sTitle, content: sContent, shortcut: nil))
+            }
+
+            if let existingIndex = folders.firstIndex(where: { $0.id == folderId || $0.title == title }) {
+                for s in targetSnippets {
+                    if let sIndex = folders[existingIndex].snippets.firstIndex(where: { $0.id == s.id || $0.title == s.title }) {
+                        if folders[existingIndex].snippets[sIndex].content != s.content {
+                            folders[existingIndex].snippets[sIndex].content = s.content
+                            changed = true
+                        }
+                    } else {
+                        folders[existingIndex].snippets.append(s)
+                        changed = true
+                    }
+                }
+            } else {
+                folders.append(SnippetFolder(id: folderId, title: title, snippets: targetSnippets, isEnabled: isEnabled))
+                changed = true
+            }
+        }
+        if changed {
+            saveSnippets(reregisterHotKeys: false)
+        }
+        return changed
     }
 
     /// Serializes all snippet folders to XML compatible with `importFromXML`.

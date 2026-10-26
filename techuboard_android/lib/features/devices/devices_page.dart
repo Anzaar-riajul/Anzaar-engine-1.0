@@ -191,6 +191,11 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
 
               // 3. Trigger immediate subnet discovery
               manager.triggerCrossBandDiscovery(scanFullSubnet: true);
+              await Future<void>.delayed(const Duration(milliseconds: 600));
+              for (final peer in manager.availablePeers) {
+                await manager.setSyncTarget(peer.peerId, enabled: true);
+                await manager.connectManualPeer(peer.host, peer.port);
+              }
 
               // 4. If relay invitation was attached, join relay in background
               if (relayUrl != null && relayUrl.isNotEmpty && relayUrl.startsWith('common-relay://')) {
@@ -750,12 +755,10 @@ class _FullscreenQRScannerState extends State<_FullscreenQRScanner> {
     for (final barcode in capture.barcodes) {
       final raw = barcode.rawValue;
       if (raw != null && raw.trim().isNotEmpty) {
-        if (raw.startsWith('common-relay://') || raw.startsWith('techuboard://') || raw.contains('#')) {
-          _detected = true;
-          HapticFeedback.mediumImpact();
-          Navigator.pop(context, raw.trim());
-          break;
-        }
+        _detected = true;
+        HapticFeedback.mediumImpact();
+        Navigator.pop(context, raw.trim());
+        break;
       }
     }
   }

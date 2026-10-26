@@ -17,6 +17,7 @@ import '../logs/log_page.dart';
 import '../settings/mobile_settings_content.dart';
 import '../snippets/snippets_page.dart';
 import '../../services/app_updater_service.dart';
+import '../../services/floating_hub_control.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -115,6 +116,7 @@ class _HomePageState extends State<HomePage>
     super.initState();
     if (Platform.isAndroid) {
       AppUpdaterService.instance.startAutoCheck();
+      FloatingHubControl.instance.refreshStatus();
     }
     if (Platform.isAndroid || Platform.isIOS) {
       WidgetsBinding.instance.addObserver(this);
@@ -181,7 +183,12 @@ class _HomePageState extends State<HomePage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _incomingShares?.drain();
+    if (state == AppLifecycleState.resumed) {
+      _incomingShares?.drain();
+      if (Platform.isAndroid) {
+        FloatingHubControl.instance.refreshStatus();
+      }
+    }
     if (state == AppLifecycleState.resumed && Platform.isIOS) {
       unawaited(_updateShareConfiguration());
     }
@@ -491,6 +498,37 @@ class _HomePageState extends State<HomePage>
             ],
           ),
           actions: [
+            if (Platform.isAndroid)
+              ValueListenableBuilder<bool>(
+                valueListenable: FloatingHubControl.instance.isRunning,
+                builder: (context, running, _) {
+                  return IconButton(
+                    onPressed: () => FloatingHubControl.instance.toggle(context),
+                    tooltip: running ? 'Floating Hub is ON' : 'Turn on Floating Paste Hub',
+                    icon: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: running
+                            ? colors.primary.withOpacity(0.18)
+                            : colors.surfaceContainerHighest.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: running
+                              ? colors.primary.withOpacity(0.6)
+                              : colors.outlineVariant.withOpacity(0.35),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Icon(
+                        running ? Icons.bubble_chart_rounded : Icons.bubble_chart_outlined,
+                        size: 18,
+                        color: running ? colors.primary : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                },
+              ),
             IconButton(
               onPressed: _openFiles,
               tooltip: l10n.receivedFiles,

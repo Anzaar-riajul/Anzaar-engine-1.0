@@ -1094,7 +1094,7 @@ class SyncManager with WidgetsBindingObserver {
         if (payload != null) {
           final decrypted = _decryptFrom(payload, from, env.type);
           if (decrypted != null) {
-            unawaited(_handleRemoteSnippetsSync(decrypted));
+            unawaited(_handleRemoteSnippetsSync(decrypted, env.name));
           }
         }
         break;
@@ -1260,19 +1260,42 @@ class SyncManager with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _handleRemoteSnippetsSync(String jsonStr) async {
+  Future<void> _handleRemoteSnippetsSync(String jsonStr, [String? peerName]) async {
     try {
       final list = jsonDecode(jsonStr) as List<dynamic>;
       final folders = list
           .map((item) => SnippetFolderItem.fromJson(item as Map<String, dynamic>))
           .toList();
-      final changed = await SnippetRepository.instance.mergeRemoteFolders(folders);
+      final changed = await SnippetRepository.instance.mergeRemoteFolders(
+        folders,
+        remoteDeviceName: peerName ?? 'Mac',
+      );
       if (changed) {
-        appLog('sync.snippets: merged ${folders.length} folders from remote peer');
+        appLog('sync.snippets: merged ${folders.length} folders from ${peerName ?? "remote"}');
       }
     } catch (e) {
       appLog('Failed to decode remote snippets sync: $e', level: 'warning');
     }
+  }
+
+  Future<void> requestSnippetsFetch() async {
+    if (_sessions.isEmpty) return;
+    final env = SyncEnvelope.make(
+      type: SyncType.snippetsFetch,
+      peerId: peerId,
+      name: displayName,
+    );
+    final data = syncEncodeFrame(env);
+    if (data == null) return;
+    for (final session in _sessions.values) {
+      try {
+        session.socket.add(data);
+        unawaited(session.socket.flush());
+      } catch (_) {}
+    }
+    // Also push our latest snippets to peers
+    final localFolders = await SnippetRepository.instance.fetchAllFolders();
+    await broadcastSnippets(localFolders);
   }
 
   Future<void> broadcastSnippets(List<SnippetFolderItem> folders) async {

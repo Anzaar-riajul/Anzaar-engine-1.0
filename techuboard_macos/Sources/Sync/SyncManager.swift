@@ -380,6 +380,11 @@ final class SyncManager: NSObject {
                 return
             }
             respondToHistoryFetch(from: remotePeerId)
+        case SyncType.snippetsFetch:
+            respondToSnippetsFetch(from: remotePeerId)
+        case SyncType.snippetsSync:
+            guard let text = decryptPayload(env, from: remotePeerId) else { return }
+            handleRemoteSnippetsSync(text)
         case SyncType.notifPost:
             guard let text = decryptPayload(env, from: remotePeerId) else { return }
             DispatchQueue.main.async { NotificationManager.shared.handleRemoteNotification(text, from: env.peerId) }
@@ -424,6 +429,55 @@ final class SyncManager: NSObject {
             self.lastHistoryFetchResponse[remotePeerId] = Date()
             self.sessions[remotePeerId]?.historyReplayRows = HistoryRepository.shared.recentTextRowids(limit: 200)
             self.pumpHistoryReplay(for: remotePeerId)
+            // Also push snippets upon history fetch
+            self.respondToSnippetsFetch(from: remotePeerId)
+        }
+    }
+
+    func respondToSnippetsFetch(from remotePeerId: String) {
+        syncQueue.async { [weak self] in
+            guard let self else { return }
+            guard let jsonStr = SnippetManager.shared.exportJSONPayload() else { return }
+            guard let encrypted = self.encrypt(jsonStr) else { return }
+            let env = SyncEnvelope.make(
+                type: SyncType.snippetsSync,
+                peerId: self.peerId,
+                name: self.displayName,
+                port: Int(self.syncPort),
+                payload: encrypted
+            )
+            guard let frame = self.encodeFrame(env) else { return }
+            _ = self.sessions[remotePeerId]?.writer?.enqueue(frame)
+        }
+    }
+
+    func handleRemoteSnippetsSync(_ jsonStr: String) {
+        guard let data = jsonStr.data(using: .utf8),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
+        DispatchQueue.main.async {
+            let changed = SnippetManager.shared.mergeRemoteFolders(list)
+            if changed {
+                appLog("Snippets merged from remote device")
+            }
+        }
+    }
+
+    func broadcastSnippets() {
+        syncQueue.async { [weak self] in
+            guard let self else { return }
+            guard let jsonStr = SnippetManager.shared.exportJSONPayload() else { return }
+            guard let encrypted = self.encrypt(jsonStr) else { return }
+            let env = SyncEnvelope.make(
+                type: SyncType.snippetsSync,
+                peerId: self.peerId,
+                name: self.displayName,
+                port: Int(self.syncPort),
+                payload: encrypted
+            )
+            guard let frame = self.encodeFrame(env) else { return }
+            for session in self.sessions.values {
+                _ = session.writer?.enqueue(frame)
+            }
         }
     }
 

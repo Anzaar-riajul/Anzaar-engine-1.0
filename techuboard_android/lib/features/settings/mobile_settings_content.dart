@@ -8,6 +8,7 @@ import '../../app_localizations.dart';
 import '../../ui/app_components.dart';
 import '../../ui/app_theme.dart';
 import '../../services/app_updater_service.dart';
+import '../../services/floating_hub_control.dart';
 import '../devices/devices_page.dart';
 import '../devices/device_widgets.dart';
 
@@ -265,6 +266,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
       final running =
           await _permissionsChannel.invokeMethod<bool>('isFloatingHubRunning') ??
               false;
+      FloatingHubControl.instance.isRunning.value = running;
       final overlay =
           await _permissionsChannel.invokeMethod<bool>('canDrawOverlays') ??
               false;

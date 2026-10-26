@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import '../models.dart';
+import '../sync_manager.dart';
 import 'app_database.dart';
 
 class SnippetRepository {
@@ -23,6 +24,13 @@ class SnippetRepository {
     _changeController.add(list);
   }
 
+  void _broadcast() async {
+    try {
+      final list = await fetchAllFolders();
+      unawaited(SyncManager.instance.broadcastSnippets(list));
+    } catch (_) {}
+  }
+
   Future<List<SnippetFolderItem>> fetchAllFolders() async {
     final db = await _db;
     final folderRows = await db.query(
@@ -43,6 +51,7 @@ class SnippetRepository {
         content: row['content'] as String,
         updatedAt: row['updated_at'] as int,
         sortOrder: row['sort_order'] as int? ?? 0,
+        deviceName: row['device_name'] as String?,
       );
       snippetsByFolder.putIfAbsent(item.folderId, () => []).add(item);
     }
@@ -56,6 +65,7 @@ class SnippetRepository {
         updatedAt: row['updated_at'] as int,
         sortOrder: row['sort_order'] as int? ?? 0,
         snippets: snippetsByFolder[fId] ?? const [],
+        deviceName: row['device_name'] as String?,
       );
     }).toList();
   }
@@ -68,8 +78,10 @@ class SnippetRepository {
       'is_enabled': folder.isEnabled ? 1 : 0,
       'updated_at': folder.updatedAt,
       'sort_order': folder.sortOrder,
+      'device_name': folder.deviceName ?? 'This Device',
     }, conflictAlgorithm: ConflictAlgorithm.replace);
     _notify();
+    _broadcast();
   }
 
   Future<void> deleteFolder(String folderId) async {
@@ -87,6 +99,7 @@ class SnippetRepository {
       );
     });
     _notify();
+    _broadcast();
   }
 
   Future<void> saveSnippet(SnippetItem snippet) async {
@@ -98,22 +111,30 @@ class SnippetRepository {
       'content': snippet.content,
       'updated_at': snippet.updatedAt,
       'sort_order': snippet.sortOrder,
+      'device_name': snippet.deviceName ?? 'This Device',
     }, conflictAlgorithm: ConflictAlgorithm.replace);
     _notify();
+    _broadcast();
   }
 
   Future<void> deleteSnippet(String snippetId) async {
     final db = await _db;
     await db.delete('snippets', where: 'id = ?', whereArgs: [snippetId]);
     _notify();
+    _broadcast();
   }
 
-  Future<bool> mergeRemoteFolders(List<SnippetFolderItem> remoteFolders) async {
+  Future<bool> mergeRemoteFolders(
+    List<SnippetFolderItem> remoteFolders, {
+    String? remoteDeviceName,
+  }) async {
     final db = await _db;
     bool changed = false;
+    final defaultDevice = remoteDeviceName ?? 'Mac';
 
     await db.transaction((txn) async {
       for (final remoteFolder in remoteFolders) {
+        final folderDevice = remoteFolder.deviceName ?? defaultDevice;
         final existing = await txn.query(
           'snippet_folders',
           where: 'id = ?',
@@ -128,6 +149,7 @@ class SnippetRepository {
             'is_enabled': remoteFolder.isEnabled ? 1 : 0,
             'updated_at': remoteFolder.updatedAt,
             'sort_order': remoteFolder.sortOrder,
+            'device_name': folderDevice,
           });
           changed = true;
         } else {
@@ -140,6 +162,7 @@ class SnippetRepository {
                 'is_enabled': remoteFolder.isEnabled ? 1 : 0,
                 'updated_at': remoteFolder.updatedAt,
                 'sort_order': remoteFolder.sortOrder,
+                'device_name': folderDevice,
               },
               where: 'id = ?',
               whereArgs: [remoteFolder.id],
@@ -150,6 +173,7 @@ class SnippetRepository {
 
         // Process snippets inside this folder
         for (final remoteSnippet in remoteFolder.snippets) {
+          final snippetDevice = remoteSnippet.deviceName ?? folderDevice;
           final existingSnippet = await txn.query(
             'snippets',
             where: 'id = ?',
@@ -165,6 +189,7 @@ class SnippetRepository {
               'content': remoteSnippet.content,
               'updated_at': remoteSnippet.updatedAt,
               'sort_order': remoteSnippet.sortOrder,
+              'device_name': snippetDevice,
             });
             changed = true;
           } else {
@@ -179,6 +204,7 @@ class SnippetRepository {
                   'content': remoteSnippet.content,
                   'updated_at': remoteSnippet.updatedAt,
                   'sort_order': remoteSnippet.sortOrder,
+                  'device_name': snippetDevice,
                 },
                 where: 'id = ?',
                 whereArgs: [remoteSnippet.id],

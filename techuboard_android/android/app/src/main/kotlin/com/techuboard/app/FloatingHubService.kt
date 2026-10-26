@@ -254,8 +254,9 @@ class FloatingHubService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (isDragging) {
+                        val wasInDropZone = isNearDropZone || isTouchInDropZone(event.rawX, event.rawY)
                         hideDropTargetView()
-                        if (isNearDropZone) {
+                        if (wasInDropZone) {
                             // Dropped in close zone!
                             vibrate(strong = true)
                             Toast.makeText(this, "Floating Hub turned off", Toast.LENGTH_SHORT).show()
@@ -340,18 +341,25 @@ class FloatingHubService : Service() {
         }
     }
 
+    private fun isTouchInDropZone(touchX: Float, touchY: Float): Boolean {
+        val sw = resources.displayMetrics.widthPixels
+        val sh = resources.displayMetrics.heightPixels
+        val targetSize = dpToPx(68)
+        val targetCenterX = sw / 2f
+        val targetCenterY = (sh - targetSize - dpToPx(48)) + targetSize / 2f
+        val dist = hypot(touchX - targetCenterX, touchY - targetCenterY)
+        val inBottomZone = touchY > (sh - dpToPx(130)) && abs(touchX - (sw / 2f)) < dpToPx(110)
+        return dist < dpToPx(95) || inBottomZone
+    }
+
     private fun checkDropZone(touchX: Float, touchY: Float) {
         val target = removeTargetView ?: return
-        val rParams = removeParams ?: return
+        val inZone = isTouchInDropZone(touchX, touchY)
 
-        val targetCenterX = rParams.x + target.width / 2f
-        val targetCenterY = rParams.y + target.height / 2f
-        val dist = hypot(touchX - targetCenterX, touchY - targetCenterY)
-
-        if (dist < dpToPx(80)) {
+        if (inZone) {
             if (!isNearDropZone) {
                 isNearDropZone = true
-                target.animate().scaleX(1.3f).scaleY(1.3f).setDuration(120).start()
+                target.animate().scaleX(1.35f).scaleY(1.35f).setDuration(120).start()
                 val bg = target.background as? GradientDrawable
                 bg?.setColor(Color.parseColor("#EECC2D2D"))
                 if (!hasVibratedInDropZone) {

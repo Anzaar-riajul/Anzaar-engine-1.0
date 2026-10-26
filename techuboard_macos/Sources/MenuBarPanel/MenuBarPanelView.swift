@@ -888,6 +888,7 @@ struct MenuBarPanelView: View {
                         "v": 1,
                         "id": SyncManager.shared.peerId,
                         "name": Host.current().localizedName ?? SyncManager.shared.displayName,
+                        "pk": SyncCryptoV4.shared.staticPublicKeyHex,
                         "ips": ips,
                         "ip": primaryIP,
                         "port": Int(SyncManager.shared.syncPort),

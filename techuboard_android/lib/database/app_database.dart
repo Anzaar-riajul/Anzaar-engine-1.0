@@ -9,7 +9,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'techuboard.db';
-  static const schemaVersion = 7;
+  static const schemaVersion = 8;
 
   Database? _db;
 
@@ -77,6 +77,14 @@ class AppDatabase {
         }
         if (oldVersion < 7) {
           await _createSnippetsTables(db);
+        }
+        if (oldVersion < 8) {
+          try {
+            await db.execute('ALTER TABLE snippet_folders ADD COLUMN device_name TEXT');
+          } catch (_) {}
+          try {
+            await db.execute('ALTER TABLE snippets ADD COLUMN device_name TEXT');
+          } catch (_) {}
         }
       },
     );
@@ -187,7 +195,8 @@ class AppDatabase {
         title TEXT NOT NULL,
         is_enabled INTEGER NOT NULL DEFAULT 1,
         updated_at INTEGER NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        device_name TEXT
       )
     ''');
     await db.execute('''
@@ -197,7 +206,8 @@ class AppDatabase {
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         updated_at INTEGER NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        device_name TEXT
       )
     ''');
     await db.execute(

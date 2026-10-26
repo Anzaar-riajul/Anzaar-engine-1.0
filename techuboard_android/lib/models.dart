@@ -256,6 +256,7 @@ class SnippetItem {
   final String content;
   final int updatedAt;
   final int sortOrder;
+  final String? deviceName;
 
   const SnippetItem({
     required this.id,
@@ -264,6 +265,7 @@ class SnippetItem {
     required this.content,
     required this.updatedAt,
     this.sortOrder = 0,
+    this.deviceName,
   });
 
   SnippetItem copyWith({
@@ -273,6 +275,7 @@ class SnippetItem {
     String? content,
     int? updatedAt,
     int? sortOrder,
+    String? deviceName,
   }) {
     return SnippetItem(
       id: id ?? this.id,
@@ -281,6 +284,7 @@ class SnippetItem {
       content: content ?? this.content,
       updatedAt: updatedAt ?? this.updatedAt,
       sortOrder: sortOrder ?? this.sortOrder,
+      deviceName: deviceName ?? this.deviceName,
     );
   }
 
@@ -291,6 +295,7 @@ class SnippetItem {
     'content': content,
     'updatedAt': updatedAt,
     'sortOrder': sortOrder,
+    if (deviceName != null) 'deviceName': deviceName,
   };
 
   factory SnippetItem.fromJson(
@@ -306,6 +311,7 @@ class SnippetItem {
           (json['updatedAt'] as num?)?.toInt() ??
           DateTime.now().millisecondsSinceEpoch,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      deviceName: json['deviceName'] as String?,
     );
   }
 }
@@ -317,6 +323,7 @@ class SnippetFolderItem {
   final int updatedAt;
   final int sortOrder;
   final List<SnippetItem> snippets;
+  final String? deviceName;
 
   const SnippetFolderItem({
     required this.id,
@@ -325,6 +332,7 @@ class SnippetFolderItem {
     required this.updatedAt,
     this.sortOrder = 0,
     this.snippets = const [],
+    this.deviceName,
   });
 
   SnippetFolderItem copyWith({
@@ -334,6 +342,7 @@ class SnippetFolderItem {
     int? updatedAt,
     int? sortOrder,
     List<SnippetItem>? snippets,
+    String? deviceName,
   }) {
     return SnippetFolderItem(
       id: id ?? this.id,
@@ -342,6 +351,7 @@ class SnippetFolderItem {
       updatedAt: updatedAt ?? this.updatedAt,
       sortOrder: sortOrder ?? this.sortOrder,
       snippets: snippets ?? this.snippets,
+      deviceName: deviceName ?? this.deviceName,
     );
   }
 
@@ -352,6 +362,7 @@ class SnippetFolderItem {
     'updatedAt': updatedAt,
     'sortOrder': sortOrder,
     'snippets': snippets.map((s) => s.toJson()).toList(),
+    if (deviceName != null) 'deviceName': deviceName,
   };
 
   factory SnippetFolderItem.fromJson(Map<String, dynamic> json) {
@@ -365,6 +376,7 @@ class SnippetFolderItem {
           (json['updatedAt'] as num?)?.toInt() ??
           DateTime.now().millisecondsSinceEpoch,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      deviceName: json['deviceName'] as String?,
       snippets: rawSnippets
           .map(
             (s) => SnippetItem.fromJson(
