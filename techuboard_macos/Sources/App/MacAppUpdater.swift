@@ -60,9 +60,15 @@ public final class MacAppUpdater: ObservableObject {
                     }
                 }
 
-                // If no direct mac binary in assets, fallback to release page
-                let finalUrl = macUrl ?? (json["html_url"] as? String ?? "https://github.com/\(self.repoOwner)/\(self.repoName)/releases/latest")
+                // If no direct mac binary in assets, this is an Android or non-Mac release; do not trigger Mac update
+                guard let macUrl = macUrl, !rawTag.hasPrefix("android-") else {
+                    DispatchQueue.main.async {
+                        self.hasUpdate = false
+                    }
+                    return
+                }
 
+                let finalUrl = macUrl
                 let remoteBuild = self.extractBuildNumber(rawTag)
                 let isNewer = remoteBuild > self.currentBuildNumber
 
