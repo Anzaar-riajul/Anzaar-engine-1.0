@@ -57,7 +57,7 @@ extension SyncSessionMethods on SyncManager {
   }
 
   static const int _maxConcurrentSessions = 32;
-  final Map<String, int> _ipConnectionCounts = {};
+  static final Map<String, int> _ipConnectionCounts = {};
 
   void _onInbound(Socket socket, int epoch) {
     if (!_isRunCurrent(epoch)) {

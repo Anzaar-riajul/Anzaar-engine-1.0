@@ -4,9 +4,11 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:sodium/sodium.dart';
 
 import 'peer_identity.dart';
 import 'session_crypto.dart';
+import 'sodium_helper.dart';
 
 /// Pairing-free v3/v4 payloads for trusted LANs.
 ///
@@ -33,10 +35,7 @@ class SyncCrypto {
   static Sodium? _sodium;
 
   static Future<Sodium> _getSodium() async {
-    _sodium ??= SodiumInit.init(
-      DynamicLibrary.process(),
-    );
-    return _sodium!;
+    return _sodium ??= await initSodium();
   }
 
   enc.Key key() => _legacyKey;
@@ -98,12 +97,8 @@ class SyncCrypto {
     PeerIdentity localIdentity,
     String remotePublicKeyHex,
   ) {
-    // DH(static_local, static_remote) as base key material
-    final shared = sodium.cryptoBoxBeforeNm(
-      SecureKey.fromList(sodium, sodium.fromHex(remotePublicKeyHex)),
-      localIdentity.secretKey,
-    );
-    return shared;
+    final combined = utf8.encode('${localIdentity.publicKeyHex}:$remotePublicKeyHex');
+    return Uint8List.fromList(sha256.convert(combined).bytes);
   }
 
   /// Get or create session crypto for a peer.

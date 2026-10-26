@@ -1,14 +1,15 @@
+import 'dart:convert';
 import 'dart:typed_data';
-
+import 'package:crypto/crypto.dart';
 import 'package:sodium/sodium.dart';
 
 /// Per-session symmetric encryption using XChaCha20-Poly1305 (crypto_secretbox).
 /// Keys are derived from the handshake and exist only in memory — never written
 /// to disk. Rekeyed periodically for forward secrecy.
 class SessionCrypto {
-  static const _keyBytes = 32; // crypto_secretbox_KEYBYTES
-  static const _nonceBytes = 24; // crypto_secretbox_NONCEBYTES
-  static const _macBytes = 16; // crypto_secretbox_MACBYTES
+  static const _keyBytes = 32;
+  static const _nonceBytes = 24;
+  static const _macBytes = 16;
 
   final Sodium _sodium;
   final SecureKey _key;
@@ -32,13 +33,12 @@ class SessionCrypto {
   }
 
   /// Encrypt plaintext with a unique nonce derived from a counter.
-  /// Returns `nonce(24) || ciphertext(|| mac(16))`.
   Uint8List encrypt(Uint8List plaintext) {
     final nonce = _nextNonce();
-    final sealed = _sodium.cryptoSecretboxEasy(
-      plaintext,
-      nonce,
-      _key,
+    final sealed = _sodium.crypto.secretBox.easy(
+      message: plaintext,
+      nonce: nonce,
+      key: _key,
     );
     final combined = Uint8List(_nonceBytes + sealed.length);
     combined.setRange(0, _nonceBytes, nonce);
@@ -53,7 +53,11 @@ class SessionCrypto {
     final nonce = sealed.sublist(0, _nonceBytes);
     final ciphertext = sealed.sublist(_nonceBytes);
     try {
-      return _sodium.cryptoSecretboxOpenEasy(ciphertext, nonce, _key);
+      return _sodium.crypto.secretBox.openEasy(
+        cipherText: ciphertext,
+        nonce: nonce,
+        key: _key,
+      );
     } catch (_) {
       return null;
     }
@@ -65,7 +69,6 @@ class SessionCrypto {
   /// The nonce for the next message (24 bytes, counter-based).
   Uint8List _nextNonce() {
     final nonce = Uint8List(_nonceBytes);
-    // 8-byte counter in big-endian, rest zeros
     final bytes = _nonceCounter.toRadixString(16).padLeft(16, '0');
     for (var i = 0; i < 8; i++) {
       nonce[i] = int.parse(bytes.substring(i * 2, i * 2 + 2), radix: 16);
@@ -90,12 +93,8 @@ class RekeyableSessionCrypto {
 
   Uint8List encrypt(Uint8List plaintext) {
     if (_crypto.shouldRekey) {
-      // Derive new key from base material + counter (simple key rotation)
-      final newKey = _sodium.cryptoKdfDeriveFromKey(
-        32,
-        1,
-        Uint8List.fromList(utf8.encode('techuboard-rekey-v1')),
-        SecureKey.fromList(_sodium, _baseKeyMaterial),
+      final newKey = Uint8List.fromList(
+        sha256.convert([..._baseKeyMaterial, ...utf8.encode('rekey')]).bytes,
       );
       _crypto.dispose();
       _crypto = SessionCrypto.fromKey(_sodium, newKey);

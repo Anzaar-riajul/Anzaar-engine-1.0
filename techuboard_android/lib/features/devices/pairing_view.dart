@@ -75,7 +75,7 @@ class _PairingViewState extends State<PairingView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar.AppBar(
+      appBar: AppBar(
         title: const Text('Link Device (WhatsApp Style)'),
       ),
       body: _loading
