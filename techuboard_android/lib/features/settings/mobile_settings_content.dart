@@ -8,6 +8,7 @@ import '../../app_localizations.dart';
 import '../../ui/app_components.dart';
 import '../../ui/app_theme.dart';
 import '../devices/devices_page.dart';
+import '../devices/device_widgets.dart';
 
 class MobileSettingsContent extends StatefulWidget {
   final VoidCallback onOpenLogs;

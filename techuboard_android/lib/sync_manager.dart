@@ -25,6 +25,7 @@ import 'notification_manager.dart';
 import 'storage_paths.dart';
 import 'features/transfers/transfer_notifications.dart';
 import 'sync/crypto.dart';
+import 'sync/file_receive_flow_control.dart';
 import 'sync/peer_identity.dart';
 import 'sync/session_crypto.dart';
 import 'sync/text_delivery_receipts.dart';

@@ -491,7 +491,7 @@ extension SyncSessionMethods on SyncManager {
   /// pipelined chunk frames.
   void _bumpSocketBuffers(Socket socket) {
     try {
-      socket.setTcpNoDelay(true);
+      socket.setOption(SocketOption.tcpNoDelay, true);
       final snd = ByteData(4)..setInt32(0, 4 * 1024 * 1024, Endian.little);
       socket.setRawOption(RawSocketOption(1, 7, snd.buffer.asUint8List()));
       final rcv = ByteData(4)..setInt32(0, 4 * 1024 * 1024, Endian.little);

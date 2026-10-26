@@ -31,10 +31,10 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Setup Android SDK 35 and Accept Licenses
+      - name: Setup Android SDK 36 and Accept Licenses
         run: |
           yes | flutter doctor --android-licenses 2>/dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" 2>/dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "platforms;android-35" 2>/dev/null || true
 
       - name: Flutter Dependencies
         working-directory: techuboard_android

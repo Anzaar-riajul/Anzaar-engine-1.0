@@ -431,7 +431,7 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.leading,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         devName,

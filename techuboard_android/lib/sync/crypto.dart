@@ -40,6 +40,55 @@ class SyncCrypto {
 
   enc.Key key() => _legacyKey;
 
+  /// Binary variant for file chunks: wire form is base64(nonce12 || ciphertext || tag)
+  Future<String?> encryptBytes(List<int> bytes) async {
+    final k = key();
+    final nonce = _randomNonceV3();
+    final keyBytes = k.bytes;
+    final native = await (nativeAesGcm?.call(
+      'seal',
+      keyBytes,
+      nonce,
+      Uint8List.fromList(bytes),
+      null,
+    ));
+    if (native != null) {
+      return base64Encode(native);
+    }
+    try {
+      final encrypter = enc.Encrypter(enc.AES(k, mode: enc.AESMode.gcm));
+      final encrypted = encrypter.encryptBytes(bytes, iv: enc.IV(nonce));
+      final combined = Uint8List.fromList([...nonce, ...encrypted.bytes]);
+      return base64Encode(combined);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Uint8List?> decryptToBytes(String base64String) async {
+    try {
+      final k = key();
+      final data = base64Decode(base64String);
+      if (data.length <= 28) return null;
+      final nonce = data.sublist(0, 12);
+      final sealed = data.sublist(12);
+      final native = await (nativeAesGcm?.call(
+        'open',
+        k.bytes,
+        nonce,
+        null,
+        sealed,
+      ));
+      if (native != null) return native;
+      final encrypter = enc.Encrypter(enc.AES(k, mode: enc.AESMode.gcm));
+      return Uint8List.fromList(
+        encrypter.decryptBytes(enc.Encrypted(sealed), iv: enc.IV(nonce)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Legacy v3 encryptText — deprecated, kept for migration compatibility.
   @Deprecated('Use SessionCrypto via peer session instead')
   String? encryptText(String text) {
@@ -122,7 +171,7 @@ class SyncCrypto {
 
     // Legacy v3 fallback (migration window only)
     if (!v4Enabled) {
-      final k = key();
+      final k = _legacyKey;
       final nonce = _randomNonceV3();
       final keyBytes = k.bytes;
       final native = await (nativeAesGcm?.call(
