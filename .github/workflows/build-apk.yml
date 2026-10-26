@@ -1,0 +1,118 @@
+name: Build Techuboard Android APK
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Techuboard Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter 3.24.5
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: "stable"
+          cache: true
+
+      - name: Setup Android SDK 36 and Accept Licenses
+        run: |
+          yes | flutter doctor --android-licenses 2>/dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "platforms;android-35" 2>/dev/null || true
+
+      - name: Flutter Dependencies
+        working-directory: techuboard_android
+        run: |
+          flutter pub get
+
+      - name: Build Techuboard Android Release APK
+        working-directory: techuboard_android
+        run: |
+          set -o pipefail
+          flutter build apk --release --no-tree-shake-icons 2>&1 | tee /tmp/build.log
+          mkdir -p ../dist
+          echo "=== Searching for Generated APK ==="
+          find build -type f -name "*.apk" -ls || true
+          find . -type f -name "*.apk" -ls || true
+          
+          # Copy release APK to dist
+          APK_FILE=$(find build/app/outputs -type f -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            APK_FILE=$(find . -type f -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | grep -v "Techuboard-Android-arm64-v8a-v1.0.32.apk" | head -n 1)
+          fi
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            APK_FILE=$(find . -type f -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          fi
+          
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            echo "ERROR: Release APK was not found in build directory!"
+            exit 1
+          fi
+          
+          echo "Found release APK: $APK_FILE"
+          cp "$APK_FILE" ../dist/Techuboard-Android-v1.0.apk
+          ls -lh ../dist/Techuboard-Android-v1.0.apk
+
+      - name: Output Error Summary
+        if: failure()
+        run: |
+          echo "=== BUILD LOG DUMP ==="
+          cat /tmp/build.log 2>/dev/null || true
+          echo "## ❌ Build Failure Details" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 80 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Push Error Log Branch
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-debug-log || git checkout -B ci-debug-log
+          tail -n 300 /tmp/build.log > build-error.txt
+          git add build-error.txt
+          git commit -m "ci: capture build error log [skip ci]" || true
+          git push -f origin ci-debug-log || true
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Techuboard-Android-v1.0
+          path: dist/Techuboard-Android-v1.0.apk
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/feat/')
+        continue-on-error: true
+        with:
+          tag_name: android-v1.0-${{ github.run_number }}
+          name: Techuboard Android v1.0 (Build ${{ github.run_number }})
+          body: |
+            ## 🎉 Techuboard Android Clipboard Companion v1.0
+            ### 🚀 Features:
+            - **Real-time Clipboard Sync**: Sync clips instantly between Mac and Android
+            - **Floating Paste Hub**: Floating bubble to paste clips directly anywhere
+            - **My Notes & Folders**: Notes synced across devices
+            - **LAN Mesh Device Sync**: 100% offline local encrypted sync with your Mac
+            - **Zero Tracking**: 100% private, no cloud dependencies
+          files: |
+            dist/Techuboard-Android-v1.0.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

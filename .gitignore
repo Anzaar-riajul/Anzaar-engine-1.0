@@ -1,0 +1,71 @@
+AGENTS.md
+.DS_Store
+*.app/
+*.dSYM/
+build/
+Kim_AGENTS.md
+
+# Build artifacts (distribute via CI/release assets, not git)
+dist/
+*.apk
+*.aab
+*.dmg
+*.icns
+AppIcon.iconset/
+
+# Flutter generated (machine-specific paths)
+clipy_android/.flutter-plugins
+clipy_android/.flutter-plugins-dependencies
+
+# Android signing keys
+*.keystore
+*.jks
+
+# Android local SDK paths
+clipy_android/android/local.properties
+
+# IDE / tool metadata (machine-generated, not project source)
+.zcode/
+.trae/
+.workbuddy/
+
+# Local agent state, SDK telemetry, and caches
+/.config/flutter/
+/.dart-tool/
+.dart_tool/
+/.flutter
+/.video_agent/
+/.dbg/
+.fvm/
+.gradle/
+coverage/
+__pycache__/
+*.pyc
+*.log
+
+# Secrets and local signing material
+.env
+.env.*
+!.env.example
+**/key.properties
+clipy_android/ios/Signing.local.xcconfig
+*.p12
+*.pfx
+*.mobileprovision
+
+# User databases and temporary build state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Personal exports and the legacy screenshot of real clipboard history
+**/snippets.json
+**/history.json
+**/notifications.json
+/res/search.png
+
+# Swift Package Manager local build cache
+.build/
+.swiftpm/

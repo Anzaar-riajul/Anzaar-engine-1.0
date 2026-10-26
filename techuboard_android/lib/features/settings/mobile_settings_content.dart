@@ -1,0 +1,458 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../clipboard_manager.dart';
+import '../../app_localizations.dart';
+import '../../ui/app_components.dart';
+import '../../ui/app_theme.dart';
+import '../devices/devices_page.dart';
+import '../devices/device_widgets.dart';
+
+class MobileSettingsContent extends StatefulWidget {
+  final VoidCallback onOpenLogs;
+  final VoidCallback onOpenReceivedFiles;
+  const MobileSettingsContent({
+    super.key,
+    required this.onOpenLogs,
+    required this.onOpenReceivedFiles,
+  });
+  @override
+  State<MobileSettingsContent> createState() => _MobileSettingsContentState();
+}
+
+class _MobileSettingsContentState extends State<MobileSettingsContent>
+    with WidgetsBindingObserver {
+  static const _widgetChannel = MethodChannel(
+    'com.techuboard.app/widget',
+  );
+  static const _permissionsChannel = MethodChannel(
+    'com.techuboard.app/permissions',
+  );
+  late final Future<String> _version = _readVersion();
+
+  Future<String> _readVersion() async {
+    try {
+      final info = await const MethodChannel(
+        'com.techuboard.app/storage',
+      ).invokeMapMethod<String, String>('getAppVersion');
+      final version = info?['version']?.trim() ?? '';
+      final build = info?['build']?.trim() ?? '';
+      if (version.isEmpty) return '—';
+      return build.isEmpty ? 'v$version' : 'v$version ($build)';
+    } catch (_) {
+      return '—';
+    }
+  }
+
+  bool _timerWidgetPinned = false;
+  bool _pinning = false;
+  bool _floatingHubEnabled = false;
+  bool _hasOverlayPermission = false;
+  bool _hasAccessibilityPermission = false;
+  bool _autoImageSync = true;
+  late final TextEditingController _excludedAppsController;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _excludedAppsController = TextEditingController(
+      text: ClipboardManager.instance.excludedApps.join('\n'),
+    );
+    if (Platform.isAndroid) {
+      _refreshPinned();
+      _refreshFloatingHubStatus();
+    }
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) {
+        setState(() {
+          _autoImageSync = prefs.getBool('autoImageSync') ?? true;
+        });
+      }
+    });
+  }
+
+  Future<void> _toggleAutoImageSync(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('autoImageSync', value);
+    if (mounted) setState(() => _autoImageSync = value);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _excludedAppsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (Platform.isAndroid && state == AppLifecycleState.resumed) {
+      _refreshPinned();
+      _refreshFloatingHubStatus();
+    }
+  }
+
+  Future<void> _refreshFloatingHubStatus() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final running =
+          await _permissionsChannel.invokeMethod<bool>('isFloatingHubRunning') ??
+              false;
+      final overlay =
+          await _permissionsChannel.invokeMethod<bool>('canDrawOverlays') ??
+              false;
+      final access =
+          await _permissionsChannel.invokeMethod<bool>(
+                  'isAccessibilityGranted') ??
+              false;
+      if (mounted) {
+        setState(() {
+          _floatingHubEnabled = running;
+          _hasOverlayPermission = overlay;
+          _hasAccessibilityPermission = access;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFloatingHub(bool enable) async {
+    if (!Platform.isAndroid) return;
+    if (enable) {
+      final canDraw =
+          await _permissionsChannel.invokeMethod<bool>('canDrawOverlays') ??
+              false;
+      if (!canDraw) {
+        await _permissionsChannel.invokeMethod<void>(
+          'requestOverlayPermission',
+        );
+        if (mounted) {
+          showTechuMessage(
+            context,
+            'Please grant "Display over other apps" permission',
+          );
+        }
+        return;
+      }
+      await _permissionsChannel.invokeMethod<void>('startFloatingHub');
+    } else {
+      await _permissionsChannel.invokeMethod<void>('stopFloatingHub');
+    }
+    await _refreshFloatingHubStatus();
+  }
+
+  Future<void> _refreshPinned() async {
+    try {
+      final pinned =
+          await _widgetChannel.invokeMethod<bool>('isTimerWidgetPinned') ??
+          false;
+      if (mounted) setState(() => _timerWidgetPinned = pinned);
+    } catch (_) {
+      /* Not every platform supports launcher widgets. */
+    }
+  }
+
+  Future<void> _pin() async {
+    if (_pinning) return;
+    setState(() => _pinning = true);
+    try {
+      final ok =
+          await _widgetChannel.invokeMethod<bool>('requestPinTimerWidget') ??
+          false;
+      if (!mounted) return;
+      showTechuMessage(
+        context,
+        ok
+            ? context.l10n.timerWidgetPinRequested
+            : context.l10n.timerWidgetPinFailed,
+      );
+      if (ok) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        if (mounted) await _refreshPinned();
+      }
+    } catch (_) {
+      if (mounted) showTechuMessage(context, context.l10n.timerWidgetPinFailed);
+    } finally {
+      if (mounted) setState(() => _pinning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TechuSection(
+            title: l10n.personalize,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const TechuIcon(Icons.palette_outlined),
+                  title: Text(l10n.appearance),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ThemeMode>(
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(
+                          value: ThemeMode.system,
+                          label: Text(l10n.systemTheme),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.light,
+                          label: Text(l10n.lightTheme),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.dark,
+                          label: Text(l10n.darkTheme),
+                        ),
+                      ],
+                      selected: {AppAppearance.instance.mode},
+                      onSelectionChanged: (value) async {
+                        await AppAppearance.instance.setMode(value.first);
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(indent: 20, endIndent: 20),
+                ListTile(
+                  leading: const TechuIcon(Icons.language_rounded),
+                  title: Text(l10n.languageLabel),
+                  trailing: DropdownButtonHideUnderline(
+                    child: DropdownButton<AppLanguage>(
+                      value: AppLanguageController.instance.language,
+                      onChanged: (language) async {
+                        if (language == null) return;
+                        await AppLanguageController.instance.setLanguage(
+                          language,
+                        );
+                        if (mounted) setState(() {});
+                      },
+                      items: AppLanguage.values
+                          .map(
+                            (language) => DropdownMenuItem(
+                              value: language,
+                              child: Text(language.displayName),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (Platform.isWindows)
+            TechuSection(
+              title: l10n.windowsExcludedApps,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _excludedAppsController,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        labelText: l10n.windowsExcludedApps,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () async {
+                        final names = _excludedAppsController.text
+                            .split('\n')
+                            .map((name) => name.trim())
+                            .where((name) => name.isNotEmpty)
+                            .toSet()
+                            .toList();
+                        await ClipboardManager.instance.updateExcludedApps(
+                          names,
+                        );
+                        if (context.mounted) {
+                          showTechuMessage(context, l10n.settingsSaved);
+                        }
+                      },
+                      child: Text(l10n.saveExcludedApps),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (Platform.isAndroid)
+            TechuSection(
+              title: l10n.homeWidgetSection,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const TechuIcon(Icons.timer_outlined),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            l10n.timerWidgetTitle,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      l10n.timerWidgetDesc,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 18),
+                    FilledButton.tonalIcon(
+                      onPressed: _timerWidgetPinned || _pinning ? null : _pin,
+                      icon: Icon(
+                        _timerWidgetPinned
+                            ? Icons.check_circle_outline
+                            : Icons.add_rounded,
+                      ),
+                      label: Text(
+                        _timerWidgetPinned
+                            ? l10n.timerWidgetAdded
+                            : l10n.addToHomeScreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (Platform.isAndroid)
+            TechuSection(
+              title: 'Floating Paste Hub',
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    secondary:
+                        const TechuIcon(Icons.dashboard_customize_rounded),
+                    title: const Text('Floating Paste Pill'),
+                    subtitle: Text(
+                      _hasOverlayPermission
+                          ? 'Floating capsule on top of any app (Overlay permission active)'
+                          : 'Floating capsule on top of any app for 1-tap pasting',
+                    ),
+                    value: _floatingHubEnabled,
+                    onChanged: (val) => _toggleFloatingHub(val),
+                  ),
+                  ListTile(
+                    leading: const TechuIcon(Icons.accessibility_new_rounded),
+                    title: const Text('1-Tap Direct Paste'),
+                    subtitle: Text(
+                      _hasAccessibilityPermission
+                          ? 'Accessibility active (Auto direct-paste ready)'
+                          : 'Tap to enable Accessibility for direct field paste',
+                    ),
+                    trailing: Icon(
+                      _hasAccessibilityPermission
+                          ? Icons.check_circle_rounded
+                          : Icons.arrow_forward_ios_rounded,
+                      color: _hasAccessibilityPermission
+                          ? Colors.green
+                          : Theme.of(context).colorScheme.primary,
+                      size: 20,
+                    ),
+                    onTap: () async {
+                      await _permissionsChannel.invokeMethod<void>(
+                        'openAccessibilitySettings',
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          TechuSection(
+            title: 'Image & File Sync',
+            child: Column(
+              children: [
+                SwitchListTile(
+                  secondary: const TechuIcon(Icons.image_outlined),
+                  title: const Text('Auto Image & File Sync'),
+                  subtitle: Text(
+                    _autoImageSync
+                        ? 'Automatically syncs copied images & files across all connected devices'
+                        : 'Manual only (Use "Send to Device" to share images)',
+                  ),
+                  value: _autoImageSync,
+                  onChanged: (val) => _toggleAutoImageSync(val),
+                ),
+              ],
+            ),
+          ),
+          TechuSection(
+            title: l10n.toolsAndSupport,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const TechuIcon(Icons.tune_rounded),
+                  title: Text(l10n.connectionSettings),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => showModalBottomSheet<bool>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => const ConnectionEditor(),
+                  ),
+                ),
+                const Divider(indent: 76, endIndent: 20),
+                ListTile(
+                  leading: const TechuIcon(Icons.folder_open_rounded),
+                  title: Text(l10n.receivedFiles),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: widget.onOpenReceivedFiles,
+                ),
+                const Divider(indent: 76, endIndent: 20),
+                ListTile(
+                  leading: const TechuIcon(Icons.article_outlined),
+                  title: Text(l10n.viewLogs),
+                  subtitle: Text(l10n.appRuntimeLogs),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: widget.onOpenLogs,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              children: [
+                Text('Techuboard', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.aboutTechuboard,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                FutureBuilder<String>(
+                  future: _version,
+                  builder: (context, snapshot) => Text(
+                    '${l10n.appVersionLabel} ${snapshot.data ?? '—'}',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

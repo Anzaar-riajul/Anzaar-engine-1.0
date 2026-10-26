@@ -1,0 +1,17 @@
+{
+  "protocol_version": 3,
+  "envelope_schema": {
+    "v": "integer",
+    "type": "string",
+    "msgId": "string (uuid)",
+    "peerId": "string",
+    "ts": "double",
+    "seqNum": "integer (optional)"
+  },
+  "supported_types": [
+    "handshake.initiator",
+    "handshake.responder",
+    "history.direct",
+    "ack"
+  ]
+}

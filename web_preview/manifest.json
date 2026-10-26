@@ -1,0 +1,24 @@
+{
+  "name": "Techuboard - বাংলা কীবোর্ড",
+  "short_name": "Techuboard",
+  "description": "বিশ্বমানের প্রিমিয়াম বাংলা ও ইংরেজি ফোনেটিক কীবোর্ড",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "assets/logo-square.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/logo-square.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

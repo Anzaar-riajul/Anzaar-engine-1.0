@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_dark"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Top Branding Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Techuboard"
+                android:textColor="@color/text_primary"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="স্মার্ট বাংলা ও ইংরেজি কীবোর্ড • v1.0"
+                android:textColor="@color/accent_cyan"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Step 1 Card: Enable Keyboard -->
+        <LinearLayout
+            android:id="@+id/cardStep1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:id="@+id/txtStep1Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="১. কীবোর্ড সক্রিয় করুন"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtStep1Desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:text="Android সেটিংস থেকে Techuboard সক্রিয় করুন"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnEnableKeyboard"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_btn_cyan"
+                android:text="⚙️ কীবোর্ড সক্রিয় করুন"
+                android:textAllCaps="false"
+                android:textColor="#0d1117"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtStep1Status"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:gravity="center"
+                android:visibility="gone"
+                android:background="@drawable/bg_btn_green"
+                android:text="✓ সক্রিয় করা হয়েছে (Enabled)"
+                android:textColor="#ffffff"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Step 2 Card: Select Default Keyboard -->
+        <LinearLayout
+            android:id="@+id/cardStep2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:id="@+id/txtStep2Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="২. Techuboard নির্বাচন করুন"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtStep2Desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:text="যেকোনো অ্যাপে টাইপ করার জন্য ডিফল্ট ইনপুট মেথড হিসেবে Techuboard বেছে নিন"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnSelectKeyboard"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_btn_cyan"
+                android:text="👆 Techuboard নির্বাচন করুন"
+                android:textAllCaps="false"
+                android:textColor="#0d1117"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtStep2Status"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:gravity="center"
+                android:visibility="gone"
+                android:background="@drawable/bg_btn_green"
+                android:text="✓ ডিফল্ট হিসেবে নির্বাচিত (Active)"
+                android:textColor="#ffffff"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Step 3 Card: Interactive Test Area -->
+        <LinearLayout
+            android:id="@+id/cardStep3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="৩. কীবোর্ড টেস্ট ড্রাইভ (Test Typing)"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="10dp"
+                android:text="নিচের বক্সে ট্যাপ করুন, নিচ থেকে Techuboard কীবোর্ড ওপেন হবে:"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/editTestTyping"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:gravity="top|start"
+                android:background="@drawable/bg_edit_text"
+                android:hint="এখানে ট্যাপ করে টাইপ করুন (যেমন ami, bangla, tumi)..."
+                android:textColorHint="#484f58"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:padding="14dp"
+                android:inputType="textMultiLine" />
+        </LinearLayout>
+
+        <!-- Features Showcase -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="কীবোর্ডের প্রধান ফিচারসমূহ"
+                android:textColor="@color/accent_cyan"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="5dp"
+                android:text="• স্পেসবারে সোয়াইপ করলেই নিমেষেই বাংলা ⇄ English\n• ৮টি থিম: AMOLED Dark, Cyber, Rose, Forest, Ocean ইত্যাদি\n• ৪-কলাম নাম্বার প্যাড (১২৩ টুল)\n• সম্পূর্ণ ইমোজি ও কাওমোজি ক্যাটাগরি\n• যুক্তবর্ণ অনুসন্ধান ও গাইড\n• নির্ভুল জোড়া বাংলা অভ্র ফোনেটিক ইঞ্জিন"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Bottom Footer -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingBottom="16dp"
+            android:text="Techuboard • 100% Android System Keyboard"
+            android:textColor="#484f58"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+</ScrollView>

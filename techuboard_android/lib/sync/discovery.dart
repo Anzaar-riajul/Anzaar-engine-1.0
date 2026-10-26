@@ -1,0 +1,463 @@
+part of '../sync_manager.dart';
+
+extension SyncDiscoveryMethods on SyncManager {
+  // -----------------------------------------------------------------------
+  // Discovery
+  // -----------------------------------------------------------------------
+
+  /// Foreground requests coalesce across pages. Sharing is an explicit device
+  /// selection flow, but repeated opens/resumes use the automatic cooldown.
+  Future<void> refreshDiscovery({bool automatic = false}) {
+    if (!isEnabled) return Future.value();
+    return _discoveryRefresh.refresh(
+      automatic: automatic,
+      hasPeers: () => _sessions.isNotEmpty,
+      scan: (full) => _refreshDiscovery(
+        pruneCache: !automatic && full,
+        scanFullSubnet: full,
+      ),
+    );
+  }
+
+  Future<void> _refreshDiscovery({
+    bool pruneCache = true,
+    bool scanFullSubnet = true,
+  }) async {
+    if (!isEnabled) return;
+    await ensureStartedIfEnabled();
+    final epoch = _runLifecycle.epoch;
+    _probeNetworkSessions();
+    _relay?.refreshPeers();
+    if (!_isRunCurrent(epoch) || !isServerRunning) {
+      throw StateError('Sync listener is not running');
+    }
+    final cache = await _readEndpointCache();
+    if (!_isRunCurrent(epoch)) return;
+    final cacheById = <String, Map<String, dynamic>>{
+      for (final e in cache)
+        if (e['peerId'] is String) e['peerId'] as String: e,
+    };
+    final kept = <String, DiscoveredPeer>{};
+    for (final entry in _sessions.entries) {
+      final id = entry.key;
+      final session = entry.value;
+      final existing = _discoveredPeers[id];
+      if (existing != null) {
+        kept[id] = existing;
+      } else {
+        final name = (cacheById[id]?['name'] as String?) ?? id;
+        kept[id] = DiscoveredPeer(
+          peerId: id,
+          displayName: name,
+          host: session.host,
+          port: session.port,
+        );
+      }
+    }
+    _discoveredPeers
+      ..clear()
+      ..addAll(kept);
+    if (!_isRunCurrent(epoch)) return;
+    _emitPeers();
+    _scanDebounceTimer?.cancel();
+    _pendingAutoFullScan = false;
+    // Explicit refresh bypasses debounce and waits through the actual scan.
+    await _runDiscovery(scanFullSubnet: scanFullSubnet, userInitiated: true);
+    if (pruneCache && _isRunCurrent(epoch)) {
+      await _rewriteEndpointCacheAfterRefresh(availablePeers, cache);
+    }
+  }
+
+  /// User-added endpoints are explicit discovery requests, not automatic sharing.
+  Future<void> connectManualPeer(String host, int peerPort) =>
+      _dial(host, peerPort, reason: 'direct');
+
+  void triggerCrossBandDiscovery({bool scanFullSubnet = false}) {
+    final epoch = _runLifecycle.epoch;
+    if (!_isRunCurrent(epoch)) return;
+    _pendingAutoFullScan |= scanFullSubnet;
+    _scanDebounceTimer?.cancel();
+    _scanDebounceTimer = Timer(SyncManager._discoveryDebounce, () {
+      if (_isRunCurrent(epoch)) {
+        final full = _pendingAutoFullScan;
+        _pendingAutoFullScan = false;
+        unawaited(
+          _runDiscovery(scanFullSubnet: full).catchError((Object error) {
+            appLog('Discovery failed: $error', level: 'warning');
+          }),
+        );
+      }
+    });
+  }
+
+  /// Counts a failed proactive dial to an authorized peer (its cached address
+  /// is dead — typically the peer moved to a new DHCP lease) and, once the
+  /// streak trips the threshold and the cooldown has elapsed, falls back to a
+  /// full /24 scan so the peer is re-found without a manual refresh.
+  void noteAuthorizedDialFailure() {
+    if (!_isRunCurrent(_runLifecycle.epoch)) return;
+    _autoRediscoverFailStreak += 1;
+    _maybeAutoRediscover();
+  }
+
+  void noteSessionEstablished() {
+    _autoRediscoverFailStreak = 0;
+  }
+
+  void _maybeAutoRediscover() {
+    if (_autoRediscoverFailStreak < SyncManager._autoRediscoverFailThreshold) {
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastAutoRediscoverAt;
+    if (last != null &&
+        now.difference(last) < SyncManager._autoRediscoverCooldown) {
+      return;
+    }
+    _lastAutoRediscoverAt = now;
+    appLog(
+      'Auto rediscover: $_autoRediscoverFailStreak consecutive authorized '
+      'dial failures — scanning /24 for missing peers',
+    );
+    triggerCrossBandDiscovery(scanFullSubnet: true);
+  }
+
+  Future<void> _runDiscovery({
+    bool scanFullSubnet = false,
+    bool userInitiated = false,
+  }) async {
+    final epoch = _runLifecycle.epoch;
+    if (!_isRunCurrent(epoch)) return;
+    final active = _discoveryTask;
+    if (active != null) {
+      final covered =
+          (!scanFullSubnet || _activeDiscoveryFull) &&
+          (!userInitiated || _activeDiscoveryExplicit);
+      await active;
+      if (!covered && _isRunCurrent(epoch)) {
+        await _runDiscovery(
+          scanFullSubnet: scanFullSubnet,
+          userInitiated: userInitiated,
+        );
+      }
+      return;
+    }
+    _activeDiscoveryFull = scanFullSubnet;
+    _activeDiscoveryExplicit = userInitiated;
+    discoveryProgress.value = const DiscoveryProgress(running: true);
+    final task = _performDiscovery(
+      epoch,
+      scanFullSubnet: scanFullSubnet,
+      userInitiated: userInitiated,
+    );
+    _discoveryTask = task;
+    try {
+      await task;
+    } finally {
+      if (_isRunCurrent(epoch) && identical(_discoveryTask, task)) {
+        _discoveryTask = null;
+        final progress = discoveryProgress.value;
+        discoveryProgress.value = DiscoveryProgress(
+          completed: progress.completed,
+          total: progress.total,
+        );
+      }
+    }
+  }
+
+  Future<void> _performDiscovery(
+    int epoch, {
+    required bool scanFullSubnet,
+    required bool userInitiated,
+  }) async {
+    final auth = authorizedPeerIds.toSet();
+    final targets =
+        <String, ({String host, int port, String? id, String reason})>{};
+    void add(String host, int peerPort, String? id, String reason) {
+      if (peerPort < 1 || peerPort > 65535) return;
+      targets.putIfAbsent(
+        '$host:$peerPort',
+        () => (host: host, port: peerPort, id: id, reason: reason),
+      );
+    }
+
+    // Explicit refresh tries remembered and manual endpoints first, including
+    // peers whose outgoing sharing toggles are off. Background work stays gated.
+    for (final e in await _readEndpointCache()) {
+      if (!_isRunCurrent(epoch)) return;
+      final id = e['peerId'] as String?;
+      final host = e['host'] as String?;
+      final peerPort = e['port'] as int?;
+      if (id == null || id == peerId || host == null || peerPort == null) {
+        continue;
+      }
+      if (!userInitiated && !auth.contains(id)) continue;
+      add(host, peerPort, id, userInitiated ? 'scan' : 'cache');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (!_isRunCurrent(epoch)) return;
+    for (final entry in prefs.getStringList('manualSyncPeers') ?? <String>[]) {
+      final parts = entry.split(':');
+      if (parts.first.isEmpty) continue;
+      final host = parts.first;
+      final peerPort = parts.length >= 2
+          ? int.tryParse(parts[1]) ?? port
+          : port;
+      final id = _resolvePeerId(host, peerPort);
+      if (!userInitiated && (id == null || !auth.contains(id))) continue;
+      add(host, peerPort, id, userInitiated ? 'scan' : 'manual');
+    }
+    if (scanFullSubnet) {
+      final myIPs = await _enumerateLocalIPv4s(forScan: true);
+      if (!_isRunCurrent(epoch)) return;
+      final connectedHosts = _sessions.values.map((s) => s.host).toSet();
+      final prefixes = <String>{};
+      for (final ip in myIPs) {
+        final parts = ip.split('.');
+        if (parts.length != 4) continue;
+        final prefix = parts.take(3).join('.');
+        if (prefixes.contains(prefix)) continue;
+        if (prefixes.length >= 2) break;
+        prefixes.add(prefix);
+        for (var d = 1; d <= 254; d++) {
+          final host = '$prefix.$d';
+          if (myIPs.contains(host) || connectedHosts.contains(host)) continue;
+          add(host, port, null, 'scan');
+        }
+      }
+    }
+    final started = Stopwatch()..start();
+    var lastProgressMs = -100;
+    final failures = <String, int>{};
+    void failure(String label) => failures[label] = (failures[label] ?? 0) + 1;
+    appLog('Discovery: ${targets.length} endpoints, full=$scanFullSubnet');
+    await runDiscoveryScan(
+      targets.keys.toList(),
+      concurrency: SyncManager._scanConcurrency,
+      isCurrent: () => _isRunCurrent(epoch),
+      onProgress: (completed, total) {
+        // Publish at most 10 intermediate updates/second, plus start and end.
+        if (completed != 0 &&
+            completed != total &&
+            started.elapsedMilliseconds - lastProgressMs < 100) {
+          return;
+        }
+        lastProgressMs = started.elapsedMilliseconds;
+        discoveryProgress.value = DiscoveryProgress(
+          running: true,
+          completed: completed,
+          total: total,
+        );
+      },
+      probe: (key) {
+        final target = targets[key]!;
+        return _dial(
+          target.host,
+          target.port,
+          peerId: target.id,
+          reason: target.reason,
+          timeout: scanFullSubnet ? SyncManager._scanConnectTimeout : null,
+          onConnectFailure: (f) => failure('connect:$f'),
+          onHandshakeFailure: (f) => failure('handshake:$f'),
+          runEpoch: epoch,
+          bypassScanCooldown: userInitiated,
+        );
+      },
+    );
+    if (_isRunCurrent(epoch)) {
+      appLog(
+        'Discovery finished: ${started.elapsedMilliseconds}ms, '
+        'peers=${_sessions.length}, failures=$failures',
+      );
+      _pruneStaleTimestampMaps();
+    }
+  }
+
+  Future<List<String>> _enumerateLocalIPv4s({bool forScan = false}) async {
+    final result = <String>[];
+    final diagParts = <String>[];
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+      );
+      bool isTunnel(String name) =>
+          RegExp(r'^(tun|utun|tap|wg|ppp)').hasMatch(name);
+      interfaces.sort(
+        (a, b) =>
+            (isTunnel(a.name) ? 1 : 0).compareTo(isTunnel(b.name) ? 1 : 0),
+      );
+      for (final iface in interfaces) {
+        if (forScan &&
+            RegExp(
+              r'^(tun|utun|tap|wg|ppp|rmnet|ccmni|pdp_ip)',
+            ).hasMatch(iface.name)) {
+          continue;
+        }
+        for (final addr in iface.addresses) {
+          final ip = addr.address;
+          final parts = ip.split('.').map(int.tryParse).toList();
+          if (parts.length != 4 || parts.any((p) => p == null)) {
+            diagParts.add('${iface.name}=$ip[ignored]');
+            continue;
+          }
+          final lan = _isLanIPv4(parts[0]!, parts[1]!);
+          diagParts.add('${iface.name}=$ip[${lan ? "LAN" : "ignored"}]');
+          if (!lan) continue;
+          result.add(ip);
+        }
+      }
+    } catch (e) {
+      appLog('enumerate IPv4 failed: $e', level: 'warning');
+    }
+    // A VPN tun0 carrying 10.8.0.x shows up as [LAN] here — that is the
+    // tell-tale sign of route hijack starving the real wlan0 subnet.
+    appLog(
+      'Discovery local interfaces: ${diagParts.isEmpty ? "<none>" : diagParts.join(", ")}',
+    );
+    return result.toSet().toList();
+  }
+
+  Future<List<String>> localIPv4Addresses() => _enumerateLocalIPv4s();
+
+  bool _isLanIPv4(int a, int b) {
+    if (a == 10) return true;
+    if (a == 192 && b == 168) return true;
+    if (a == 172 && b >= 16 && b <= 31) return true;
+    if (a == 169 && b == 254) return true;
+    return false;
+  }
+
+  // -----------------------------------------------------------------------
+  // Endpoint cache
+  // -----------------------------------------------------------------------
+
+  Future<void> _persistEndpoint(
+    String peerId,
+    String name,
+    String host,
+    int port,
+  ) async {
+    if (host.startsWith('relay:')) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = await _readEndpointCache();
+    list.removeWhere((e) => e['peerId'] == peerId);
+    list.add({
+      'peerId': peerId,
+      'name': name,
+      'host': host,
+      'port': port,
+      'ts': DateTime.now().millisecondsSinceEpoch / 1000.0,
+    });
+    await prefs.setString(SyncManager._endpointCacheKey, jsonEncode(list));
+  }
+
+  /// Keep live sessions + authorized peers from previous cache; drop unauthorized ghosts.
+  Future<void> _rewriteEndpointCacheAfterRefresh(
+    List<DiscoveredPeer> livePeers,
+    List<Map<String, dynamic>> previousCache,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+    final auth = authorizedPeerIds.toSet();
+    final liveIds = livePeers.map((p) => p.peerId).toSet();
+    final directIds = livePeers
+        .where((p) => !p.host.startsWith('relay:'))
+        .map((p) => p.peerId)
+        .toSet();
+    final list = <Map<String, dynamic>>[
+      for (final p in livePeers.where((p) => !p.host.startsWith('relay:')))
+        {
+          'peerId': p.peerId,
+          'name': p.displayName,
+          'host': p.host,
+          'port': p.port,
+          'ts': now,
+        },
+    ];
+    for (final e in previousCache) {
+      final id = e['peerId'] as String?;
+      if (id == null ||
+          directIds.contains(id) ||
+          (!auth.contains(id) && !liveIds.contains(id)) ||
+          (e['host'] as String? ?? '').startsWith('relay:')) {
+        continue;
+      }
+      list.add(Map<String, dynamic>.from(e));
+    }
+    if (list.isEmpty) {
+      await prefs.remove(SyncManager._endpointCacheKey);
+    } else {
+      await prefs.setString(SyncManager._endpointCacheKey, jsonEncode(list));
+    }
+    appLog(
+      'endpoint cache pruned to ${list.length} peer(s) after refresh (live+authorized)',
+    );
+  }
+
+  String resolvedPeerLabel(String peerId) {
+    final online = _discoveredPeers[peerId];
+    if (online != null) return online.displayName;
+    return peerId.length <= 8 ? peerId : peerId.substring(0, 8);
+  }
+
+  Future<String?> resolvedPeerHostPort(String peerId) async {
+    final online = _discoveredPeers[peerId];
+    if (online != null) return '${online.host}:${online.port}';
+    for (final e in await _readEndpointCache()) {
+      if (e['peerId'] == peerId) {
+        final host = e['host'];
+        final p = e['port'];
+        if (host is String && p != null) return '$host:$p';
+      }
+    }
+    return null;
+  }
+
+  Future<String> resolvedPeerLabelAsync(String peerId) async {
+    final online = _discoveredPeers[peerId];
+    if (online != null) return online.displayName;
+    for (final e in await _readEndpointCache()) {
+      if (e['peerId'] == peerId) {
+        final name = e['name'];
+        if (name is String && name.isNotEmpty) return name;
+      }
+    }
+    return peerId.length <= 8 ? peerId : peerId.substring(0, 8);
+  }
+
+  Future<List<Map<String, dynamic>>> _readEndpointCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(SyncManager._endpointCacheKey);
+    if (raw == null) return [];
+    try {
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      final cutoff =
+          DateTime.now()
+              .subtract(SyncManager._endpointCacheTtl)
+              .millisecondsSinceEpoch /
+          1000.0;
+      return list
+          .where((e) => ((e['ts'] as num?)?.toDouble() ?? 0) >= cutoff)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Dial cached endpoints for authorized peers only.
+  Future<void> _loadEndpointCache() async {
+    final epoch = _runLifecycle.epoch;
+    if (!_isRunCurrent(epoch)) return;
+    final auth = authorizedPeerIds.toSet();
+    for (final e in await _readEndpointCache()) {
+      if (!_isRunCurrent(epoch)) return;
+      final id = e['peerId'] as String?;
+      final host = e['host'] as String?;
+      final p = e['port'] as int?;
+      if (id == null || host == null || p == null) continue;
+      if (id == peerId || !auth.contains(id)) continue;
+      unawaited(_dial(host, p, reason: 'cache', peerId: id, runEpoch: epoch));
+    }
+  }
+}

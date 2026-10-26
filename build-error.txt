@@ -1,0 +1,5 @@
+
+Running Gradle task 'assembleRelease'...                        
+Caught exception: Already watching path: /home/runner/work/Anzaar-engine-1.0/Anzaar-engine-1.0/techuboard_android/android
+Running Gradle task 'assembleRelease'...                          309.0s
+Gradle build failed to produce an .apk file. It's likely that this file was generated under /home/runner/work/Anzaar-engine-1.0/Anzaar-engine-1.0/techuboard_android/build, but the tool couldn't find it.

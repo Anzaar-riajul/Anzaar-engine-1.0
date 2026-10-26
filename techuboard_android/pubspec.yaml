@@ -1,0 +1,48 @@
+name: techuboard_android
+description: Clipboard history, encrypted LAN sync, floating paste hub, notes, notification mirroring, and file transfer for Techuboard.
+publish_to: none
+version: 1.0.32+12284
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  common_relay:
+    path: ../vendor/common-relay/dart
+  qr_flutter: 4.1.0
+  mobile_scanner: 6.0.11
+  sodium: 3.4.3
+  flutter_secure_storage: 10.0.0
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  shared_preferences: ^2.2.2
+  uuid: ^3.0.7
+  crypto: ^3.0.3
+  encrypt: ^5.0.3
+  file_picker: 8.1.7
+  sqflite: 2.4.1
+  sqflite_common_ffi: 2.3.4+4
+  path: 1.9.0
+  connectivity_plus: ^6.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/techuboard-logo.png
+
+# The shared package is initialized only by main_windows.dart. Android/iOS use
+# sqflite's native plugin. Resolve SQLite from each OS instead of downloading
+# native assets for every target; Windows 10/11 provides winsqlite3.dll.
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3

@@ -1,0 +1,219 @@
+name: CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Select affected platforms
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      macos: ${{ steps.platforms.outputs.macos }}
+      android: ${{ steps.platforms.outputs.android }}
+      windows: ${{ steps.platforms.outputs.windows }}
+      ios: ${{ steps.platforms.outputs.ios }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ !inputs.full_matrix && github.event_name != 'workflow_dispatch' }}
+        with:
+          persist-credentials: false
+          # Covers the common single-commit push and pull request merge commit.
+          fetch-depth: 2
+      - name: Detect changed paths
+        id: platforms
+        shell: bash
+        env:
+          FORCE_ALL: ${{ inputs.full_matrix || github.event_name == 'workflow_dispatch' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          macos=false android=false windows=false ios=false
+          if [[ "$FORCE_ALL" == true ]]; then
+            macos=true android=true windows=true ios=true
+          elif [[ -z "$BASE_SHA" || -z "$HEAD_SHA" ]] ||
+               ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null ||
+               ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            # A missing comparison must never turn into skipped CI.
+            macos=true android=true windows=true ios=true
+          else
+            changed_files="$RUNNER_TEMP/clipy-changed-files"
+            if ! git diff --name-only --no-renames -z "$BASE_SHA" "$HEAD_SHA" > "$changed_files"; then
+              macos=true android=true windows=true ios=true
+            else
+              all=false
+              while IFS= read -r -d '' path; do
+                case "$path" in
+                  .github/workflows/*|scripts/check.sh|scripts/lib/build_common.sh|LICENSE|THIRD_PARTY_NOTICES.md)
+                    all=true ;;
+                  techuboard_android/lib/*|techuboard_android/assets/*|techuboard_android/pubspec.*|techuboard_android/analysis_options.yaml|techuboard_android/devtools_options.yaml|.fvmrc)
+                    android=true windows=true ios=true ;;
+                  techuboard_android/android/*|techuboard_android/test/*|techuboard_android/tool/*|build_android_apk.sh)
+                    android=true ;;
+                  techuboard_android/windows/*|scripts/package_windows.ps1)
+                    windows=true ;;
+                  techuboard_android/ios/*)
+                    ios=true ;;
+                  clipy_macos/*|third_party/libwebp/*|Clipy/*|build_macos_app.sh|scripts/lib/build_webp.sh|scripts/test_macos_core.sh|scripts/test_native_screenshot.sh|scripts/check_screenshot_provenance.sh|docs/MACOS_INSTALL.md)
+                    macos=true ;;
+                  docs/*|README*|techuboard_android/README*|res/*|.github/PULL_REQUEST_TEMPLATE.md)
+                    ;; # Repository checks still run for documentation-only changes.
+                  *)
+                    all=true ;; # Unknown build input: fail open and run every platform.
+                esac
+              done < "$changed_files"
+              if [[ "$all" == true ]]; then
+                macos=true android=true windows=true ios=true
+              fi
+            fi
+          fi
+          {
+            printf 'macos=%s\n' "$macos"
+            printf 'android=%s\n' "$android"
+            printf 'windows=%s\n' "$windows"
+            printf 'ios=%s\n' "$ios"
+          } >> "$GITHUB_OUTPUT"
+
+  repository:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: bash scripts/check.sh repo
+
+  android:
+    name: Flutter checks and Android build
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Read pinned Flutter version
+        id: flutter
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+        working-directory: techuboard_android
+      - run: bash scripts/check.sh flutter
+      - name: Build Android without release credentials
+        working-directory: techuboard_android
+        run: flutter build apk --debug --no-pub
+
+  macos:
+    name: macOS compile and bundle validation
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
+    uses: ./.github/workflows/macos.yml
+
+  windows:
+    name: Windows x64 compile
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Read pinned Flutter version
+        id: flutter
+        shell: pwsh
+        run: |
+          $version = (Get-Content .fvmrc -Raw | ConvertFrom-Json).flutter
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          channel: stable
+          cache: true
+      - name: Build Windows application
+        shell: pwsh
+        working-directory: techuboard_android
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build windows --release --no-pub -t lib/main_windows.dart
+      - name: Package and smoke-test extracted Windows ZIP
+        shell: pwsh
+        run: |
+          ./scripts/package_windows.ps1 -Version ci-smoke
+          $extracted = Join-Path $env:RUNNER_TEMP 'clipy-ci-smoke'
+          Expand-Archive -Path 'dist/ClipyClone-Windows-x64-vci-smoke.zip' -DestinationPath $extracted
+          $executable = Join-Path $extracted 'ClipyClone.exe'
+          $process = Start-Process -FilePath $executable -WorkingDirectory $extracted -PassThru
+          try {
+            Start-Sleep -Seconds 12
+            $process.Refresh()
+            if ($process.HasExited) { throw "Extracted Windows app exited with code $($process.ExitCode)." }
+            $database = Join-Path $env:APPDATA 'ClipyClone/clipy.db'
+            if (-not (Test-Path $database)) { throw "Extracted Windows app did not initialize its database." }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
+  ios:
+    name: iOS unsigned build and simulator compile
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Read pinned Flutter version
+        id: flutter
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        working-directory: techuboard_android
+        run: flutter pub get --enforce-lockfile
+      - name: Build unsigned iOS application
+        working-directory: techuboard_android
+        run: flutter build ios --release --no-codesign --no-pub
+      - name: Compile iOS Simulator runner
+        working-directory: techuboard_android
+        run: |
+          ARCH="$(uname -m)"
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/clipy-ios-simulator" \
+            ARCHS="$ARCH" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+      - name: Launch iOS application in Simulator
+        shell: bash
+        run: |
+          SIMULATOR="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for group in devices.values() for d in group if "iPhone" in d["name"]))
+          ')"
+          xcrun simctl boot "$SIMULATOR"
+          xcrun simctl bootstatus "$SIMULATOR" -b
+          xcrun simctl install "$SIMULATOR" "$RUNNER_TEMP/clipy-ios-simulator/Build/Products/Debug-iphonesimulator/Runner.app"
+          xcrun simctl launch "$SIMULATOR" com.clipyclone.clipy.ios
