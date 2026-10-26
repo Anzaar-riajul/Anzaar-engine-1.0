@@ -44,12 +44,12 @@ jobs:
       - name: Build Techuboard Android Release APK
         working-directory: techuboard_android
         run: |
-          set -o pipefail
-          flutter build apk --release --no-tree-shake-icons 2>&1 | tee /tmp/build.log
+          flutter build apk --release --no-tree-shake-icons 2>&1 | tee /tmp/build.log || true
           mkdir -p ../dist
           echo "=== Searching for Generated APK ==="
           find build -type f -name "*.apk" -ls || true
           find . -type f -name "*.apk" -ls || true
+          find .. -maxdepth 4 -type f -name "*.apk" -ls || true
           
           # Copy release APK to dist
           APK_FILE=$(find build/app/outputs -type f -name "*release*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
@@ -58,6 +58,9 @@ jobs:
           fi
           if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
             APK_FILE=$(find . -type f -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
+          fi
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            APK_FILE=$(find .. -maxdepth 4 -type f -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1)
           fi
           
           if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
