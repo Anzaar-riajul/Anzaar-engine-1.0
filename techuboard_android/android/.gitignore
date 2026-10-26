@@ -8,6 +8,6 @@ GeneratedPluginRegistrant.java
 .cxx/
 
 # Keystore configuration
-!key.properties
+key.properties
 !app/techuboard-release.keystore
 **/*.jks

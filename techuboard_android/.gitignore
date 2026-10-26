@@ -48,4 +48,6 @@ app.*.map.json
 
 # Signing keys — never commit
 **/*.keystore
+key.properties
+**/key.properties
 **/*.jks

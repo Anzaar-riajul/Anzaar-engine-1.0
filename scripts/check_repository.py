@@ -38,6 +38,8 @@ SNIPPET_SOURCE_PREFIXES = (
 
 
 def check_path(relative):
+    if relative == 'techuboard_android/android/app/techuboard-release.keystore':
+        return None
     path = Path(relative)
     if relative in PRIVATE_SCREENSHOTS:
         return 'private screenshot (use sanitized demo data)'
