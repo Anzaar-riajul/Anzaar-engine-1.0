@@ -44,7 +44,8 @@ jobs:
       - name: Build Techuboard Android Release APK
         working-directory: techuboard_android
         run: |
-          flutter build apk --release --no-tree-shake-icons --verbose
+          set -o pipefail
+          flutter build apk --release --no-tree-shake-icons 2>&1 | tee /tmp/build.log
           mkdir -p ../dist
           echo "=== Searching for Generated APK ==="
           find build -type f -name "*.apk" -ls || true
@@ -67,6 +68,14 @@ jobs:
           echo "Found release APK: $APK_FILE"
           cp "$APK_FILE" ../dist/Techuboard-Android-v1.0.apk
           ls -lh ../dist/Techuboard-Android-v1.0.apk
+
+      - name: Output Error Summary
+        if: failure()
+        run: |
+          echo "## ❌ Build Failure Details" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 80 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
