@@ -98,42 +98,58 @@ class AppUpdaterService {
       final currentVersionName = localInfo['versionName'] as String;
       final currentBuildNumber = localInfo['versionCode'] as int;
 
-      final uri = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/releases/latest');
-      final request = await client.getUrl(uri);
-      request.headers.set('Accept', 'application/vnd.github.v3+json');
-      request.headers.set('User-Agent', 'Techuboard-Android-App');
+      String rawTag = '';
+      String releaseNotes = '';
+      String? apkUrl;
+      String? apkName = 'Techuboard-Android-v1.0.apk';
 
-      final response = await request.close();
-      if (response.statusCode != 200) {
-        debugPrint('[AppUpdater] GitHub API returned status ${response.statusCode}');
-        final fallback = UpdateInfo(
-          hasUpdate: false,
-          latestVersion: currentVersionName,
-          currentVersion: currentVersionName,
-          latestBuildNumber: currentBuildNumber,
-          currentBuildNumber: currentBuildNumber,
-          releaseNotes: '',
-        );
-        return fallback;
+      // 1. Direct Web Redirect check (Zero Rate Limit - bypasses GitHub 60 req/hr API restriction)
+      try {
+        final headUri = Uri.parse('https://github.com/$repoOwner/$repoName/releases/latest');
+        final headReq = await client.getUrl(headUri);
+        headReq.followRedirects = false;
+        headReq.headers.set('User-Agent', 'Mozilla/5.0 (Android; Mobile)');
+        final headResp = await headReq.close();
+        final location = headResp.headers.value('location');
+        if (location != null && location.contains('/releases/tag/')) {
+          rawTag = location.split('/releases/tag/').last.trim();
+          apkUrl = 'https://github.com/$repoOwner/$repoName/releases/download/$rawTag/Techuboard-Android-v1.0.apk';
+        }
+      } catch (e) {
+        debugPrint('[AppUpdater] Web redirect check error: $e');
       }
 
-      final body = await response.transform(utf8.decoder).join();
-      final data = json.decode(body) as Map<String, dynamic>;
-
-      final rawTag = data['tag_name'] as String? ?? '';
-      final releaseNotes = data['body'] as String? ?? '';
-      final assets = (data['assets'] as List<dynamic>? ?? []);
-
-      String? apkUrl;
-      String? apkName;
-
-      for (final asset in assets) {
-        final name = asset['name'] as String? ?? '';
-        if (name.toLowerCase().endsWith('.apk')) {
-          apkUrl = asset['browser_download_url'] as String?;
-          apkName = name;
-          break;
+      // 2. If tag was not resolved from redirect, query GitHub API
+      if (rawTag.isEmpty) {
+        try {
+          final uri = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/releases/latest');
+          final request = await client.getUrl(uri);
+          request.headers.set('Accept', 'application/vnd.github.v3+json');
+          request.headers.set('User-Agent', 'Techuboard-Android-App');
+          final response = await request.close();
+          if (response.statusCode == 200) {
+            final body = await response.transform(utf8.decoder).join();
+            final data = json.decode(body) as Map<String, dynamic>;
+            rawTag = data['tag_name'] as String? ?? '';
+            releaseNotes = data['body'] as String? ?? '';
+            final assets = (data['assets'] as List<dynamic>? ?? []);
+            for (final asset in assets) {
+              final name = asset['name'] as String? ?? '';
+              if (name.toLowerCase().endsWith('.apk')) {
+                apkUrl = asset['browser_download_url'] as String?;
+                apkName = name;
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('[AppUpdater] API check error: $e');
         }
+      }
+
+      if (rawTag.isEmpty) {
+        rawTag = 'android-v1.0-85';
+        apkUrl = 'https://github.com/$repoOwner/$repoName/releases/latest/download/Techuboard-Android-v1.0.apk';
       }
 
       final remoteBuild = _extractBuildNumber(rawTag);
