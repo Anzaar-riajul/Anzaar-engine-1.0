@@ -2,6 +2,13 @@ import AppKit
 import CoreImage
 import SwiftUI
 
+struct HistoryDeleteConfirmation: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let onConfirm: () -> Void
+}
+
 struct MenuBarPanelView: View {
     @ObservedObject var model: MenuBarPanelModel
     @ObservedObject var overflow: MenuBarOverflowManager
@@ -25,6 +32,7 @@ struct MenuBarPanelView: View {
     @State private var deviceTabMode: Int = 0
     @State private var copiedPairingPin = false
     @State private var showPairingCard = false
+    @State private var deleteConfirmTarget: HistoryDeleteConfirmation? = nil
     var activateIcon: (MenuBarOverflowItem) -> Void
 
     var body: some View {
@@ -66,6 +74,11 @@ struct MenuBarPanelView: View {
                     .padding(.bottom, 52)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .allowsHitTesting(false)
+            }
+        }
+        .overlay {
+            if let target = deleteConfirmTarget {
+                deleteConfirmationDialogView(target)
             }
         }
         .font(AppFont.body).tint(AppColor.accent)
@@ -267,13 +280,17 @@ struct MenuBarPanelView: View {
                 let isSelected = model.page == .home && model.tab == tab
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        model.selectTab(tab)
+                        if tab == .clipboard && model.page == .home && model.tab == .clipboard {
+                            model.cycleHistoryDeviceFilter()
+                        } else {
+                            model.selectTab(tab)
+                        }
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: tabIcon(tab))
+                        Image(systemName: tab == .clipboard ? model.clipboardTabIcon : tabIcon(tab))
                             .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                        Text(tab == .devices ? L10n.format(.panelDeviceCount, model.devices.count) : tab.title)
+                        Text(tab == .devices ? L10n.format(.panelDeviceCount, model.devices.count) : (tab == .clipboard ? model.clipboardTabTitle : tab.title))
                             .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
                     }
                     .frame(maxWidth: .infinity)
@@ -336,15 +353,285 @@ struct MenuBarPanelView: View {
     }
     private var historyContent: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 6) {
-                ForEach(HistoryTypeFilter.allCases) { filter in
-                    filterPill(filter)
+            if model.deviceFilterMode == .noDevices {
+                noDeviceConnectedCardsView
+            } else {
+                HStack(spacing: 6) {
+                    ForEach(HistoryTypeFilter.allCases) { filter in
+                        filterPill(filter)
+                    }
+                    Spacer(minLength: 0)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            model.isSelectMode.toggle()
+                            if !model.isSelectMode {
+                                model.selectedIDs.removeAll()
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: model.isSelectMode ? "checkmark.circle.fill" : "checklist")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(model.isSelectMode ? "Done" : "Select")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(
+                            model.isSelectMode ? AppColor.accent.opacity(0.18) : Color.primary.opacity(0.04),
+                            in: Capsule()
+                        )
+                        .overlay(
+                            Capsule().strokeBorder(
+                                model.isSelectMode ? AppColor.accent.opacity(0.4) : Color.primary.opacity(0.06),
+                                lineWidth: 0.5
+                            )
+                        )
+                        .foregroundStyle(model.isSelectMode ? AppColor.accent : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(model.isSelectMode ? "Exit selection mode" : "Select items to delete")
+                }.padding(.bottom, 4)
+
+                if model.isSelectMode {
+                    selectionActionBar
                 }
-                Spacer(minLength: 0)
-            }.padding(.bottom, 4)
-            historyList
-            actionLink(.panelAllHistory) { model.onAction?(.search(model.query)) }
+
+                historyList
+                actionLink(.panelAllHistory) { model.onAction?(.search(model.query)) }
+            }
         }
+    }
+
+    private var selectionActionBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    model.selectAllVisible()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: model.selectedIDs.count == model.history.count && !model.history.isEmpty ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 11))
+                    Text(model.selectedIDs.count == model.history.count && !model.history.isEmpty ? "Deselect All" : "Select All")
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.primary.opacity(0.85))
+
+            Text("(\(model.selectedIDs.count))")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Color.secondary)
+
+            Spacer()
+
+            if !model.selectedIDs.isEmpty {
+                Button {
+                    let count = model.selectedIDs.count
+                    deleteConfirmTarget = HistoryDeleteConfirmation(
+                        title: "Delete \(count) Item\(count > 1 ? "s" : "")?",
+                        message: "Are you sure you want to delete \(count) selected item\(count > 1 ? "s" : "") from clipboard history? This cannot be undone.",
+                        onConfirm: {
+                            model.deleteSelectedEntries()
+                            model.notice = "Deleted \(count) item\(count > 1 ? "s" : "")"
+                        }
+                    )
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10.5))
+                        Text("Delete (\(model.selectedIDs.count))")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+                    .foregroundStyle(Color.red)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                deleteConfirmTarget = HistoryDeleteConfirmation(
+                    title: "Clear All History?",
+                    message: "Are you sure you want to clear all unpinned clipboard history? This cannot be undone.",
+                    onConfirm: {
+                        model.clearAllHistory()
+                        model.notice = "History cleared"
+                    }
+                )
+            } label: {
+                Text("Clear All")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.red.opacity(0.8))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+        .padding(.bottom, 2)
+    }
+
+    private var noDeviceConnectedCardsView: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 5) {
+                Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                    .font(.system(size: 28))
+                    .foregroundStyle(Color.orange)
+                Text("No Device Connected")
+                    .font(.system(size: 13.5, weight: .bold))
+                Text("Connect with your phone or PC to sync clipboard instantly:")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+            }
+            .padding(.top, 14)
+
+            HStack(spacing: 10) {
+                Button {
+                    deviceTabMode = 0
+                    showPairingCard = true
+                    model.selectTab(.devices)
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: "iphone.gen3")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Color.green)
+                            Spacer()
+                            Image(systemName: "chevron.right.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.secondary.opacity(0.6))
+                        }
+                        Text("Android Phone")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.primary)
+                        Text("Scan QR code or enter 6-digit PIN")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    deviceTabMode = 0
+                    showPairingCard = true
+                    model.selectTab(.devices)
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: "laptopcomputer")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Color.blue)
+                            Spacer()
+                            Image(systemName: "chevron.right.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.secondary.opacity(0.6))
+                        }
+                        Text("Windows / PC")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.primary)
+                        Text("Connect via Relay PIN or LAN")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 4)
+
+            Button {
+                withAnimation {
+                    model.cycleHistoryDeviceFilter()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.counterclockwise")
+                    Text("Return to All History")
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColor.accent)
+            }
+            .buttonStyle(.link)
+            .padding(.top, 4)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func deleteConfirmationDialogView(_ target: HistoryDeleteConfirmation) -> some View {
+        ZStack {
+            Color.black.opacity(0.45)
+                .edgesIgnoringSafeArea(.all)
+                .onTapGesture {
+                    deleteConfirmTarget = nil
+                }
+
+            VStack(spacing: 12) {
+                Image(systemName: "trash.circle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(Color.red)
+
+                Text(target.title)
+                    .font(.system(size: 13.5, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(target.message)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 10)
+
+                HStack(spacing: 10) {
+                    Button {
+                        deleteConfirmTarget = nil
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        target.onConfirm()
+                        deleteConfirmTarget = nil
+                    } label: {
+                        Text("Delete")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(Color.red, in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 4)
+            }
+            .padding(16)
+            .frame(width: 280)
+            .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+            .shadow(color: Color.black.opacity(0.25), radius: 16, x: 0, y: 8)
+        }
+        .transition(.opacity)
     }
 
     private func filterPill(_ filter: HistoryTypeFilter) -> some View {
@@ -399,7 +686,12 @@ struct MenuBarPanelView: View {
         }
     }
     private func historyRow(_ entry: HistoryEntry) -> some View {
-        MenuBarPanelHistoryRow(entry: entry, selected: model.selectedID == "h:" + entry.id,
+        MenuBarPanelHistoryRow(entry: entry,
+                              selected: model.selectedID == "h:" + entry.id,
+                              isSelectMode: model.isSelectMode,
+                              isSelectedForDelete: model.selectedIDs.contains(entry.id),
+                              onToggleSelect: { model.toggleSelectID(entry.id) },
+                              onDelete: { promptDeleteEntry(entry) },
                               use: { model.onHistory?(entry, .use) },
                               copy: { model.onHistory?(entry, .copy) },
                               saveSnippet: { model.savingSnippetEntry = entry },
@@ -430,7 +722,26 @@ struct MenuBarPanelView: View {
                     default: EmptyView()
                     }
                 }
+                Divider()
+                Button(role: .destructive) {
+                    promptDeleteEntry(entry)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
+    }
+
+    private func promptDeleteEntry(_ entry: HistoryEntry) {
+        let displayTitle = entry.listDisplayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = displayTitle.count > 35 ? "\(displayTitle.prefix(35))..." : displayTitle
+        deleteConfirmTarget = HistoryDeleteConfirmation(
+            title: "Delete Item?",
+            message: "Are you sure you want to delete '\(preview)'? This cannot be undone.",
+            onConfirm: {
+                model.deleteSingleEntry(entry)
+                model.notice = "Deleted item"
+            }
+        )
     }
     private func downloadImage(_ entry: HistoryEntry) {
         guard case .image(let path) = entry.item else { return }
@@ -1511,6 +1822,10 @@ struct MenuBarPanelView: View {
 private struct MenuBarPanelHistoryRow: View {
     let entry: HistoryEntry
     let selected: Bool
+    var isSelectMode: Bool = false
+    var isSelectedForDelete: Bool = false
+    var onToggleSelect: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
     let use: () -> Void
     let copy: () -> Void
     let saveSnippet: () -> Void
@@ -1553,9 +1868,27 @@ private struct MenuBarPanelHistoryRow: View {
     }
     var body: some View {
         HStack(spacing: 6) {
+            if isSelectMode {
+                Button {
+                    onToggleSelect?()
+                } label: {
+                    Image(systemName: isSelectedForDelete ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 13, weight: isSelectedForDelete ? .bold : .regular))
+                        .foregroundStyle(isSelectedForDelete ? AppColor.accent : Color.secondary.opacity(0.55))
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+            }
+
             if case .image = entry.item {
                 ZStack(alignment: .bottomTrailing) {
-                    Button(action: use) {
+                    Button(action: {
+                        if isSelectMode {
+                            onToggleSelect?()
+                        } else {
+                            use()
+                        }
+                    }) {
                         if let image = thumbnail.image {
                             Image(nsImage: image)
                                 .resizable()
@@ -1586,7 +1919,13 @@ private struct MenuBarPanelHistoryRow: View {
                 }
                 .frame(width: 38, height: 26)
             } else if !isPlainText {
-                Button(action: use) {
+                Button(action: {
+                    if isSelectMode {
+                        onToggleSelect?()
+                    } else {
+                        use()
+                    }
+                }) {
                     Image(systemName: symbol)
                         .font(.system(size: 14, weight: .light))
                         .foregroundStyle(AppColor.accent)
@@ -1595,7 +1934,13 @@ private struct MenuBarPanelHistoryRow: View {
                 .buttonStyle(.plain)
             }
 
-            Button(action: use) {
+            Button(action: {
+                if isSelectMode {
+                    onToggleSelect?()
+                } else {
+                    use()
+                }
+            }) {
                 HStack(spacing: 5) {
                     if entry.isPinned {
                         Image(systemName: "pin.fill")
@@ -1652,6 +1997,16 @@ private struct MenuBarPanelHistoryRow: View {
                     }
                     .buttonStyle(.plain)
                     .help("Copy to Clipboard")
+
+                    Button(action: { onDelete?() }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                            .frame(width: 22, height: 22)
+                            .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete Item")
                 }
                 .transition(.opacity)
             } else {

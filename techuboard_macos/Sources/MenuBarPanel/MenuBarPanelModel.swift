@@ -67,6 +67,105 @@ final class MenuBarPanelModel: ObservableObject {
     @Published var notice: String?
     @Published var savingSnippetEntry: HistoryEntry?
     @Published var previewEntry: HistoryEntry?
+
+    enum DeviceFilterMode: Equatable {
+        case all
+        case thisDevice
+        case peer(peerId: String, name: String)
+        case noDevices
+    }
+
+    @Published var deviceFilterMode: DeviceFilterMode = .all
+    @Published var isSelectMode: Bool = false
+    @Published var selectedIDs: Set<String> = []
+
+    var clipboardTabTitle: String {
+        switch deviceFilterMode {
+        case .all: return "All"
+        case .thisDevice: return "This Mac"
+        case .peer(_, let name): return name
+        case .noDevices: return "Devices"
+        }
+    }
+
+    var clipboardTabIcon: String {
+        switch deviceFilterMode {
+        case .all: return "doc.on.clipboard"
+        case .thisDevice: return "laptopcomputer"
+        case .peer(_, let name):
+            if name.localizedCaseInsensitiveContains("android") || name.localizedCaseInsensitiveContains("phone") {
+                return "iphone"
+            }
+            return "laptopcomputer.and.iphone"
+        case .noDevices: return "laptopcomputer.trianglebadge.exclamationmark"
+        }
+    }
+
+    func cycleHistoryDeviceFilter() {
+        if tab != .clipboard {
+            selectTab(.clipboard)
+            return
+        }
+        let peers = SyncManager.shared.availablePeers
+        switch deviceFilterMode {
+        case .all:
+            deviceFilterMode = .thisDevice
+        case .thisDevice:
+            if peers.isEmpty {
+                deviceFilterMode = .noDevices
+            } else {
+                let first = peers[0]
+                deviceFilterMode = .peer(peerId: first.peerId, name: first.displayName)
+            }
+        case .peer(let id, _):
+            if let idx = peers.firstIndex(where: { $0.peerId == id }), idx + 1 < peers.count {
+                let next = peers[idx + 1]
+                deviceFilterMode = .peer(peerId: next.peerId, name: next.displayName)
+            } else {
+                deviceFilterMode = .all
+            }
+        case .noDevices:
+            deviceFilterMode = .all
+        }
+        scheduleSearch(immediate: true)
+    }
+
+    func toggleSelectID(_ id: String) {
+        if selectedIDs.contains(id) {
+            selectedIDs.remove(id)
+        } else {
+            selectedIDs.insert(id)
+        }
+    }
+
+    func selectAllVisible() {
+        if selectedIDs.count == history.count {
+            selectedIDs.removeAll()
+        } else {
+            selectedIDs = Set(history.map(\.id))
+        }
+    }
+
+    func deleteSelectedEntries() {
+        let toDelete = history.filter { selectedIDs.contains($0.id) }
+        ClipboardManager.shared.removeHistoryEntries(toDelete)
+        selectedIDs.removeAll()
+        isSelectMode = false
+        refreshHistory()
+    }
+
+    func deleteSingleEntry(_ entry: HistoryEntry) {
+        ClipboardManager.shared.removeHistoryEntry(entry)
+        selectedIDs.remove(entry.id)
+        refreshHistory()
+    }
+
+    func clearAllHistory() {
+        ClipboardManager.shared.clearHistory()
+        selectedIDs.removeAll()
+        isSelectMode = false
+        refreshHistory()
+    }
     var onAction: ((Action) -> Void)?
     var onHistory: ((HistoryEntry, HistoryAction) -> Void)?
     var onSnippet: ((UUID) -> Void)?
@@ -167,7 +266,26 @@ final class MenuBarPanelModel: ObservableObject {
         let search = self.search
         let work = DispatchWorkItem { [weak self] in
             guard !token.isCancelled else { return }
-            let entries = search(options, token)
+            var entries = search(options, token)
+            if let mode = self?.deviceFilterMode {
+                let peers = SyncManager.shared.availablePeers
+                switch mode {
+                case .all:
+                    break
+                case .thisDevice:
+                    entries = entries.filter { entry in
+                        let app = entry.sourceApp ?? ""
+                        return app != "Remote Device" && !peers.contains { $0.displayName == app }
+                    }
+                case .peer(_, let name):
+                    entries = entries.filter { entry in
+                        let app = entry.sourceApp ?? ""
+                        return app == "Remote Device" || app.localizedCaseInsensitiveContains(name)
+                    }
+                case .noDevices:
+                    entries = []
+                }
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.open, self.revision == ticket, !token.isCancelled else { return }
                 self.history = entries
