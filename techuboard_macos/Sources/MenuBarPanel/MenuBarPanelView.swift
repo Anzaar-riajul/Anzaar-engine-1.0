@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import SwiftUI
 
 struct MenuBarPanelView: View {
@@ -464,9 +465,54 @@ struct MenuBarPanelView: View {
                 }.buttonStyle(.bordered).controlSize(.small).disabled(refreshingDevices)
             }.padding(.bottom, 4)
             ScrollView {
-                VStack(spacing: 0) {
-                    if model.devices.isEmpty { empty(.noDevicesFound, hint: .panelSyncHint, symbol: "network") }
-                    else {
+                VStack(spacing: 8) {
+                    if model.devices.isEmpty {
+                        VStack(spacing: 8) {
+                            if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                                VStack(spacing: 4) {
+                                    Image(nsImage: qr)
+                                        .interpolation(.none)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 120, height: 120)
+                                        .padding(6)
+                                        .background(Color.white)
+                                        .cornerRadius(8)
+                                        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+
+                                    Text("ফোনের ক্যামেরা দিয়ে স্ক্যান করুন")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.primary)
+
+                                    Text("Android APK সরাসরি ডাউনলোড করতে")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.top, 4)
+                            }
+
+                            HStack(spacing: 8) {
+                                Button {
+                                    if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
+                                        let picker = NSSharingServicePicker(items: [url])
+                                        if let window = NSApp.keyWindow {
+                                            picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
+                                        }
+                                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                                        NSWorkspace.shared.open(github)
+                                    }
+                                } label: {
+                                    Label("AirDrop / Share APK", systemImage: "square.and.arrow.up")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                    } else {
                         LazyVStack(spacing: 0) {
                             ForEach(model.devices, id: \.peerId) { device in
                                 HStack(spacing: 10) {
@@ -500,6 +546,18 @@ struct MenuBarPanelView: View {
         refreshingDevices = true
         SyncManager.shared.refreshDiscovery(pruneCache: true, scanFullSubnet: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { refreshingDevices = false }
+    }
+    private func qrImage(for text: String) -> NSImage? {
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(Data(text.utf8), forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let outputImage = filter.outputImage else { return nil }
+        let transform = CGAffineTransform(scaleX: 5, y: 5)
+        let scaled = outputImage.transformed(by: transform)
+        let rep = NSCIImageRep(ciImage: scaled)
+        let nsImage = NSImage(size: rep.size)
+        nsImage.addRepresentation(rep)
+        return nsImage
     }
     private var notificationsContent: some View {
         VStack(spacing: 0) {
