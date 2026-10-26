@@ -620,8 +620,8 @@
             <p class="dl-sub">Direct APK download. Includes floating paste hub and in-app auto updates.</p>
           </div>
           <div>
-            <a id="btn-dl-apk" href="https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/download/android-v1.0-79/Techuboard-Android-v1.0.apk" class="btn btn-solid" style="width: 100%;">
-              Download APK (~84 MB)
+            <a id="btn-dl-apk" href="https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases/latest" class="btn btn-solid" style="width: 100%;">
+              Download Latest APK
             </a>
           </div>
         </div>
@@ -694,9 +694,16 @@
 
           const apkAsset = (data.assets || []).find(a => (a.name || '').toLowerCase().endsWith('.apk'));
           if (apkAsset && apkAsset.browser_download_url) {
-            if (btnAndroid) btnAndroid.href = apkAsset.browser_download_url;
+            const sizeMb = apkAsset.size ? ` (${(apkAsset.size / (1024 * 1024)).toFixed(1)} MB)` : '';
+            if (btnAndroid) {
+              btnAndroid.href = apkAsset.browser_download_url;
+              btnAndroid.textContent = `Download Latest APK${sizeMb}`;
+            }
             const dlBtn = document.getElementById('btn-dl-apk');
-            if (dlBtn) dlBtn.href = apkAsset.browser_download_url;
+            if (dlBtn) {
+              dlBtn.href = apkAsset.browser_download_url;
+              dlBtn.textContent = `Download Latest APK${sizeMb}`;
+            }
           }
         }
       } catch (e) {
