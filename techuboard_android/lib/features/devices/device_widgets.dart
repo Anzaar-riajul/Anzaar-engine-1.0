@@ -646,17 +646,12 @@ class _ConnectionEditorState extends State<ConnectionEditor> {
   late final _port = TextEditingController(
     text: '${SyncManager.instance.port}',
   );
-  late final _secret = TextEditingController(
-    text: SyncManager.instance.pairingSecret,
-  );
   bool _saving = false;
-  bool _obscure = true;
 
   @override
   void dispose() {
     _name.dispose();
     _port.dispose();
-    _secret.dispose();
     super.dispose();
   }
 
@@ -667,7 +662,6 @@ class _ConnectionEditorState extends State<ConnectionEditor> {
       await SyncManager.instance.updateConnectionSettings(
         name: _name.text,
         listeningPort: int.parse(_port.text.trim()),
-        secret: _secret.text,
       );
       if (!mounted) return;
       showTechuMessage(
@@ -718,31 +712,6 @@ class _ConnectionEditorState extends State<ConnectionEditor> {
                   validator: (value) => value == null || value.trim().isEmpty
                       ? l10n.nameRequired
                       : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _secret,
-                  enabled: !_saving,
-                  obscureText: _obscure,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(
-                    labelText: l10n.syncPairingSecret,
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                      tooltip: _obscure ? l10n.showSecret : l10n.hideSecret,
-                      icon: Icon(
-                        _obscure
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.syncPairingSecretHint,
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 20),
                 TextFormField(
