@@ -7,6 +7,7 @@ import '../../clipboard_manager.dart';
 import '../../app_localizations.dart';
 import '../../ui/app_components.dart';
 import '../../ui/app_theme.dart';
+import '../../services/app_updater_service.dart';
 import '../devices/devices_page.dart';
 import '../devices/device_widgets.dart';
 
@@ -47,6 +48,126 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
   }
 
   bool _timerWidgetPinned = false;
+  bool _isCheckingUpdate = false;
+
+  Future<void> _handleCheckUpdate() async {
+    if (_isCheckingUpdate) return;
+    setState(() => _isCheckingUpdate = true);
+    try {
+      final info = await AppUpdaterService.instance.checkForUpdate();
+      if (!mounted) return;
+      if (info.hasUpdate) {
+        _showUpdateDialog(info);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You are using the latest version of Techuboard.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to check updates: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCheckingUpdate = false);
+    }
+  }
+
+  void _showUpdateDialog(UpdateInfo info) {
+    double progress = 0.0;
+    bool isDownloading = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.system_update, color: Colors.blueAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Update Available: v${info.latestVersion}',
+                        style: const TextStyle(fontSize: 18)),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('A newer version of Techuboard is ready to install.'),
+                  if (info.releaseNotes.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Changes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 120),
+                      child: SingleChildScrollView(
+                        child: Text(info.releaseNotes, style: const TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                  if (isDownloading) ...[
+                    const SizedBox(height: 16),
+                    LinearProgressIndicator(value: progress > 0 ? progress : null),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Downloading: ${(progress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                if (!isDownloading)
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogCtx),
+                    child: const Text('Later'),
+                  ),
+                FilledButton.icon(
+                  icon: isDownloading
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.download),
+                  label: Text(isDownloading ? 'Downloading...' : 'Update Now'),
+                  onPressed: isDownloading || info.downloadUrl == null
+                      ? null
+                      : () async {
+                          setDialogState(() => isDownloading = true);
+                          try {
+                            await AppUpdaterService.instance.downloadAndInstall(
+                              downloadUrl: info.downloadUrl!,
+                              onProgress: (p) {
+                                setDialogState(() => progress = p);
+                              },
+                            );
+                            if (mounted) Navigator.pop(dialogCtx);
+                          } catch (e) {
+                            setDialogState(() => isDownloading = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Update download failed: $e')),
+                              );
+                            }
+                          }
+                        },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
   bool _pinning = false;
   bool _floatingHubEnabled = false;
   bool _hasOverlayPermission = false;
@@ -447,6 +568,18 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _isCheckingUpdate ? null : _handleCheckUpdate,
+                  icon: _isCheckingUpdate
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync, size: 18),
+                  label: Text(_isCheckingUpdate ? 'Checking...' : 'Check for Updates'),
                 ),
               ],
             ),

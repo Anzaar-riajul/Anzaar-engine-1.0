@@ -89,15 +89,26 @@ class MainActivity: FlutterActivity() {
         shareChannel = SharedFileInbox.attach(applicationContext, flutterEngine)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "openFolder") {
-                val path = call.argument<String>("path")
-                if (path != null) {
-                    openFolder(path, result)
-                } else {
-                    result.error("INVALID_ARGUMENT", "Path is null", null)
+            when (call.method) {
+                "openFolder" -> {
+                    val path = call.argument<String>("path")
+                    if (path != null) {
+                        openFolder(path, result)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Path is null", null)
+                    }
                 }
-            } else {
-                result.notImplemented()
+                "installApk" -> {
+                    val path = call.argument<String>("filePath")
+                    if (path != null) {
+                        installApk(path, result)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "File path is null", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
         
@@ -468,6 +479,33 @@ class MainActivity: FlutterActivity() {
                 arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE),
                 STORAGE_PERMISSION_REQUEST_CODE
             )
+        }
+    }
+
+    /**
+     * Launch Android system package installer for in-place app update.
+     */
+    private fun installApk(filePath: String, result: MethodChannel.Result) {
+        try {
+            val file = File(filePath)
+            if (!file.exists()) {
+                result.error("FILE_NOT_FOUND", "APK file does not exist: $filePath", null)
+                return
+            }
+            val contentUri = FileProvider.getUriForFile(
+                applicationContext,
+                "${applicationContext.packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            Log.e("Techuboard", "Failed to launch installer intent: ${e.message}", e)
+            result.error("INSTALL_FAILED", e.message, null)
         }
     }
 
