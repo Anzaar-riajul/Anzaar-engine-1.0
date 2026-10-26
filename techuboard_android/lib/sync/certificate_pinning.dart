@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 
 /// SSL Certificate Pinning for WSS Relay connections.
 /// Ensures protection against Man-In-The-Middle (MITM) attacks on untrusted networks.
@@ -11,7 +12,7 @@ class CertificatePinning {
   static HttpClient createPinnedHttpClient() {
     final client = HttpClient();
     client.badCertificateCallback = (X509Certificate cert, String host, int port) {
-      final sha256Hex = cert.sha256.map((b) => b.toRadixString(16).padLeft(2, '0')).join('').toUpperCase();
+      final sha256Hex = sha256.convert(cert.der).toString().toUpperCase();
       return _allowedSHA256Fingerprints.contains(sha256Hex);
     };
     return client;

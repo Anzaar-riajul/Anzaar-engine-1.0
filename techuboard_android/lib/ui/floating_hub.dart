@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'floating_hub_popup.dart';
 
 /// A world-class Adaptive Floating Hub using physics-based spring dynamics.
 /// Implements: Magnetic Edge Snapping, Contextual Opacity, and Haptic Feedback.
@@ -41,6 +42,22 @@ class _FloatingHubWidgetState extends State<_FloatingHubWidget> with SingleTicke
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _snapToEdge() {
+    final size = MediaQuery.of(context).size;
+    final middle = size.width / 2;
+    final targetX = (_position.dx < middle) ? 20.0 : (size.width - 70.0);
+    final targetY = _position.dy.clamp(50.0, size.height - 120.0);
+    setState(() {
+      _position = Offset(targetX, targetY);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
@@ -71,10 +88,6 @@ class _FloatingHubWidgetState extends State<_FloatingHubWidget> with SingleTicke
               });
               _snapToEdge();
             },
-import 'floating_hub_popup.dart';
-
-// ... (Widget-এর ভেতরে)
-
             child: GestureDetector(
               onTap: () {
                 showDialog(
