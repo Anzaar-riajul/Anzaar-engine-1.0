@@ -56,13 +56,20 @@ class FloatingHubAccessibilityService : AccessibilityService() {
         val focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
 
         if (focusedNode != null && focusedNode.isEditable) {
-            val args = Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }
-            if (focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+            // 1. Try ACTION_PASTE first so it pastes at current cursor position without wiping out existing text!
+            if (focusedNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+                Log.d(TAG, "Successfully pasted via ACTION_PASTE")
                 return true
             }
-            if (focusedNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+
+            // 2. Fallback: If ACTION_PASTE fails, preserve any existing text
+            val currentText = focusedNode.text?.toString() ?: ""
+            val newText = if (currentText.isEmpty()) text else "$currentText $text"
+            val args = Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
+            }
+            if (focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+                Log.d(TAG, "Successfully pasted via ACTION_SET_TEXT (preserved existing text)")
                 return true
             }
         }
