@@ -31,7 +31,7 @@ struct SettingsView: View {
   @State private var notificationSyncTargets: Set<String> = Set(
     PreferencesManager.shared.notificationSyncPeerIds)
   @State private var isRefreshingDevices = false
-  @StateObject private var relayGroups = SyncRelayGroups()
+  @ObservedObject private var relayGroups = SyncRelayGroups.shared
   @State private var showEnterPhoneCode = false
   @State private var phoneCodeInput = ""
   @State private var copiedPairingCode = false

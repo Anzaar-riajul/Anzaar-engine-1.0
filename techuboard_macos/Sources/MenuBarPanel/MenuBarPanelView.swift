@@ -20,6 +20,10 @@ struct MenuBarPanelView: View {
     @State private var isAvroInstalled = TechuAvroInstaller.isInstalled()
     @State private var isAvroWorking = false
     @State private var showClearHistoryConfirm = false
+    @ObservedObject private var relayGroups = SyncRelayGroups.shared
+    @State private var deviceTabMode: Int = 0
+    @State private var copiedPairingPin = false
+    @State private var showPairingCard = false
     var activateIcon: (MenuBarOverflowItem) -> Void
 
     var body: some View {
@@ -463,62 +467,16 @@ struct MenuBarPanelView: View {
                         Text(L10n.t(refreshingDevices ? .refreshingDevices : .refreshDevices))
                     }.font(AppFont.secondary)
                 }.buttonStyle(.bordered).controlSize(.small).disabled(refreshingDevices)
-            }.padding(.bottom, 4)
+            }.padding(.bottom, 6)
             ScrollView {
-                VStack(spacing: 8) {
-                    if model.devices.isEmpty {
-                        VStack(spacing: 8) {
-                            if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
-                                VStack(spacing: 4) {
-                                    Image(nsImage: qr)
-                                        .interpolation(.none)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 120, height: 120)
-                                        .padding(6)
-                                        .background(Color.white)
-                                        .cornerRadius(8)
-                                        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
-
-                                    Text("ফোনের ক্যামেরা দিয়ে স্ক্যান করুন")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(.primary)
-
-                                    Text("Android APK সরাসরি ডাউনলোড করতে")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.top, 4)
-                            }
-
-                            HStack(spacing: 8) {
-                                Button {
-                                    if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
-                                        let picker = NSSharingServicePicker(items: [url])
-                                        if let window = NSApp.keyWindow {
-                                            picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
-                                        }
-                                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
-                                        NSWorkspace.shared.open(github)
-                                    }
-                                } label: {
-                                    Label("AirDrop / Share APK", systemImage: "square.and.arrow.up")
-                                        .font(.system(size: 11))
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-                        }
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-                    } else {
+                VStack(spacing: 10) {
+                    if !model.devices.isEmpty {
                         LazyVStack(spacing: 0) {
                             ForEach(model.devices, id: \.peerId) { device in
                                 HStack(spacing: 10) {
-                                    Image(systemName: "desktopcomputer").font(.system(size: 21)).foregroundStyle(.secondary)
+                                    Image(systemName: "iphone.gen3").font(.system(size: 21)).foregroundStyle(.green)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(device.displayName).lineLimit(2)
+                                        Text(device.displayName).lineLimit(2).font(.system(size: 13, weight: .semibold))
                                         Text(device.connectionDescription)
                                             .font(AppFont.caption)
                                             .foregroundStyle(.secondary)
@@ -530,15 +488,143 @@ struct MenuBarPanelView: View {
                                         .buttonStyle(.bordered).controlSize(.small).fixedSize()
                                     Button(L10n.t(.panelSendFile)) { model.onAction?(.sendFile(device.peerId)) }
                                         .buttonStyle(.bordered).controlSize(.small).fixedSize()
-                                }.padding(.vertical, 10)
+                                }.padding(.vertical, 8)
                                 Divider()
                             }
                         }
+
+                        Button {
+                            showPairingCard.toggle()
+                        } label: {
+                            Label(showPairingCard ? "পেয়ারিং QR কোড লুকান" : "অন্য ডিভাইস যুক্ত করুন (Pair Another Device)", systemImage: "qrcode")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(.link)
+                        .padding(.top, 2)
                     }
+
+                    if model.devices.isEmpty || showPairingCard {
+                        devicePairingAndDownloadCard
+                    }
+
                     actionLink(.panelSyncSettings) { model.onAction?(.syncSettings) }
                 }
             }
         }
+        .onAppear {
+            relayGroups.ensureReady()
+        }
+    }
+
+    private var devicePairingAndDownloadCard: some View {
+        VStack(spacing: 10) {
+            Picker("", selection: $deviceTabMode) {
+                Text("📱 Pair Android Phone").tag(0)
+                Text("⬇️ Download APK").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .padding(.horizontal, 4)
+
+            if deviceTabMode == 0 {
+                // Pair Device Tab (For Android app "Scan Mac QR Code" & 6-digit PIN)
+                VStack(spacing: 8) {
+                    let pairingCode = relayGroups.pairingCode ?? "common-relay://join#techuboard-mac"
+                    if let qr = qrImage(for: pairingCode) {
+                        Image(nsImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 130, height: 130)
+                            .padding(6)
+                            .background(Color.white)
+                            .cornerRadius(10)
+                            .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+                    }
+
+                    Text("Android অ্যাপে 'Scan Mac QR Code' বাটনে ট্যাপ করে স্ক্যান করুন")
+                        .font(.system(size: 11, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.primary)
+
+                    Divider().padding(.horizontal, 16)
+
+                    VStack(spacing: 4) {
+                        Text("অথবা ফোনে এই ৬-ডিজিটের কোড দিন:")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            Text(relayGroups.shortPin)
+                                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color.accentColor)
+                                .textSelection(.enabled)
+
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(relayGroups.shortPin.replacingOccurrences(of: " ", with: ""), forType: .string)
+                                copiedPairingPin = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    copiedPairingPin = false
+                                }
+                            } label: {
+                                Image(systemName: copiedPairingPin ? "checkmark" : "doc.on.doc")
+                                    .font(.system(size: 11))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .help("পিন কপি করুন")
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+            } else {
+                // Download APK Tab
+                VStack(spacing: 8) {
+                    if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                        Image(nsImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 120, height: 120)
+                            .padding(6)
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+
+                        Text("ফোনের ক্যামেরা দিয়ে স্ক্যান করুন")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("Android APK সরাসরি ডাউনলোড করতে")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button {
+                            if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
+                                let picker = NSSharingServicePicker(items: [url])
+                                if let window = NSApp.keyWindow {
+                                    picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
+                                }
+                            } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                                NSWorkspace.shared.open(github)
+                            }
+                        } label: {
+                            Label("AirDrop / Share APK", systemImage: "square.and.arrow.up")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
     }
     /// Same user refresh as the menu and settings: prune ghosts + full /24 scan.
     private func refreshDevices() {

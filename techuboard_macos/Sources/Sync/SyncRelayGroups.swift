@@ -4,6 +4,8 @@ import CommonRelay
 
 @MainActor
 final class SyncRelayGroups: ObservableObject {
+    static let shared = SyncRelayGroups()
+
     @Published var members: [[String:Any]] = []
     @Published var online = Set<String>()
     @Published var invitation: [String:Any]?
@@ -29,6 +31,38 @@ final class SyncRelayGroups: ObservableObject {
     private var closed = false
     private var watchStopped = false
     var manager: Bool { members.contains { $0["device"] as? String == device && $0["manager"] as? Bool == true } }
+
+    var shortPin: String {
+        guard let inv = invitation, let id = inv["id"] as? String, id.count >= 6 else {
+            return "749 215"
+        }
+        let hex = String(id.prefix(6))
+        if let num = Int(hex, radix: 16) {
+            let pin = (num % 900000) + 100000
+            let s = "\(pin)"
+            return "\(s.prefix(3)) \(s.suffix(3))"
+        }
+        return "749 215"
+    }
+
+    var pairingCode: String? {
+        guard let inv = invitation else { return nil }
+        return try? Self.encode(inv)
+    }
+
+    func ensureReady() {
+        perform {
+            try await self.refresh()
+            if !self.enrolled && !self.creationPending {
+                let macName = Host.current().localizedName ?? "Mac"
+                try await self.createGroup(title: "Techuboard", name: macName)
+            }
+            if self.invitation == nil && self.manager {
+                self.automaticJoin = true
+                try await self.createInvitation()
+            }
+        }
+    }
     private var zh: Bool { PreferencesManager.shared.appLanguage == .zh }
     func t(_ cn: String,_ en: String) -> String { zh ? cn : en }
     private static func query(_ account: String) -> [String:Any] { [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:"com.techuboard.relay-groups",kSecAttrAccount as String:account] }

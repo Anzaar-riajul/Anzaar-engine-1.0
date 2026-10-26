@@ -74,6 +74,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MemoryFootprintReclaimer.registerIdleHandlers()
         LaunchAtLoginManager.syncWithPreference()
         SyncManager.shared.start()
+        DispatchQueue.main.async {
+            SyncRelayGroups.shared.ensureReady()
+        }
         print("Techuboard started!")
     }
 
