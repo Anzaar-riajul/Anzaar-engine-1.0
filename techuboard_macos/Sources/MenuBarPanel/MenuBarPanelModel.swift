@@ -250,10 +250,8 @@ enum MenuBarPanelPolicy {
     static func preferredSize(page: MenuBarPanelModel.Page, tab: MenuBarPanelModel.Tab, deviceCount: Int = 0) -> CGSize {
         switch page {
         case .home:
-            guard tab == .devices else { return CGSize(width: 380, height: 580) }
-            // Home chrome (search, icons, usage, tabs, footer) plus refresh row and device rows.
-            let height = deviceCount == 0 ? 320 : min(580, max(270, 230 + deviceCount * 45))
-            return CGSize(width: 380, height: CGFloat(height))
+            // Maintain consistent 580pt panel height across All, Notes, and Devices tabs.
+            return CGSize(width: 380, height: 580)
         case .tools: return CGSize(width: 380, height: 320)
         case .notifications: return CGSize(width: 380, height: 540)
         case .settings: return CGSize(width: 380, height: 500)
