@@ -45,6 +45,7 @@ jobs:
         working-directory: techuboard_android
         run: |
           BUILD_CODE=$((12300 + ${{ github.run_number }}))
+          echo "BUILD_CODE=$BUILD_CODE" >> $GITHUB_ENV
           echo "Building with BUILD_CODE=$BUILD_CODE"
           flutter build apk --release --no-tree-shake-icons --build-number=$BUILD_CODE --build-name=1.0.${{ github.run_number }} 2>&1 | tee /tmp/build.log || true
           mkdir -p ../dist
@@ -107,8 +108,9 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/feat/')
         continue-on-error: true
         with:
-          tag_name: android-v1.0-${{ github.run_number }}
-          name: Techuboard Android v1.0 (Build ${{ github.run_number }})
+          tag_name: android-v1.0-${{ env.BUILD_CODE }}
+          name: Techuboard Android v1.0 (Build ${{ env.BUILD_CODE }})
+          make_latest: true
           body: |
             ## 🎉 Techuboard Android Clipboard Companion v1.0
             ### 🚀 Features:
