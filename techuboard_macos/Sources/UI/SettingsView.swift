@@ -35,6 +35,7 @@ struct SettingsView: View {
   @State private var showEnterPhoneCode = false
   @State private var phoneCodeInput = ""
   @State private var copiedPairingCode = false
+  @State private var copiedDownloadLink = false
   @State private var showPairingSection = false
   @State private var isReencryptingHistory = false
 
@@ -361,6 +362,79 @@ struct SettingsView: View {
             .padding(14)
             .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
           }
+        }
+
+        Section("Android অ্যাপ ডাউনলোড ও ইনস্টল (Download Android App)") {
+          VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 18) {
+              if let qr = qrImage(for: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                VStack(spacing: 8) {
+                  Image(nsImage: qr)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 140, height: 140)
+                    .padding(8)
+                    .background(Color.white)
+                    .cornerRadius(10)
+                    .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+
+                  Text("ক্যামেরা দিয়ে স্ক্যান করুন")
+                    .font(AppFont.caption)
+                    .foregroundStyle(.secondary)
+                }
+              }
+
+              VStack(alignment: .leading, spacing: 10) {
+                Text("ফোনে Techuboard অ্যাপ নেই? এখনই ইনস্টল করুন")
+                  .font(.headline)
+                Text("আপনার Android ফোনের সাধারণ ক্যামেরা দিয়ে পাশের QR কোডটি স্ক্যান করলে সরাসরি APK ডাউনলোড করতে পারবেন। অথবা নিচের বিকল্পগুলো ব্যবহার করুন:")
+                  .font(AppFont.caption)
+                  .foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                  Button {
+                    if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
+                      NSWorkspace.shared.activateFileViewerSelecting([url])
+                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                      NSWorkspace.shared.open(github)
+                    }
+                  } label: {
+                    Label("APK ফাইল দেখুন", systemImage: "arrow.down.doc")
+                  }
+                  .buttonStyle(.bordered)
+
+                  Button {
+                    if let url = Bundle.main.url(forResource: "Techuboard-Android", withExtension: "apk") {
+                      let picker = NSSharingServicePicker(items: [url])
+                      if let window = NSApp.keyWindow {
+                        picker.show(relativeTo: .zero, of: window.contentView ?? NSView(), preferredEdge: .minY)
+                      }
+                    } else if let github = URL(string: "https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases") {
+                      NSWorkspace.shared.open(github)
+                    }
+                  } label: {
+                    Label("AirDrop / শেয়ার করুন", systemImage: "square.and.arrow.up")
+                  }
+                  .buttonStyle(.borderedProminent)
+
+                  Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("https://github.com/Anzaar-riajul/Anzaar-engine-1.0/releases", forType: .string)
+                    copiedDownloadLink = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                      copiedDownloadLink = false
+                    }
+                  } label: {
+                    Label(copiedDownloadLink ? "লিঙ্ক কপি হয়েছে" : "লিঙ্ক কপি করুন", systemImage: copiedDownloadLink ? "checkmark" : "doc.on.doc")
+                  }
+                  .buttonStyle(.bordered)
+                }
+              }
+            }
+          }
+          .padding(14)
+          .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
         }
       }
       if pageID == "banglaKeyboard" {

@@ -94,6 +94,10 @@ cp "${MACOS_PROJECT_DIR}/Resources/token-prices-seed.json" \
 if [ -f "${MACOS_PROJECT_DIR}/Resources/MenuBarIcon.png" ]; then
   cp "${MACOS_PROJECT_DIR}/Resources"/MenuBarIcon*.png "${STAGED_APP}/Contents/Resources/"
 fi
+if [ -f "${REPO_ROOT}/Techuboard-Android-arm64-v8a-v1.0.32.apk" ]; then
+  cp "${REPO_ROOT}/Techuboard-Android-arm64-v8a-v1.0.32.apk" "${STAGED_APP}/Contents/Resources/Techuboard-Android.apk"
+  printf 'Bundled Techuboard-Android.apk into %s\n' "${STAGED_APP}/Contents/Resources/"
+fi
 
 # --------------------------------------------------------------------------
 # Build and embed TechuAvro.app (Bangla phonetic system input method)
