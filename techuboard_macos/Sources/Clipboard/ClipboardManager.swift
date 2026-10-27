@@ -723,7 +723,7 @@ class ClipboardManager {
 
     func handleRemoteImageSync(data: Data, hash: String) {
         guard !data.isEmpty, let image = NSImage(data: data) else { return }
-        let effectiveHash = hash.isEmpty ? (sha256Hex(data) ?? UUID().uuidString) : hash
+        let effectiveHash = hash.isEmpty ? sha256Hex(data) : hash
         appLog("Handling remote image sync: \(effectiveHash.prefix(8))")
 
         lastSyncHash = effectiveHash

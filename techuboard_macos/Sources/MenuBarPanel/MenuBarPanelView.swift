@@ -357,10 +357,15 @@ struct MenuBarPanelView: View {
                 noDeviceConnectedCardsView
             } else {
                 HStack(spacing: 6) {
-                    ForEach(HistoryTypeFilter.allCases) { filter in
-                        filterPill(filter)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 5) {
+                            ForEach(HistoryTypeFilter.allCases) { filter in
+                                filterPill(filter)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 1)
                     }
-                    Spacer(minLength: 0)
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) {
@@ -375,9 +380,11 @@ struct MenuBarPanelView: View {
                                 .font(.system(size: 10, weight: .semibold))
                             Text(model.isSelectMode ? "Done" : "Select")
                                 .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
                         .background(
                             model.isSelectMode ? AppColor.accent.opacity(0.18) : Color.primary.opacity(0.04),
                             in: Capsule()
@@ -392,7 +399,8 @@ struct MenuBarPanelView: View {
                     }
                     .buttonStyle(.plain)
                     .help(model.isSelectMode ? "Exit selection mode" : "Select items to delete")
-                }.padding(.bottom, 4)
+                }
+                .padding(.bottom, 4)
 
                 if model.isSelectMode {
                     selectionActionBar
@@ -648,9 +656,11 @@ struct MenuBarPanelView: View {
                 }
                 Text(filter == .pinned ? "Pinned" : L10n.t(filter.labelKey))
                     .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, 9)
-            .padding(.vertical, 4)
+            .padding(.vertical, 4.5)
             .background(
                 isSelected ? AppColor.accent.opacity(0.18) : Color.primary.opacity(0.04),
                 in: Capsule()
@@ -2406,6 +2416,7 @@ private struct MenuBarPanelSaveSnippetView: View {
 private struct MenuBarPanelSnippetsTab: View {
     @ObservedObject var model: MenuBarPanelModel
     @State private var expandedFolderIDs: Set<UUID> = []
+    @State private var selectedDeviceFilter: String = "all"
     
     // Add Folder
     @State private var isAddingFolder = false
@@ -2442,6 +2453,93 @@ private struct MenuBarPanelSnippetsTab: View {
     }
     @State private var clipboardPickerTarget: ClipboardPickerTarget?
 
+    private var availableDevices: [String] {
+        var list: [String] = []
+        for d in model.devices {
+            if !list.contains(d.displayName) && d.displayName.lowercased() != "mac" {
+                list.append(d.displayName)
+            }
+        }
+        for f in model.folders {
+            if let dev = f.deviceName, dev.lowercased() != "mac", !list.contains(dev) {
+                list.append(dev)
+            }
+            for s in f.snippets {
+                if let dev = s.deviceName, dev.lowercased() != "mac", !list.contains(dev) {
+                    list.append(dev)
+                }
+            }
+        }
+        return list
+    }
+
+    private var allDeviceTabs: [(id: String, label: String, icon: String)] {
+        var tabs: [(id: String, label: String, icon: String)] = [
+            ("all", "All Notes", "square.grid.2x2"),
+            ("mac", "This Mac", "laptopcomputer")
+        ]
+        var addedRemotes = Set<String>()
+        for dev in availableDevices {
+            tabs.append((dev.lowercased(), dev, "phone"))
+            addedRemotes.insert(dev.lowercased())
+        }
+        if !addedRemotes.contains("android") {
+            tabs.append(("android", "Android", "phone"))
+        }
+        return tabs
+    }
+
+    private func snippetsForFolder(_ folder: SnippetFolder) -> [Snippet] {
+        if selectedDeviceFilter == "all" {
+            return folder.snippets
+        }
+        if selectedDeviceFilter == "mac" {
+            return folder.snippets.filter { ($0.deviceName?.lowercased() ?? "mac") == "mac" }
+        }
+        return folder.snippets.filter { ($0.deviceName?.lowercased() ?? "").contains(selectedDeviceFilter) }
+    }
+
+    private var displayedFolders: [SnippetFolder] {
+        if selectedDeviceFilter == "all" {
+            return model.folders
+        }
+        return model.folders.filter { folder in
+            !snippetsForFolder(folder).isEmpty || (folder.deviceName?.lowercased() ?? "mac").contains(selectedDeviceFilter)
+        }
+    }
+
+    private func deviceFilterPill(id: String, label: String, icon: String) -> some View {
+        let isSelected = selectedDeviceFilter == id
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                selectedDeviceFilter = id
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 9.5, weight: .bold))
+                Text(label)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4.5)
+            .background(
+                isSelected ? AppColor.accent.opacity(0.18) : Color.primary.opacity(0.04),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    isSelected ? AppColor.accent.opacity(0.4) : Color.primary.opacity(0.06),
+                    lineWidth: 0.5
+                )
+            )
+            .foregroundStyle(isSelected ? AppColor.accent : Color.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             // Header bar
@@ -2465,6 +2563,17 @@ private struct MenuBarPanelSnippetsTab: View {
                 .foregroundStyle(AppColor.accent)
             }
             .padding(.horizontal, 4)
+
+            // Device Filter Tabs (All Notes, This Mac, Android, etc.)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 5) {
+                    ForEach(allDeviceTabs, id: \.id) { tab in
+                        deviceFilterPill(id: tab.id, label: tab.label, icon: tab.icon)
+                    }
+                }
+                .padding(.vertical, 2)
+                .padding(.horizontal, 2)
+            }
 
             // New folder input form
             if isAddingFolder {
@@ -2501,12 +2610,12 @@ private struct MenuBarPanelSnippetsTab: View {
 
             // Folders list with expandable accordion
             ScrollView {
-                if model.folders.isEmpty {
+                if displayedFolders.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "folder")
                             .font(.system(size: 28))
                             .foregroundStyle(.secondary)
-                        Text(L10n.t(.noSnippets))
+                        Text(selectedDeviceFilter == "all" ? L10n.t(.noSnippets) : "No notes for \(selectedDeviceFilter.capitalized)")
                             .font(AppFont.secondary)
                             .foregroundStyle(.secondary)
                     }
@@ -2514,10 +2623,15 @@ private struct MenuBarPanelSnippetsTab: View {
                     .frame(maxWidth: .infinity)
                 } else {
                     LazyVStack(spacing: 6) {
-                        ForEach(model.folders) { folder in
+                        ForEach(displayedFolders) { folder in
                             folderSection(folder)
                         }
                     }
+                }
+            }
+            .onHover { hovering in
+                if !hovering && !model.isPreviewHovered {
+                    model.schedulePreviewDismiss(delay: 0.15)
                 }
             }
 
@@ -2680,7 +2794,7 @@ private struct MenuBarPanelSnippetsTab: View {
                             Text(folder.title)
                                 .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(1)
-                            Text("\(folder.snippets.count)")
+                            Text("\(snippetsForFolder(folder).count)")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 6)
@@ -2837,13 +2951,14 @@ private struct MenuBarPanelSnippetsTab: View {
                         .padding(.top, 4)
                     }
 
-                    if folder.snippets.isEmpty && addingSnippetFolderId != folder.id {
+                    let displayedSnippets = snippetsForFolder(folder)
+                    if displayedSnippets.isEmpty && addingSnippetFolderId != folder.id {
                         Text(L10n.t(.noSnippets))
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .padding(8)
                     } else {
-                        ForEach(folder.snippets) { snippet in
+                        ForEach(displayedSnippets) { snippet in
                             snippetRow(folder: folder, snippet: snippet)
                         }
                     }
@@ -2855,130 +2970,159 @@ private struct MenuBarPanelSnippetsTab: View {
         }
     }
 
+    @ViewBuilder
     private func snippetRow(folder: SnippetFolder, snippet: Snippet) -> some View {
-        Group {
-            if editingSnippetId == snippet.id {
-                // Inline Edit Snippet form
-                VStack(alignment: .leading, spacing: 5) {
-                    TextField("Title", text: $editSnippetTitle)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12.5))
-                        .padding(6)
-                        .background(Color(nsColor: .textBackgroundColor).opacity(0.7), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+        if editingSnippetId == snippet.id {
+            snippetEditView(snippet: snippet)
+        } else {
+            snippetDisplayRow(folder: folder, snippet: snippet)
+        }
+    }
 
-                    HStack {
-                        Text("Content")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            clipboardPickerTarget = .editSnippet
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.on.clipboard")
-                                    .font(.system(size: 10, weight: .medium))
-                                Text("From Clipboard")
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(AppColor.accent.opacity(0.12), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(AppColor.accent)
-                        .help("Pick an item from clipboard history to paste here")
-                    }
+    private func snippetEditView(snippet: Snippet) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            TextField("Title", text: $editSnippetTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .padding(6)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.7), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
 
-                    ZStack(alignment: .topLeading) {
-                        TextEditor(text: $editSnippetContent)
-                            .font(.system(size: 12))
-                            .frame(height: 55)
-                            .padding(4)
-                            .background(Color(nsColor: .textBackgroundColor).opacity(0.7), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-
-                        if editSnippetContent.isEmpty {
-                            Text("Type content or click 'From Clipboard' above...")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
-                                .padding(8)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Cancel") { editingSnippetId = nil }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11))
-                        Button(L10n.t(.save)) {
-                            let title = editSnippetTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !title.isEmpty {
-                                SnippetManager.shared.updateSnippetTitle(id: snippet.id, title: title)
-                                SnippetManager.shared.updateSnippetContent(id: snippet.id, content: editSnippetContent)
-                                model.folders = SnippetManager.shared.folders
-                            }
-                            editingSnippetId = nil
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    }
-                }
-                .padding(8)
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-            } else {
-                HStack(spacing: 8) {
-                    Button {
-                        model.onSnippet?(snippet.id)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(snippet.title)
-                                .font(.system(size: 12.5, weight: .medium))
-                                .lineLimit(1)
-                            Text(snippet.content)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(snippet.content)
-
-                    // Action buttons
+            HStack {
+                Text("Content")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    clipboardPickerTarget = .editSnippet
+                } label: {
                     HStack(spacing: 4) {
-                        Button {
-                            editSnippetTitle = snippet.title
-                            editSnippetContent = snippet.content
-                            editingSnippetId = snippet.id
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 22, height: 22)
-                                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Edit Snippet")
-
-                        Button {
-                            deleteTarget = DeleteTarget(isFolder: false, folderId: folder.id, snippetId: snippet.id, name: snippet.title)
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 22, height: 22)
-                                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Delete Snippet")
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 10, weight: .medium))
+                        Text("From Clipboard")
+                            .font(.system(size: 11, weight: .medium))
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(AppColor.accent.opacity(0.12), in: Capsule())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColor.accent)
+                .help("Pick an item from clipboard history to paste here")
+            }
+
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $editSnippetContent)
+                    .font(.system(size: 12))
+                    .frame(height: 55)
+                    .padding(4)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.7), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+
+                if editSnippetContent.isEmpty {
+                    Text("Type content or click 'From Clipboard' above...")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { editingSnippetId = nil }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                Button(L10n.t(.save)) {
+                    let title = editSnippetTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !title.isEmpty {
+                        SnippetManager.shared.updateSnippetTitle(id: snippet.id, title: title)
+                        SnippetManager.shared.updateSnippetContent(id: snippet.id, content: editSnippetContent)
+                        model.folders = SnippetManager.shared.folders
+                    }
+                    editingSnippetId = nil
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(8)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+    }
+
+    private func snippetDisplayRow(folder: SnippetFolder, snippet: Snippet) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                model.onSnippet?(snippet.id)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(snippet.title)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .lineLimit(1)
+                        if let dev = snippet.deviceName, dev.lowercased() != "mac" {
+                            Text(dev)
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundStyle(Color.purple)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+                        }
+                    }
+                    Text(snippet.content)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Action buttons
+            HStack(spacing: 4) {
+                Button {
+                    editSnippetTitle = snippet.title
+                    editSnippetContent = snippet.content
+                    editingSnippetId = snippet.id
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Edit Snippet")
+
+                Button {
+                    deleteTarget = DeleteTarget(isFolder: false, folderId: folder.id, snippetId: snippet.id, name: snippet.title)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.red.opacity(0.8))
+                        .frame(width: 22, height: 22)
+                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Delete Snippet")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Rectangle())
+        .onHover { isHovered in
+            let entry = HistoryEntry(
+                item: .text(snippet.content),
+                date: Date(),
+                sourceApp: snippet.title,
+                contentHash: snippet.id.uuidString
+            )
+            if isHovered {
+                model.hoverRow(entry)
+            } else {
+                model.unhoverRow(entry)
             }
         }
     }

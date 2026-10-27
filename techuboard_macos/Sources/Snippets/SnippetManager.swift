@@ -32,6 +32,7 @@ struct Snippet: Codable, Identifiable {
     var title: String
     var content: String
     var shortcut: ShortcutCombo?
+    var deviceName: String? = nil
 }
 
 struct SnippetFolder: Codable, Identifiable {
@@ -40,6 +41,7 @@ struct SnippetFolder: Codable, Identifiable {
     var snippets: [Snippet]
     var isEnabled: Bool = true
     var shortcut: ShortcutCombo?
+    var deviceName: String? = nil
 }
 
 final class SnippetMenuReference: NSObject {
@@ -353,6 +355,7 @@ class SnippetManager {
             let idStr = folderDict["id"] as? String ?? UUID().uuidString
             let folderId = UUID(uuidString: idStr) ?? UUID()
             let isEnabled = (folderDict["isEnabled"] as? Bool) ?? true
+            let devName = (folderDict["deviceName"] as? String) ?? "Android"
             let snippetsRaw = folderDict["snippets"] as? [[String: Any]] ?? []
 
             var targetSnippets: [Snippet] = []
@@ -361,7 +364,8 @@ class SnippetManager {
                       let sContent = sDict["content"] as? String else { continue }
                 let sIdStr = sDict["id"] as? String ?? UUID().uuidString
                 let sId = UUID(uuidString: sIdStr) ?? UUID()
-                targetSnippets.append(Snippet(id: sId, title: sTitle, content: sContent, shortcut: nil))
+                let sDevName = (sDict["deviceName"] as? String) ?? devName
+                targetSnippets.append(Snippet(id: sId, title: sTitle, content: sContent, shortcut: nil, deviceName: sDevName))
             }
 
             if let existingIndex = folders.firstIndex(where: { $0.id == folderId || $0.title == title }) {
@@ -369,6 +373,7 @@ class SnippetManager {
                     if let sIndex = folders[existingIndex].snippets.firstIndex(where: { $0.id == s.id || $0.title == s.title }) {
                         if folders[existingIndex].snippets[sIndex].content != s.content {
                             folders[existingIndex].snippets[sIndex].content = s.content
+                            folders[existingIndex].snippets[sIndex].deviceName = s.deviceName
                             changed = true
                         }
                     } else {
@@ -377,7 +382,7 @@ class SnippetManager {
                     }
                 }
             } else {
-                folders.append(SnippetFolder(id: folderId, title: title, snippets: targetSnippets, isEnabled: isEnabled))
+                folders.append(SnippetFolder(id: folderId, title: title, snippets: targetSnippets, isEnabled: isEnabled, shortcut: nil, deviceName: devName))
                 changed = true
             }
         }
