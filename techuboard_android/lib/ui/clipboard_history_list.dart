@@ -82,30 +82,246 @@ class _PaginatedClipboardHistoryListState
   }
 
   Future<void> _saveAsNote(HistoryEntry entry) async {
-    try {
-      final folders = await SnippetRepository.instance.fetchAllFolders();
-      final folderId = folders.isNotEmpty ? folders.first.id : 'default';
-      final text = entry.item.value.toString();
-      final title = text.length > 30 ? text.substring(0, 30).replaceAll('\n', ' ').trim() : text.replaceAll('\n', ' ').trim();
-      await SnippetRepository.instance.saveSnippet(
-        SnippetItem(
-          id: const Uuid().v4(),
-          folderId: folderId,
-          title: title.isEmpty ? 'Note' : title,
-          content: text,
-          updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        ),
+    final text = entry.item.value.toString();
+    var folders = await SnippetRepository.instance.fetchAllFolders();
+    if (folders.isEmpty) {
+      final defaultFolder = SnippetFolderItem(
+        id: const Uuid().v4(),
+        title: 'General',
+        isEnabled: true,
+        updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Saved as Note (নোটে সংরক্ষণ করা হয়েছে)'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
-          ),
+      await SnippetRepository.instance.saveFolder(defaultFolder);
+      folders = [defaultFolder];
+    }
+
+    String selectedFolderId = folders.first.id;
+    final firstLine = text.trim().split('\n').first;
+    final initialTitle = firstLine.length > 40 ? '${firstLine.substring(0, 40)}…' : firstLine;
+    final titleController = TextEditingController(text: initialTitle);
+
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final theme = Theme.of(context);
+            final colors = theme.colorScheme;
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+            return Container(
+              margin: const EdgeInsets.only(top: 48),
+              decoration: BoxDecoration(
+                color: theme.scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + bottomInset),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: colors.onSurface.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        const Icon(Icons.note_add_rounded, color: Color(0xFF1262F3)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Save to Notes (নোটে সংরক্ষণ)',
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.pop(sheetContext),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Folder (ফোল্ডার নির্বাচন করুন)',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ...folders.map((f) {
+                          final isSelected = f.id == selectedFolderId;
+                          return ChoiceChip(
+                            label: Text(f.title),
+                            selected: isSelected,
+                            selectedColor: colors.primaryContainer,
+                            labelStyle: TextStyle(
+                              color: isSelected ? colors.onPrimaryContainer : colors.onSurface,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            onSelected: (_) {
+                              setSheetState(() => selectedFolderId = f.id);
+                            },
+                          );
+                        }),
+                        ActionChip(
+                          avatar: const Icon(Icons.create_new_folder_outlined, size: 16),
+                          label: const Text('New Folder'),
+                          onPressed: () async {
+                            final nameController = TextEditingController();
+                            final newName = await showDialog<String>(
+                              context: context,
+                              builder: (dlgContext) => AlertDialog(
+                                title: const Text('New Folder'),
+                                content: TextField(
+                                  controller: nameController,
+                                  autofocus: true,
+                                  decoration: const InputDecoration(hintText: 'Folder name'),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(dlgContext),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () => Navigator.pop(dlgContext, nameController.text.trim()),
+                                    child: const Text('Create'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (newName != null && newName.isNotEmpty) {
+                              final newF = SnippetFolderItem(
+                                id: const Uuid().v4(),
+                                title: newName,
+                                isEnabled: true,
+                                updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                              );
+                              await SnippetRepository.instance.saveFolder(newF);
+                              final updatedFolders = await SnippetRepository.instance.fetchAllFolders();
+                              setSheetState(() {
+                                folders = updatedFolders;
+                                selectedFolderId = newF.id;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Note Title (শিরোনাম)',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        hintText: 'Note headline...',
+                        filled: true,
+                        fillColor: colors.surfaceContainerHighest.withOpacity(0.4),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Content Preview (কনটেন্ট)',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: colors.outlineVariant.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        text,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton.icon(
+                            icon: const Icon(Icons.check_rounded, size: 18),
+                            label: const Text('Save Note'),
+                            onPressed: () async {
+                              final finalTitle = titleController.text.trim().isEmpty
+                                  ? 'Note'
+                                  : titleController.text.trim();
+                              await SnippetRepository.instance.saveSnippet(
+                                SnippetItem(
+                                  id: const Uuid().v4(),
+                                  folderId: selectedFolderId,
+                                  title: finalTitle,
+                                  content: text,
+                                  updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                                ),
+                              );
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                              if (mounted) {
+                                final folderTitle = folders.firstWhere((f) => f.id == selectedFolderId).title;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Saved to "$folderTitle" (নোটে সংরক্ষিত)'),
+                                    behavior: SnackBarBehavior.floating,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
-      }
-    } catch (_) {}
+      },
+    );
   }
 
   @override

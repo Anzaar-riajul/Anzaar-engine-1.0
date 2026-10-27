@@ -486,6 +486,8 @@ class FloatingHubService : Service() {
                 .start()
         }
 
+        val theme = getHubTheme()
+
         // Custom root layout to intercept Android Back Button & Back Gestures
         val root = object : FrameLayout(this) {
             override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -500,8 +502,8 @@ class FloatingHubService : Service() {
         val cardBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(18).toFloat()
-            setColor(Color.parseColor("#12151D"))
-            setStroke(dpToPx(1), Color.parseColor("#263142"))
+            setColor(theme.panelBg)
+            setStroke(dpToPx(1), theme.panelBorder)
         }
         root.background = cardBg
         root.elevation = dpToPx(24).toFloat()
@@ -529,8 +531,8 @@ class FloatingHubService : Service() {
             val tbBg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dpToPx(8).toFloat()
-                setColor(Color.parseColor("#161C26"))
-                setStroke(dpToPx(1), Color.parseColor("#252E3E"))
+                setColor(theme.tabBg)
+                setStroke(dpToPx(1), theme.tabBorder)
             }
             background = tbBg
             setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
@@ -555,13 +557,13 @@ class FloatingHubService : Service() {
 
         val closeBtn = TextView(this).apply {
             text = "✕"
-            setTextColor(Color.parseColor("#8E99A8"))
+            setTextColor(theme.textMuted)
             textSize = 13f
             gravity = Gravity.CENTER
             val cBg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dpToPx(6).toFloat()
-                setColor(Color.parseColor("#1B2230"))
+                setColor(theme.actionBtnBg)
             }
             background = cBg
             layoutParams = LinearLayout.LayoutParams(dpToPx(28), dpToPx(28)).apply {
@@ -606,8 +608,8 @@ class FloatingHubService : Service() {
             val sBtnBg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dpToPx(8).toFloat()
-                setColor(Color.parseColor("#1B2230"))
-                setStroke(dpToPx(1), Color.parseColor("#29354A"))
+                setColor(theme.actionBtnBg)
+                setStroke(dpToPx(1), theme.cardBorder)
             }
             background = sBtnBg
             layoutParams = LinearLayout.LayoutParams(dpToPx(32), dpToPx(28)).apply {
@@ -625,8 +627,8 @@ class FloatingHubService : Service() {
             val sBg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dpToPx(8).toFloat()
-                setColor(Color.parseColor("#1B2230"))
-                setStroke(dpToPx(1), Color.parseColor("#38BDF8"))
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.accentBlue)
             }
             background = sBg
             setPadding(dpToPx(8), 0, dpToPx(8), 0)
@@ -641,8 +643,8 @@ class FloatingHubService : Service() {
 
         val searchInput = EditText(this).apply {
             hint = "Search clips, notes..."
-            setHintTextColor(Color.parseColor("#788494"))
-            setTextColor(Color.WHITE)
+            setHintTextColor(theme.textMuted)
+            setTextColor(theme.textPrimary)
             textSize = 12.5f
             background = null
             maxLines = 1
@@ -652,7 +654,7 @@ class FloatingHubService : Service() {
 
         val dismissSearchBtn = TextView(this).apply {
             text = "✕"
-            setTextColor(Color.parseColor("#94A3B8"))
+            setTextColor(theme.textMuted)
             textSize = 13.5f
             setPadding(dpToPx(6), dpToPx(4), dpToPx(4), dpToPx(4))
         }
@@ -708,7 +710,7 @@ class FloatingHubService : Service() {
         }
         val footerLabel = TextView(this).apply {
             text = "Techuboard"
-            setTextColor(Color.parseColor("#475569"))
+            setTextColor(theme.textMuted)
             textSize = 10.5f
             paint.isFakeBoldText = true
             letterSpacing = 0.08f
@@ -728,13 +730,13 @@ class FloatingHubService : Service() {
                 tv.gravity = Gravity.CENTER
                 tv.textSize = 12f
                 tv.paint.isFakeBoldText = isSelected
-                tv.setTextColor(if (isSelected) Color.WHITE else Color.parseColor("#8E99A8"))
+                tv.setTextColor(if (isSelected) theme.tabActiveText else theme.tabInactiveText)
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(8).toFloat()
                     if (isSelected) {
-                        setColor(Color.parseColor("#253247"))
-                        setStroke(dpToPx(1), Color.parseColor("#384B6B"))
+                        setColor(theme.tabActiveBg)
+                        setStroke(dpToPx(1), theme.tabActiveBorder)
                     } else {
                         setColor(Color.TRANSPARENT)
                     }
@@ -750,17 +752,17 @@ class FloatingHubService : Service() {
             when (activeTab) {
                 Tab.ALL -> {
                     filterAndSearchContainer.visibility = View.VISIBLE
-                    renderSubFilters(subFilterRow) { renderActiveTab() }
-                    renderAllTab(contentLayout, currentQuery)
+                    renderSubFilters(subFilterRow, theme) { renderActiveTab() }
+                    renderAllTab(contentLayout, currentQuery, root, theme) { renderActiveTab() }
                 }
                 Tab.NOTES -> {
                     filterAndSearchContainer.visibility = View.VISIBLE
-                    renderNotesFolderFilters(subFilterRow) { renderActiveTab() }
-                    renderNotesTab(contentLayout, currentQuery)
+                    renderNotesFolderFilters(subFilterRow, root, theme) { renderActiveTab() }
+                    renderNotesTab(contentLayout, currentQuery, root, theme) { renderActiveTab() }
                 }
                 Tab.DEVICES -> {
                     filterAndSearchContainer.visibility = View.GONE
-                    renderDevicesTab(contentLayout, currentQuery)
+                    renderDevicesTab(contentLayout, currentQuery, theme)
                 }
             }
         }
@@ -846,10 +848,117 @@ class FloatingHubService : Service() {
     }
 
     // =========================================================================
+    // 2.5 THEME MODEL DYNAMICALLY SYNCED WITH ANDROID APP APPEARANCE
+    // =========================================================================
+
+    data class HubTheme(
+        val isDark: Boolean,
+        val panelBg: Int,
+        val panelBorder: Int,
+        val cardBg: Int,
+        val cardBorder: Int,
+        val tabBg: Int,
+        val tabBorder: Int,
+        val tabActiveBg: Int,
+        val tabActiveBorder: Int,
+        val tabActiveText: Int,
+        val tabInactiveText: Int,
+        val chipBg: Int,
+        val chipBorder: Int,
+        val chipActiveBg: Int,
+        val chipActiveBorder: Int,
+        val chipActiveText: Int,
+        val chipInactiveText: Int,
+        val textPrimary: Int,
+        val textSecondary: Int,
+        val textMuted: Int,
+        val accentBlue: Int,
+        val deleteBg: Int,
+        val deleteBorder: Int,
+        val deleteText: Int,
+        val inputBg: Int,
+        val inputBorder: Int,
+        val actionBtnBg: Int
+    )
+
+    private fun getHubTheme(): HubTheme {
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val appearance = prefs.getString("flutter.appearance", "system")
+        val isNightSystem = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isDark = when (appearance) {
+            "dark" -> true
+            "light" -> false
+            else -> isNightSystem
+        }
+
+        return if (isDark) {
+            HubTheme(
+                isDark = true,
+                panelBg = Color.parseColor("#12151D"),
+                panelBorder = Color.parseColor("#263142"),
+                cardBg = Color.parseColor("#161C26"),
+                cardBorder = Color.parseColor("#232C3C"),
+                tabBg = Color.parseColor("#161C26"),
+                tabBorder = Color.parseColor("#252E3E"),
+                tabActiveBg = Color.parseColor("#253247"),
+                tabActiveBorder = Color.parseColor("#384B6B"),
+                tabActiveText = Color.WHITE,
+                tabInactiveText = Color.parseColor("#8E99A8"),
+                chipBg = Color.parseColor("#151C26"),
+                chipBorder = Color.parseColor("#222C3A"),
+                chipActiveBg = Color.parseColor("#1A324A"),
+                chipActiveBorder = Color.parseColor("#0284C7"),
+                chipActiveText = Color.parseColor("#38BDF8"),
+                chipInactiveText = Color.parseColor("#8E99A8"),
+                textPrimary = Color.WHITE,
+                textSecondary = Color.parseColor("#CBD5E1"),
+                textMuted = Color.parseColor("#64748B"),
+                accentBlue = Color.parseColor("#38BDF8"),
+                deleteBg = Color.parseColor("#2A1C20"),
+                deleteBorder = Color.parseColor("#5A2328"),
+                deleteText = Color.parseColor("#EF4444"),
+                inputBg = Color.parseColor("#1B2230"),
+                inputBorder = Color.parseColor("#29354A"),
+                actionBtnBg = Color.parseColor("#1C2430")
+            )
+        } else {
+            HubTheme(
+                isDark = false,
+                panelBg = Color.parseColor("#FFFFFF"),
+                panelBorder = Color.parseColor("#CBD5E1"),
+                cardBg = Color.parseColor("#F8FAFC"),
+                cardBorder = Color.parseColor("#E2E8F0"),
+                tabBg = Color.parseColor("#F1F5F9"),
+                tabBorder = Color.parseColor("#CBD5E1"),
+                tabActiveBg = Color.parseColor("#FFFFFF"),
+                tabActiveBorder = Color.parseColor("#94A3B8"),
+                tabActiveText = Color.parseColor("#0F172A"),
+                tabInactiveText = Color.parseColor("#64748B"),
+                chipBg = Color.parseColor("#F1F5F9"),
+                chipBorder = Color.parseColor("#E2E8F0"),
+                chipActiveBg = Color.parseColor("#E0F2FE"),
+                chipActiveBorder = Color.parseColor("#0284C7"),
+                chipActiveText = Color.parseColor("#0284C7"),
+                chipInactiveText = Color.parseColor("#64748B"),
+                textPrimary = Color.parseColor("#0F172A"),
+                textSecondary = Color.parseColor("#334155"),
+                textMuted = Color.parseColor("#64748B"),
+                accentBlue = Color.parseColor("#0284C7"),
+                deleteBg = Color.parseColor("#FEE2E2"),
+                deleteBorder = Color.parseColor("#FCA5A5"),
+                deleteText = Color.parseColor("#DC2626"),
+                inputBg = Color.parseColor("#F8FAFC"),
+                inputBorder = Color.parseColor("#CBD5E1"),
+                actionBtnBg = Color.parseColor("#F1F5F9")
+            )
+        }
+    }
+
+    // =========================================================================
     // 3. TAB 1: ALL (CLIPBOARD HISTORY)
     // =========================================================================
 
-    private fun renderSubFilters(container: LinearLayout, onFilterChanged: () -> Unit) {
+    private fun renderSubFilters(container: LinearLayout, theme: HubTheme, onFilterChanged: () -> Unit) {
         val filters = listOf(
             "all" to "All",
             "pinned" to "📌 Pinned",
@@ -864,16 +973,16 @@ class FloatingHubService : Service() {
                 text = label
                 textSize = 11.5f
                 paint.isFakeBoldText = isSelected
-                setTextColor(if (isSelected) Color.parseColor("#38BDF8") else Color.parseColor("#8E99A8"))
+                setTextColor(if (isSelected) theme.chipActiveText else theme.chipInactiveText)
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(14).toFloat()
                     if (isSelected) {
-                        setColor(Color.parseColor("#1A324A"))
-                        setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+                        setColor(theme.chipActiveBg)
+                        setStroke(dpToPx(1), theme.chipActiveBorder)
                     } else {
-                        setColor(Color.parseColor("#151C26"))
-                        setStroke(dpToPx(1), Color.parseColor("#222C3A"))
+                        setColor(theme.chipBg)
+                        setStroke(dpToPx(1), theme.chipBorder)
                     }
                 }
                 background = bg
@@ -933,13 +1042,19 @@ class FloatingHubService : Service() {
         var isPinned: Boolean
     )
 
-    private fun renderAllTab(container: LinearLayout, query: String) {
+    private fun renderAllTab(
+        container: LinearLayout,
+        query: String,
+        root: FrameLayout,
+        theme: HubTheme,
+        onRefresh: () -> Unit
+    ) {
         val clips = fetchClipboardItems(query, activeSubFilter)
 
         if (clips.isEmpty()) {
             val emptyTv = TextView(this).apply {
                 text = if (query.isEmpty()) "Clipboard history is empty" else "No matching clips found"
-                setTextColor(Color.parseColor("#788494"))
+                setTextColor(theme.textMuted)
                 textSize = 13f
                 gravity = Gravity.CENTER
                 setPadding(0, dpToPx(40), 0, dpToPx(40))
@@ -957,8 +1072,8 @@ class FloatingHubService : Service() {
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(8).toFloat()
-                    setColor(Color.parseColor("#161C26"))
-                    setStroke(dpToPx(1), Color.parseColor("#232C3C"))
+                    setColor(theme.cardBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
                 }
                 background = bg
                 setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6))
@@ -975,7 +1090,7 @@ class FloatingHubService : Service() {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(2).toFloat()
-                    setColor(Color.parseColor("#38BDF8"))
+                    setColor(theme.accentBlue)
                 }
             }
             row.addView(leftIndicator)
@@ -990,7 +1105,7 @@ class FloatingHubService : Service() {
                     clipToOutline = true
                     background = GradientDrawable().apply {
                         cornerRadius = dpToPx(4).toFloat()
-                        setColor(Color.parseColor("#1F2937"))
+                        setColor(if (theme.isDark) Color.parseColor("#1F2937") else Color.parseColor("#E2E8F0"))
                     }
                     try {
                         val file = File(clip.value)
@@ -1010,8 +1125,8 @@ class FloatingHubService : Service() {
                     val fBg = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
                         cornerRadius = dpToPx(6).toFloat()
-                        setColor(Color.parseColor("#1E293B"))
-                        setStroke(dpToPx(1), Color.parseColor("#334155"))
+                        setColor(theme.inputBg)
+                        setStroke(dpToPx(1), theme.cardBorder)
                     }
                     background = fBg
                     layoutParams = LinearLayout.LayoutParams(dpToPx(30), dpToPx(28)).apply {
@@ -1067,7 +1182,7 @@ class FloatingHubService : Service() {
             val fileName = if (isFile) File(clip.value).name else ""
             val bodyTv = TextView(this).apply {
                 text = if (isImage) "[Image]" else if (isFile) (if (fileName.isNotEmpty()) fileName else "[File]") else clip.value.replace("\n", " ").trim()
-                setTextColor(Color.parseColor("#F1F5F9"))
+                setTextColor(theme.textPrimary)
                 textSize = 12.5f
                 paint.isFakeBoldText = true
                 maxLines = 1
@@ -1086,8 +1201,8 @@ class FloatingHubService : Service() {
                 }
             }
             val subTv = TextView(this).apply {
-                text = formatTimeAgo(clip.createdAt) + if (clip.sourceApp.isNotEmpty()) " · ${clip.sourceApp}" else "" + fileDetails
-                setTextColor(Color.parseColor("#64748B"))
+                text = formatTimeAgo(clip.createdAt) + (if (clip.sourceApp.isNotEmpty()) " · ${clip.sourceApp}" else "") + fileDetails
+                setTextColor(theme.textMuted)
                 textSize = 9.5f
                 setPadding(0, dpToPx(1), 0, 0)
             }
@@ -1118,7 +1233,8 @@ class FloatingHubService : Service() {
                 val pBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(5).toFloat()
-                    setColor(if (clip.isPinned) Color.parseColor("#263548") else Color.parseColor("#1C2430"))
+                    setColor(if (clip.isPinned) theme.chipActiveBg else theme.actionBtnBg)
+                    setStroke(dpToPx(1), if (clip.isPinned) theme.chipActiveBorder else theme.cardBorder)
                 }
                 background = pBg
                 setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
@@ -1128,7 +1244,7 @@ class FloatingHubService : Service() {
                 layoutParams = lp
                 setOnClickListener {
                     togglePinClip(clip.hash)
-                    expand()
+                    onRefresh()
                 }
             }
 
@@ -1138,7 +1254,8 @@ class FloatingHubService : Service() {
                 val nBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(5).toFloat()
-                    setColor(Color.parseColor("#1C2430"))
+                    setColor(theme.actionBtnBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
                 }
                 background = nBg
                 setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
@@ -1147,7 +1264,7 @@ class FloatingHubService : Service() {
                 }
                 layoutParams = lp
                 setOnClickListener {
-                    saveClipToNotes(clip.value)
+                    showSaveNoteDialog(clip.value, root, theme, onRefresh)
                 }
             }
 
@@ -1157,14 +1274,14 @@ class FloatingHubService : Service() {
                 val dBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(5).toFloat()
-                    setColor(Color.parseColor("#2A1C20"))
-                    setStroke(dpToPx(1), Color.parseColor("#5A2328"))
+                    setColor(theme.deleteBg)
+                    setStroke(dpToPx(1), theme.deleteBorder)
                 }
                 background = dBg
                 setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
                 setOnClickListener {
                     deleteClip(clip.id)
-                    expand()
+                    onRefresh()
                 }
             }
 
@@ -1190,7 +1307,12 @@ class FloatingHubService : Service() {
         val updatedAt: Long
     )
 
-    private fun renderNotesFolderFilters(container: LinearLayout, onFilterChanged: () -> Unit) {
+    private fun renderNotesFolderFilters(
+        container: LinearLayout,
+        root: FrameLayout,
+        theme: HubTheme,
+        onFilterChanged: () -> Unit
+    ) {
         val folders = fetchSnippetFolders()
 
         val allPill = TextView(this).apply {
@@ -1198,16 +1320,16 @@ class FloatingHubService : Service() {
             textSize = 11.5f
             val isSelected = activeFolderId == "all"
             paint.isFakeBoldText = isSelected
-            setTextColor(if (isSelected) Color.parseColor("#38BDF8") else Color.parseColor("#8E99A8"))
+            setTextColor(if (isSelected) theme.chipActiveText else theme.chipInactiveText)
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dpToPx(14).toFloat()
                 if (isSelected) {
-                    setColor(Color.parseColor("#1A324A"))
-                    setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+                    setColor(theme.chipActiveBg)
+                    setStroke(dpToPx(1), theme.chipActiveBorder)
                 } else {
-                    setColor(Color.parseColor("#151C26"))
-                    setStroke(dpToPx(1), Color.parseColor("#222C3A"))
+                    setColor(theme.chipBg)
+                    setStroke(dpToPx(1), theme.chipBorder)
                 }
             }
             background = bg
@@ -1228,16 +1350,16 @@ class FloatingHubService : Service() {
                 text = fTitle
                 textSize = 11.5f
                 paint.isFakeBoldText = isSelected
-                setTextColor(if (isSelected) Color.parseColor("#38BDF8") else Color.parseColor("#8E99A8"))
+                setTextColor(if (isSelected) theme.chipActiveText else theme.chipInactiveText)
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(14).toFloat()
                     if (isSelected) {
-                        setColor(Color.parseColor("#1A324A"))
-                        setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+                        setColor(theme.chipActiveBg)
+                        setStroke(dpToPx(1), theme.chipActiveBorder)
                     } else {
-                        setColor(Color.parseColor("#151C26"))
-                        setStroke(dpToPx(1), Color.parseColor("#222C3A"))
+                        setColor(theme.chipBg)
+                        setStroke(dpToPx(1), theme.chipBorder)
                     }
                 }
                 background = bg
@@ -1252,15 +1374,103 @@ class FloatingHubService : Service() {
             }
             container.addView(pill)
         }
+
+        // [+ New Folder] chip
+        val newFolderPill = TextView(this).apply {
+            text = "+ New Folder"
+            textSize = 11.5f
+            paint.isFakeBoldText = true
+            setTextColor(theme.accentBlue)
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(14).toFloat()
+                setColor(theme.chipBg)
+                setStroke(dpToPx(1), theme.accentBlue)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+            setOnClickListener {
+                showNewFolderInlineDialog(root, theme) { newId, _ ->
+                    activeFolderId = newId
+                    onFilterChanged()
+                }
+            }
+        }
+        container.addView(newFolderPill)
     }
 
-    private fun renderNotesTab(container: LinearLayout, query: String) {
+    private fun renderNotesTab(
+        container: LinearLayout,
+        query: String,
+        root: FrameLayout,
+        theme: HubTheme,
+        onRefresh: () -> Unit
+    ) {
+        val folders = fetchSnippetFolders()
         val notes = fetchNotes(query, activeFolderId)
+
+        // Top folder header card: 📁 Folder Title, note count, and [+ Add Note] button (macOS Model)
+        val activeFolderTitle = if (activeFolderId == "all") "All Notes" else (folders.firstOrNull { it.first == activeFolderId }?.second ?: "Notes")
+        val folderHeaderCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.cardBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(8))
+            }
+            layoutParams = lp
+        }
+
+        val folderTitleCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val folderTitleTv = TextView(this).apply {
+            text = "📁 $activeFolderTitle"
+            setTextColor(theme.textPrimary)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+        }
+        val folderCountTv = TextView(this).apply {
+            text = "${notes.size} note${if (notes.size == 1) "" else "s"}"
+            setTextColor(theme.textMuted)
+            textSize = 10f
+        }
+        folderTitleCol.addView(folderTitleTv)
+        folderTitleCol.addView(folderCountTv)
+        folderHeaderCard.addView(folderTitleCol)
+
+        val btnAddNote = TextView(this).apply {
+            text = "+ Add Note"
+            setTextColor(theme.accentBlue)
+            textSize = 11.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(6).toFloat()
+                setColor(theme.chipActiveBg)
+                setStroke(dpToPx(1), theme.chipActiveBorder)
+            }
+            background = bg
+            setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+            setOnClickListener {
+                showCreateNoteDialog(activeFolderId, root, theme, onRefresh)
+            }
+        }
+        folderHeaderCard.addView(btnAddNote)
+        container.addView(folderHeaderCard)
 
         if (notes.isEmpty()) {
             val emptyTv = TextView(this).apply {
                 text = if (query.isEmpty()) "No saved notes in this category" else "No matching notes found"
-                setTextColor(Color.parseColor("#788494"))
+                setTextColor(theme.textMuted)
                 textSize = 13f
                 gravity = Gravity.CENTER
                 setPadding(0, dpToPx(40), 0, dpToPx(40))
@@ -1275,8 +1485,8 @@ class FloatingHubService : Service() {
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(10).toFloat()
-                    setColor(Color.parseColor("#18202C"))
-                    setStroke(dpToPx(1), Color.parseColor("#263346"))
+                    setColor(theme.cardBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
                 }
                 background = bg
                 setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
@@ -1298,14 +1508,14 @@ class FloatingHubService : Service() {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(2).toFloat()
-                    setColor(Color.parseColor("#38BDF8"))
+                    setColor(theme.accentBlue)
                 }
             }
             metaRow.addView(leftIndicator)
 
             val folderBadge = TextView(this).apply {
                 text = note.folderTitle.uppercase()
-                setTextColor(Color.parseColor("#38BDF8"))
+                setTextColor(theme.accentBlue)
                 textSize = 10.5f
                 paint.isFakeBoldText = true
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -1317,7 +1527,7 @@ class FloatingHubService : Service() {
             // Note title
             val titleTv = TextView(this).apply {
                 text = note.title
-                setTextColor(Color.WHITE)
+                setTextColor(theme.textPrimary)
                 textSize = 14f
                 paint.isFakeBoldText = true
                 setPadding(0, dpToPx(4), 0, dpToPx(2))
@@ -1327,7 +1537,7 @@ class FloatingHubService : Service() {
             // Note body
             val bodyTv = TextView(this).apply {
                 text = note.content
-                setTextColor(Color.parseColor("#CBD5E1"))
+                setTextColor(theme.textSecondary)
                 textSize = 12.5f
                 maxLines = 3
                 ellipsize = TextUtils.TruncateAt.END
@@ -1347,7 +1557,8 @@ class FloatingHubService : Service() {
                 val eBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(5).toFloat()
-                    setColor(Color.parseColor("#1C2430"))
+                    setColor(theme.actionBtnBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
                 }
                 background = eBg
                 setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
@@ -1356,12 +1567,7 @@ class FloatingHubService : Service() {
                 }
                 layoutParams = lp
                 setOnClickListener {
-                    val intent = Intent(this@FloatingHubService, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        putExtra("open_tab", "notes")
-                    }
-                    startActivity(intent)
-                    collapse()
+                    showEditNoteDialog(note, root, theme, onRefresh)
                 }
             }
 
@@ -1371,14 +1577,14 @@ class FloatingHubService : Service() {
                 val dBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(5).toFloat()
-                    setColor(Color.parseColor("#2A1C20"))
-                    setStroke(dpToPx(1), Color.parseColor("#5A2328"))
+                    setColor(theme.deleteBg)
+                    setStroke(dpToPx(1), theme.deleteBorder)
                 }
                 background = dBg
                 setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
                 setOnClickListener {
                     deleteNote(note.id)
-                    expand() // Refresh
+                    onRefresh()
                 }
             }
 
@@ -1387,12 +1593,812 @@ class FloatingHubService : Service() {
             card.addView(actionRow)
 
             card.setOnClickListener {
-                copyToClipboard(note.content)
-                Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                executePaste(note.content)
             }
 
             container.addView(card)
         }
+    }
+
+    // =========================================================================
+    // 4.5 IN-HUB NOTE DIALOGS (SAVE AS NOTE, CREATE NOTE, EDIT NOTE, NEW FOLDER)
+    // =========================================================================
+
+    private fun showSaveNoteDialog(
+        clipValue: String,
+        root: FrameLayout,
+        theme: HubTheme,
+        onComplete: () -> Unit
+    ) {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(if (theme.isDark) Color.argb(190, 8, 11, 16) else Color.argb(150, 15, 23, 42))
+            isClickable = true
+            isFocusable = true
+        }
+
+        val dialogContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(14).toFloat()
+                setColor(theme.panelBg)
+                setStroke(dpToPx(1), theme.panelBorder)
+            }
+            background = bg
+            elevation = dpToPx(24).toFloat()
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER
+                setMargins(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        overlay.addView(dialogContainer)
+
+        // Header Row
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dpToPx(10))
+        }
+        val headerTitle = TextView(this).apply {
+            text = "Save to Notes"
+            setTextColor(theme.textPrimary)
+            textSize = 14.5f
+            paint.isFakeBoldText = true
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(theme.textMuted)
+            textSize = 13.5f
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+            setOnClickListener { root.removeView(overlay) }
+        }
+        headerRow.addView(headerTitle)
+        headerRow.addView(closeBtn)
+        dialogContainer.addView(headerRow)
+
+        // Folders list
+        val folders = fetchSnippetFolders().toMutableList()
+        if (folders.isEmpty()) {
+            val genId = createSnippetFolder("General")
+            folders.add(Pair(genId, "General"))
+        }
+        var selectedFolderId = if (activeFolderId != "all" && folders.any { it.first == activeFolderId }) activeFolderId else folders.first().first
+
+        val folderLabel = TextView(this).apply {
+            text = "SELECT FOLDER"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(folderLabel)
+
+        val folderChipsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setPadding(0, 0, 0, dpToPx(8))
+        }
+        val folderChipsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        folderChipsScroll.addView(folderChipsRow)
+        dialogContainer.addView(folderChipsScroll)
+
+        fun rebuildFolderChips() {
+            folderChipsRow.removeAllViews()
+            for ((fId, fTitle) in folders) {
+                val isSelected = selectedFolderId == fId
+                val chip = TextView(this).apply {
+                    text = fTitle
+                    textSize = 11.5f
+                    paint.isFakeBoldText = isSelected
+                    setTextColor(if (isSelected) theme.chipActiveText else theme.chipInactiveText)
+                    val bg = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dpToPx(12).toFloat()
+                        setColor(if (isSelected) theme.chipActiveBg else theme.chipBg)
+                        setStroke(dpToPx(1), if (isSelected) theme.chipActiveBorder else theme.chipBorder)
+                    }
+                    background = bg
+                    setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(0, 0, dpToPx(5), 0)
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        selectedFolderId = fId
+                        rebuildFolderChips()
+                    }
+                }
+                folderChipsRow.addView(chip)
+            }
+
+            // [+ New Folder] chip
+            val newFolderChip = TextView(this).apply {
+                text = "+ New Folder"
+                textSize = 11.5f
+                paint.isFakeBoldText = true
+                setTextColor(theme.accentBlue)
+                val bg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(12).toFloat()
+                    setColor(theme.chipBg)
+                    setStroke(dpToPx(1), theme.accentBlue)
+                }
+                background = bg
+                setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+                setOnClickListener {
+                    showNewFolderInlineDialog(root, theme) { newId, newTitle ->
+                        folders.add(Pair(newId, newTitle))
+                        selectedFolderId = newId
+                        rebuildFolderChips()
+                    }
+                }
+            }
+            folderChipsRow.addView(newFolderChip)
+        }
+        rebuildFolderChips()
+
+        // Title input
+        val titleLabel = TextView(this).apply {
+            text = "NOTE TITLE"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(titleLabel)
+
+        val defaultTitle = clipValue.lines().firstOrNull { it.isNotBlank() }?.trim() ?: "Note"
+        val titleInput = EditText(this).apply {
+            setText(if (defaultTitle.length > 40) defaultTitle.take(40) else defaultTitle)
+            setTextColor(theme.textPrimary)
+            setHintTextColor(theme.textMuted)
+            hint = "Note Title..."
+            textSize = 13f
+            maxLines = 1
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.inputBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(8))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(titleInput)
+
+        // Content preview
+        val contentLabel = TextView(this).apply {
+            text = "CONTENT PREVIEW"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(contentLabel)
+
+        val previewBox = TextView(this).apply {
+            text = clipValue
+            setTextColor(theme.textSecondary)
+            textSize = 11.5f
+            maxLines = 4
+            ellipsize = TextUtils.TruncateAt.END
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.cardBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(previewBox)
+
+        // Action buttons
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+
+        val btnCancel = TextView(this).apply {
+            text = "Cancel"
+            setTextColor(theme.textMuted)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.actionBtnBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = bg
+            setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dpToPx(8), 0)
+            }
+            layoutParams = lp
+            setOnClickListener { root.removeView(overlay) }
+        }
+
+        val btnSave = TextView(this).apply {
+            text = "Save Note"
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#0284C7"))
+            }
+            background = bg
+            setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8))
+            setOnClickListener {
+                val title = titleInput.text.toString().trim()
+                val ok = insertSnippet(selectedFolderId, if (title.isEmpty()) "Note" else title, clipValue)
+                if (ok) {
+                    val folderName = folders.firstOrNull { it.first == selectedFolderId }?.second ?: "Notes"
+                    Toast.makeText(this@FloatingHubService, "Saved to $folderName", Toast.LENGTH_SHORT).show()
+                    root.removeView(overlay)
+                    onComplete()
+                } else {
+                    Toast.makeText(this@FloatingHubService, "Failed to save note", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        dialogContainer.addView(btnRow)
+
+        root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun showCreateNoteDialog(
+        defaultFolderId: String,
+        root: FrameLayout,
+        theme: HubTheme,
+        onComplete: () -> Unit
+    ) {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(if (theme.isDark) Color.argb(190, 8, 11, 16) else Color.argb(150, 15, 23, 42))
+            isClickable = true
+            isFocusable = true
+        }
+
+        val dialogContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(14).toFloat()
+                setColor(theme.panelBg)
+                setStroke(dpToPx(1), theme.panelBorder)
+            }
+            background = bg
+            elevation = dpToPx(24).toFloat()
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER
+                setMargins(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        overlay.addView(dialogContainer)
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dpToPx(10))
+        }
+        val headerTitle = TextView(this).apply {
+            text = "Create Note"
+            setTextColor(theme.textPrimary)
+            textSize = 14.5f
+            paint.isFakeBoldText = true
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(theme.textMuted)
+            textSize = 13.5f
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+            setOnClickListener { root.removeView(overlay) }
+        }
+        headerRow.addView(headerTitle)
+        headerRow.addView(closeBtn)
+        dialogContainer.addView(headerRow)
+
+        val folders = fetchSnippetFolders().toMutableList()
+        if (folders.isEmpty()) {
+            val genId = createSnippetFolder("General")
+            folders.add(Pair(genId, "General"))
+        }
+        var selectedFolderId = if (defaultFolderId != "all" && folders.any { it.first == defaultFolderId }) defaultFolderId else folders.first().first
+
+        val folderLabel = TextView(this).apply {
+            text = "FOLDER"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(folderLabel)
+
+        val folderChipsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setPadding(0, 0, 0, dpToPx(8))
+        }
+        val folderChipsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        folderChipsScroll.addView(folderChipsRow)
+        dialogContainer.addView(folderChipsScroll)
+
+        fun rebuildFolderChips() {
+            folderChipsRow.removeAllViews()
+            for ((fId, fTitle) in folders) {
+                val isSelected = selectedFolderId == fId
+                val chip = TextView(this).apply {
+                    text = fTitle
+                    textSize = 11.5f
+                    paint.isFakeBoldText = isSelected
+                    setTextColor(if (isSelected) theme.chipActiveText else theme.chipInactiveText)
+                    val bg = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dpToPx(12).toFloat()
+                        setColor(if (isSelected) theme.chipActiveBg else theme.chipBg)
+                        setStroke(dpToPx(1), if (isSelected) theme.chipActiveBorder else theme.chipBorder)
+                    }
+                    background = bg
+                    setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(0, 0, dpToPx(5), 0)
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        selectedFolderId = fId
+                        rebuildFolderChips()
+                    }
+                }
+                folderChipsRow.addView(chip)
+            }
+        }
+        rebuildFolderChips()
+
+        // Title input
+        val titleLabel = TextView(this).apply {
+            text = "TITLE"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(titleLabel)
+
+        val titleInput = EditText(this).apply {
+            setTextColor(theme.textPrimary)
+            setHintTextColor(theme.textMuted)
+            hint = "Note Title..."
+            textSize = 13f
+            maxLines = 1
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.inputBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(8))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(titleInput)
+
+        // Content input
+        val contentLabel = TextView(this).apply {
+            text = "CONTENT"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(contentLabel)
+
+        val contentInput = EditText(this).apply {
+            setTextColor(theme.textPrimary)
+            setHintTextColor(theme.textMuted)
+            hint = "Type note body here..."
+            textSize = 12.5f
+            minLines = 3
+            maxLines = 5
+            gravity = Gravity.TOP or Gravity.START
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.inputBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(contentInput)
+
+        // Buttons
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        val btnCancel = TextView(this).apply {
+            text = "Cancel"
+            setTextColor(theme.textMuted)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.actionBtnBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = bg
+            setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dpToPx(8), 0)
+            }
+            layoutParams = lp
+            setOnClickListener { root.removeView(overlay) }
+        }
+        val btnSave = TextView(this).apply {
+            text = "Save Note"
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#0284C7"))
+            }
+            background = bg
+            setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8))
+            setOnClickListener {
+                val title = titleInput.text.toString().trim()
+                val content = contentInput.text.toString().trim()
+                if (content.isEmpty()) {
+                    Toast.makeText(this@FloatingHubService, "Please enter note content", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val ok = insertSnippet(selectedFolderId, if (title.isEmpty()) "Note" else title, content)
+                if (ok) {
+                    Toast.makeText(this@FloatingHubService, "Note created", Toast.LENGTH_SHORT).show()
+                    root.removeView(overlay)
+                    onComplete()
+                }
+            }
+        }
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        dialogContainer.addView(btnRow)
+
+        root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun showEditNoteDialog(
+        note: NoteItem,
+        root: FrameLayout,
+        theme: HubTheme,
+        onComplete: () -> Unit
+    ) {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(if (theme.isDark) Color.argb(190, 8, 11, 16) else Color.argb(150, 15, 23, 42))
+            isClickable = true
+            isFocusable = true
+        }
+
+        val dialogContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(14).toFloat()
+                setColor(theme.panelBg)
+                setStroke(dpToPx(1), theme.panelBorder)
+            }
+            background = bg
+            elevation = dpToPx(24).toFloat()
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER
+                setMargins(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        overlay.addView(dialogContainer)
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dpToPx(10))
+        }
+        val headerTitle = TextView(this).apply {
+            text = "Edit Note (${note.folderTitle})"
+            setTextColor(theme.textPrimary)
+            textSize = 14.5f
+            paint.isFakeBoldText = true
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(theme.textMuted)
+            textSize = 13.5f
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+            setOnClickListener { root.removeView(overlay) }
+        }
+        headerRow.addView(headerTitle)
+        headerRow.addView(closeBtn)
+        dialogContainer.addView(headerRow)
+
+        // Title
+        val titleLabel = TextView(this).apply {
+            text = "TITLE"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(titleLabel)
+
+        val titleInput = EditText(this).apply {
+            setText(note.title)
+            setTextColor(theme.textPrimary)
+            setHintTextColor(theme.textMuted)
+            textSize = 13f
+            maxLines = 1
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.inputBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(8))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(titleInput)
+
+        // Content
+        val contentLabel = TextView(this).apply {
+            text = "CONTENT"
+            setTextColor(theme.textMuted)
+            textSize = 9.5f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        dialogContainer.addView(contentLabel)
+
+        val contentInput = EditText(this).apply {
+            setText(note.content)
+            setTextColor(theme.textPrimary)
+            setHintTextColor(theme.textMuted)
+            textSize = 12.5f
+            minLines = 3
+            maxLines = 6
+            gravity = Gravity.TOP or Gravity.START
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.inputBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(contentInput)
+
+        // Buttons
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        val btnCancel = TextView(this).apply {
+            text = "Cancel"
+            setTextColor(theme.textMuted)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.actionBtnBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = bg
+            setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dpToPx(8), 0)
+            }
+            layoutParams = lp
+            setOnClickListener { root.removeView(overlay) }
+        }
+        val btnSave = TextView(this).apply {
+            text = "Save Changes"
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#0284C7"))
+            }
+            background = bg
+            setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8))
+            setOnClickListener {
+                val title = titleInput.text.toString().trim()
+                val content = contentInput.text.toString().trim()
+                if (content.isEmpty()) {
+                    Toast.makeText(this@FloatingHubService, "Please enter note content", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val ok = updateSnippet(note.id, title, content)
+                if (ok) {
+                    Toast.makeText(this@FloatingHubService, "Note updated", Toast.LENGTH_SHORT).show()
+                    root.removeView(overlay)
+                    onComplete()
+                }
+            }
+        }
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        dialogContainer.addView(btnRow)
+
+        root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun showNewFolderInlineDialog(
+        root: FrameLayout,
+        theme: HubTheme,
+        onCreated: (String, String) -> Unit
+    ) {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(if (theme.isDark) Color.argb(190, 8, 11, 16) else Color.argb(150, 15, 23, 42))
+            isClickable = true
+            isFocusable = true
+        }
+
+        val dialogContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(14).toFloat()
+                setColor(theme.panelBg)
+                setStroke(dpToPx(1), theme.panelBorder)
+            }
+            background = bg
+            elevation = dpToPx(24).toFloat()
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER
+                setMargins(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            }
+            layoutParams = lp
+        }
+        overlay.addView(dialogContainer)
+
+        val headerTitle = TextView(this).apply {
+            text = "Create New Folder"
+            setTextColor(theme.textPrimary)
+            textSize = 14f
+            paint.isFakeBoldText = true
+            setPadding(0, 0, 0, dpToPx(8))
+        }
+        dialogContainer.addView(headerTitle)
+
+        val nameInput = EditText(this).apply {
+            hint = "Folder name (e.g. Work, Ideas)"
+            setTextColor(theme.textPrimary)
+            setHintTextColor(theme.textMuted)
+            textSize = 13f
+            maxLines = 1
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.inputBg)
+                setStroke(dpToPx(1), theme.inputBorder)
+            }
+            background = bg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(12))
+            }
+            layoutParams = lp
+        }
+        dialogContainer.addView(nameInput)
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        val btnCancel = TextView(this).apply {
+            text = "Cancel"
+            setTextColor(theme.textMuted)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.actionBtnBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = bg
+            setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dpToPx(8), 0)
+            }
+            layoutParams = lp
+            setOnClickListener { root.removeView(overlay) }
+        }
+        val btnCreate = TextView(this).apply {
+            text = "Create"
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#0284C7"))
+            }
+            background = bg
+            setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8))
+            setOnClickListener {
+                val name = nameInput.text.toString().trim()
+                if (name.isEmpty()) {
+                    Toast.makeText(this@FloatingHubService, "Please enter folder name", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val newId = createSnippetFolder(name)
+                if (newId.isNotEmpty()) {
+                    Toast.makeText(this@FloatingHubService, "Folder '$name' created", Toast.LENGTH_SHORT).show()
+                    root.removeView(overlay)
+                    onCreated(newId, name)
+                } else {
+                    Toast.makeText(this@FloatingHubService, "Failed to create folder", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnCreate)
+        dialogContainer.addView(btnRow)
+
+        root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        nameInput.requestFocus()
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+        imm?.showSoftInput(nameInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
     }
 
     // =========================================================================
@@ -1407,15 +2413,15 @@ class FloatingHubService : Service() {
         val pairedAt: String
     )
 
-    private fun renderDevicesTab(container: LinearLayout, query: String) {
+    private fun renderDevicesTab(container: LinearLayout, query: String, theme: HubTheme) {
         // 1. This Phone Status Card
         val thisDeviceCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dpToPx(10).toFloat()
-                setColor(Color.parseColor("#162130"))
-                setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+                setColor(theme.cardBg)
+                setStroke(dpToPx(1), theme.accentBlue)
             }
             background = bg
             setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
@@ -1431,7 +2437,7 @@ class FloatingHubService : Service() {
 
         val phoneTitle = TextView(this).apply {
             text = "📱 This Phone (Android)"
-            setTextColor(Color.WHITE)
+            setTextColor(theme.textPrimary)
             textSize = 14f
             paint.isFakeBoldText = true
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -1450,7 +2456,7 @@ class FloatingHubService : Service() {
 
         val portSub = TextView(this).apply {
             text = "Encrypted TCP peer listener active on port :5566"
-            setTextColor(Color.parseColor("#788494"))
+            setTextColor(theme.textMuted)
             textSize = 11.5f
             setPadding(0, dpToPx(4), 0, 0)
         }
@@ -1462,7 +2468,7 @@ class FloatingHubService : Service() {
 
         val labelDevices = TextView(this).apply {
             text = "PAIRED PEERS"
-            setTextColor(Color.parseColor("#64748B"))
+            setTextColor(theme.textMuted)
             textSize = 11f
             paint.isFakeBoldText = true
             setPadding(0, dpToPx(4), 0, dpToPx(6))
@@ -1476,8 +2482,8 @@ class FloatingHubService : Service() {
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(10).toFloat()
-                    setColor(Color.parseColor("#151C26"))
-                    setStroke(dpToPx(1), Color.parseColor("#222C3A"))
+                    setColor(theme.cardBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
                 }
                 background = bg
                 setPadding(dpToPx(16), dpToPx(24), dpToPx(16), dpToPx(24))
@@ -1488,7 +2494,7 @@ class FloatingHubService : Service() {
 
             val emptyMsg = TextView(this).apply {
                 text = "No paired Mac or companion devices yet."
-                setTextColor(Color.parseColor("#8E99A8"))
+                setTextColor(theme.textMuted)
                 textSize = 12.5f
                 gravity = Gravity.CENTER
             }
@@ -1503,8 +2509,8 @@ class FloatingHubService : Service() {
                     val bg = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
                         cornerRadius = dpToPx(10).toFloat()
-                        setColor(Color.parseColor("#18202C"))
-                        setStroke(dpToPx(1), Color.parseColor("#263346"))
+                        setColor(theme.cardBg)
+                        setStroke(dpToPx(1), theme.cardBorder)
                     }
                     background = bg
                     setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
@@ -1531,7 +2537,7 @@ class FloatingHubService : Service() {
 
                 val nameTv = TextView(this).apply {
                     text = dev.name
-                    setTextColor(Color.WHITE)
+                    setTextColor(theme.textPrimary)
                     textSize = 13.5f
                     paint.isFakeBoldText = true
                 }
@@ -1552,14 +2558,14 @@ class FloatingHubService : Service() {
 
                 val btnConnect = TextView(this).apply {
                     text = "⚡ Connect"
-                    setTextColor(Color.parseColor("#38BDF8"))
+                    setTextColor(theme.accentBlue)
                     textSize = 11f
                     paint.isFakeBoldText = true
                     val cBg = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
                         cornerRadius = dpToPx(6).toFloat()
-                        setColor(Color.parseColor("#15273B"))
-                        setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+                        setColor(theme.chipActiveBg)
+                        setStroke(dpToPx(1), theme.chipActiveBorder)
                     }
                     background = cBg
                     setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
@@ -1578,20 +2584,20 @@ class FloatingHubService : Service() {
 
                 val btnUnpair = TextView(this).apply {
                     text = "Unpair"
-                    setTextColor(Color.parseColor("#EF4444"))
+                    setTextColor(theme.deleteText)
                     textSize = 11f
                     paint.isFakeBoldText = true
                     val bBg = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
                         cornerRadius = dpToPx(6).toFloat()
-                        setColor(Color.parseColor("#261D22"))
-                        setStroke(dpToPx(1), Color.parseColor("#7F1D1D"))
+                        setColor(theme.deleteBg)
+                        setStroke(dpToPx(1), theme.deleteBorder)
                     }
                     background = bBg
                     setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
                     setOnClickListener {
                         unpairDevice(dev.id)
-                        expand() // Refresh
+                        renderDevicesTab(container, query, theme)
                     }
                 }
 
@@ -1983,42 +2989,93 @@ class FloatingHubService : Service() {
         val db = getReadableDatabase() ?: return
         try {
             db.delete("snippets", "id = ?", arrayOf(id))
+            notifySnippetChange()
         } catch (_: Exception) {} finally {
             try { db.close() } catch (_: Exception) {}
         }
     }
 
-    private fun saveClipToNotes(clipValue: String) {
-        val db = getReadableDatabase() ?: return
-        try {
-            var folderId = ""
-            val cursor = db.rawQuery("SELECT id FROM snippet_folders WHERE is_enabled = 1 ORDER BY created_at ASC LIMIT 1", null)
-            if (cursor.moveToFirst()) {
-                folderId = cursor.getString(0)
-            }
-            cursor.close()
-
-            if (folderId.isEmpty()) {
-                folderId = UUID.randomUUID().toString()
-                db.execSQL(
-                    "INSERT OR IGNORE INTO snippet_folders (id, title, is_enabled, created_at, updated_at) VALUES (?, 'General', 1, ?, ?)",
-                    arrayOf(folderId, System.currentTimeMillis(), System.currentTimeMillis())
-                )
-            }
-
-            val snippetId = UUID.randomUUID().toString()
-            val title = if (clipValue.length > 30) clipValue.take(30).replace("\n", " ").trim() else clipValue.replace("\n", " ").trim()
+    private fun createSnippetFolder(title: String): String {
+        val db = getReadableDatabase() ?: return ""
+        return try {
+            val id = UUID.randomUUID().toString()
             val now = System.currentTimeMillis()
-            db.execSQL(
-                "INSERT INTO snippets (id, folder_id, title, content, created_at, updated_at, sort_order) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                arrayOf(snippetId, folderId, if (title.isEmpty()) "Note" else title, clipValue, now, now)
-            )
-            Toast.makeText(this, "Saved as Note", Toast.LENGTH_SHORT).show()
+            val cv = android.content.ContentValues().apply {
+                put("id", id)
+                put("title", title)
+                put("is_enabled", 1)
+                put("updated_at", now)
+                put("sort_order", 0)
+            }
+            db.insertWithOnConflict("snippet_folders", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+            notifySnippetChange()
+            id
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving clip to notes: $e")
+            Log.e(TAG, "Error creating folder: $e")
+            ""
         } finally {
             try { db.close() } catch (_: Exception) {}
         }
+    }
+
+    private fun insertSnippet(folderId: String, title: String, content: String): Boolean {
+        val db = getReadableDatabase() ?: return false
+        return try {
+            val id = UUID.randomUUID().toString()
+            val now = System.currentTimeMillis()
+            val cv = android.content.ContentValues().apply {
+                put("id", id)
+                put("folder_id", folderId)
+                put("title", if (title.isBlank()) "Note" else title.trim())
+                put("content", content.trim())
+                put("updated_at", now)
+                put("sort_order", 0)
+            }
+            db.insertWithOnConflict("snippets", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+            notifySnippetChange()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inserting snippet: $e")
+            false
+        } finally {
+            try { db.close() } catch (_: Exception) {}
+        }
+    }
+
+    private fun updateSnippet(id: String, title: String, content: String): Boolean {
+        val db = getReadableDatabase() ?: return false
+        return try {
+            val now = System.currentTimeMillis()
+            val cv = android.content.ContentValues().apply {
+                put("title", if (title.isBlank()) "Note" else title.trim())
+                put("content", content.trim())
+                put("updated_at", now)
+            }
+            val affected = db.update("snippets", cv, "id = ?", arrayOf(id))
+            notifySnippetChange()
+            affected > 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating snippet: $e")
+            false
+        } finally {
+            try { db.close() } catch (_: Exception) {}
+        }
+    }
+
+    private fun notifySnippetChange() {
+        try {
+            val engine = io.flutter.embedding.engine.FlutterEngineCache.getInstance().get(TechuboardApplication.ENGINE_ID)
+            if (engine != null) {
+                mainHandler.post {
+                    try {
+                        io.flutter.plugin.common.MethodChannel(
+                            engine.dartExecutor.binaryMessenger,
+                            TechuboardApplication.CLIPBOARD_CHANNEL
+                        ).invokeMethod("reloadSnippets", null)
+                    } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun fetchPairedDevices(): List<DeviceItem> {

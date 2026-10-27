@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database/clipboard_repository.dart';
+import 'database/snippet_repository.dart';
 import 'log_manager.dart';
 import 'models.dart';
 import 'sync_manager.dart';
@@ -117,6 +118,13 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
   }
 
   Future<dynamic> _handleClipboardMethodCall(MethodCall call) async {
+    if (call.method == 'reloadSnippets') {
+      try {
+        final folders = await SnippetRepository.instance.fetchAllFolders();
+        await SyncManager.instance.broadcastSnippets(folders);
+      } catch (_) {}
+      return null;
+    }
     if (Platform.isWindows && call.method == 'onClipboardChanged') {
       await _readWindowsClipboard();
       return null;
