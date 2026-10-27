@@ -97,6 +97,7 @@ class FloatingHubService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        mainHandler.removeCallbacks(dimRunnable)
         removeExpandedView()
         removePillView()
         removeDropTargetView()
@@ -144,22 +145,48 @@ class FloatingHubService : Service() {
     // 1. FLOATING PILL & DRAG-TO-CLOSE DROP TARGET (MESSENGER STYLE)
     // =========================================================================
 
+    // 2-second auto-dimming when idle / closed
+    private val dimRunnable = Runnable {
+        if (!isExpanded) {
+            pillView?.animate()
+                ?.alpha(0.2f)
+                ?.setDuration(350)
+                ?.start()
+        }
+    }
+
+    private fun resetPillOpacity() {
+        mainHandler.removeCallbacks(dimRunnable)
+        pillView?.animate()
+            ?.alpha(1.0f)
+            ?.setDuration(120)
+            ?.start()
+    }
+
+    private fun schedulePillDim() {
+        mainHandler.removeCallbacks(dimRunnable)
+        if (!isExpanded) {
+            mainHandler.postDelayed(dimRunnable, 2000L)
+        }
+    }
+
     private fun createPillView() {
         val pill = FrameLayout(this)
         val pillBg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             colors = intArrayOf(Color.parseColor("#1262F3"), Color.parseColor("#0A47B8"))
             gradientType = GradientDrawable.LINEAR_GRADIENT
-            setStroke(dpToPx(2), Color.parseColor("#ABC7FF"))
+            setStroke(dpToPx(1.5f.toInt().coerceAtLeast(1)), Color.parseColor("#80ABC7FF"))
         }
         pill.background = pillBg
         pill.elevation = dpToPx(8).toFloat()
 
         val icon = ImageView(this).apply {
-            setImageResource(android.R.drawable.ic_menu_edit)
-            setColorFilter(Color.WHITE)
-            val padding = dpToPx(12)
-            setPadding(padding, padding, padding, padding)
+            setImageResource(R.drawable.ic_menubar_white_logo)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            val paddingH = dpToPx(11)
+            val paddingV = dpToPx(13)
+            setPadding(paddingH, paddingV, paddingH, paddingV)
         }
         pill.addView(icon, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
@@ -197,6 +224,7 @@ class FloatingHubService : Service() {
         pill.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    resetPillOpacity()
                     initialX = params.x
                     initialY = params.y
                     initialTouchX = event.rawX
@@ -207,6 +235,7 @@ class FloatingHubService : Service() {
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    resetPillOpacity()
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
 
@@ -242,10 +271,15 @@ class FloatingHubService : Service() {
                         // Safe vertical clamp so it never slips under notch or nav bar
                         params.y = params.y.coerceIn(dpToPx(40), sh - dpToPx(100))
                         windowManager?.updateViewLayout(pill, params)
+                        schedulePillDim()
                     } else {
                         toggleExpanded()
                     }
                     true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    schedulePillDim()
+                    false
                 }
                 else -> false
             }
@@ -254,6 +288,7 @@ class FloatingHubService : Service() {
         pillView = pill
         try {
             windowManager?.addView(pill, params)
+            schedulePillDim()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add pillView", e)
         }
@@ -386,6 +421,7 @@ class FloatingHubService : Service() {
         if (!isExpanded) return
         isExpanded = false
         removeExpandedView()
+        schedulePillDim()
     }
 
     private fun removeExpandedView() {
@@ -400,6 +436,7 @@ class FloatingHubService : Service() {
     private fun expand() {
         if (isExpanded) return
         isExpanded = true
+        resetPillOpacity()
         vibrate(strong = false)
 
         // Custom root layout to intercept Android Back Button & Back Gestures

@@ -221,15 +221,21 @@ class AppUpdaterService {
       request.headers.set('User-Agent', 'Techuboard-Android-App');
       final response = await request.close();
 
+      Uri currentUri = uri;
       HttpClientResponse downloadResponse = response;
-      if (response.statusCode == 302 || response.statusCode == 301) {
-        final redirectLocation = response.headers.value('location');
-        if (redirectLocation != null) {
-          final redirectUri = Uri.parse(redirectLocation);
-          final redirectRequest = await client.getUrl(redirectUri);
-          redirectRequest.headers.set('User-Agent', 'Techuboard-Android-App');
-          downloadResponse = await redirectRequest.close();
-        }
+      int redirects = 0;
+      while ((downloadResponse.statusCode == 301 ||
+              downloadResponse.statusCode == 302 ||
+              downloadResponse.statusCode == 307 ||
+              downloadResponse.statusCode == 308) &&
+          redirects < 5) {
+        final redirectLocation = downloadResponse.headers.value('location');
+        if (redirectLocation == null || redirectLocation.isEmpty) break;
+        currentUri = Uri.parse(redirectLocation);
+        final redirectRequest = await client.getUrl(currentUri);
+        redirectRequest.headers.set('User-Agent', 'Techuboard-Android-App');
+        downloadResponse = await redirectRequest.close();
+        redirects++;
       }
 
       if (downloadResponse.statusCode != 200) {
