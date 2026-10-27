@@ -40,8 +40,13 @@ class TechuboardSyncForegroundService : Service() {
 
     companion object {
         private const val TAG = "TechuFGS"
-        private const val CHANNEL_ID = "techu_sync_foreground"
-        private const val NOTIFICATION_ID = 0x7101
+        const val CHANNEL_ID = TechuboardNotificationHelper.CHANNEL_ID
+        const val NOTIFICATION_ID = TechuboardNotificationHelper.NOTIFICATION_ID
+
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         /** Fallback / busy interval when Dart does not return a delay. */
         private const val SYNC_TICK_BUSY_MS = 30_000L
         private const val SYNC_TICK_IDLE_MS = 90_000L
@@ -93,9 +98,15 @@ class TechuboardSyncForegroundService : Service() {
         mainHandler.removeCallbacks(tickWatchdogRunnable)
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        isRunning = true
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isRunning = true
         startForegroundCompat()
         renewWakeLock()
         Log.i(TAG, "onStartCommand: intent=${if (intent == null) "null(sticky rebuild)" else "explicit"}")
@@ -107,9 +118,11 @@ class TechuboardSyncForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         stopSyncTicks()
         releaseWakeLock()
         super.onDestroy()
+        TechuboardNotificationHelper.update(applicationContext)
     }
 
     /**
@@ -246,16 +259,9 @@ class TechuboardSyncForegroundService : Service() {
     }
 
     private fun startForegroundCompat() {
-        ensureChannel()
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(getNotificationTitleRes()))
-            .setContentText(getString(getNotificationTextRes()))
-            .setContentIntent(SyncNotificationIntent.openApp(this))
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setShowWhen(false)
-            .build()
+        isRunning = true
+        TechuboardNotificationHelper.ensureChannel(this)
+        val notification = TechuboardNotificationHelper.buildUnifiedNotification(this)
 
         val type = when {
             // specialUse matches the manifest type; exempt from the Android 15
@@ -266,22 +272,7 @@ class TechuboardSyncForegroundService : Service() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             else -> 0
         }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
-    }
-
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(getChannelNameRes()),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = getString(getChannelDescRes())
-            setShowBadge(false)
-        }
-        nm.createNotificationChannel(channel)
+        ServiceCompat.startForeground(this, TechuboardNotificationHelper.NOTIFICATION_ID, notification, type)
     }
 
     private fun getNotificationTitleRes(): Int = R.string.fgs_notification_title

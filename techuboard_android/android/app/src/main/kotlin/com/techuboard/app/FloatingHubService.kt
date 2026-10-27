@@ -48,8 +48,8 @@ class FloatingHubService : Service() {
 
     companion object {
         private const val TAG = "TechuFloatingHub"
-        private const val CHANNEL_ID = "techu_floating_hub"
-        private const val NOTIFICATION_ID = 5567
+        const val CHANNEL_ID = TechuboardNotificationHelper.CHANNEL_ID
+        const val NOTIFICATION_ID = TechuboardNotificationHelper.NOTIFICATION_ID
         const val ACTION_STOP_SERVICE = "com.techuboard.app.ACTION_STOP_FLOATING_HUB"
 
         @Volatile
@@ -91,7 +91,6 @@ class FloatingHubService : Service() {
         super.onCreate()
         isRunning = true
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        createNotificationChannel()
         startForegroundCompat()
         createPillView()
     }
@@ -101,68 +100,39 @@ class FloatingHubService : Service() {
         removeExpandedView()
         removePillView()
         removeDropTargetView()
+
+        if (TechuboardSyncForegroundService.isRunning) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_DETACH)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(false)
+            }
+            TechuboardNotificationHelper.update(applicationContext)
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+        }
         super.onDestroy()
     }
 
     private fun startForegroundCompat() {
-        val notification = buildForegroundNotification()
+        TechuboardNotificationHelper.ensureChannel(this)
+        val notification = TechuboardNotificationHelper.buildUnifiedNotification(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceCompat.startForeground(
                 this,
-                NOTIFICATION_ID,
+                TechuboardNotificationHelper.NOTIFICATION_ID,
                 notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
-            startForeground(NOTIFICATION_ID, notification)
+            startForeground(TechuboardNotificationHelper.NOTIFICATION_ID, notification)
         }
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Techuboard Floating Hub",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Quick clipboard & snippet paste overlay"
-                setShowBadge(false)
-            }
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(channel)
-        }
-    }
-
-    private fun buildForegroundNotification(): Notification {
-        val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val openAppPending = PendingIntent.getActivity(
-            this,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val stopIntent = Intent(this, FloatingHubService::class.java).apply {
-            action = ACTION_STOP_SERVICE
-        }
-        val stopPending = PendingIntent.getService(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Techuboard Floating Hub")
-            .setContentText("Tap floating pill to paste clips anywhere")
-            .setSmallIcon(android.R.drawable.ic_menu_edit)
-            .setContentIntent(openAppPending)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Turn Off", stopPending)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
     }
 
     private fun dpToPx(dp: Int): Int {
