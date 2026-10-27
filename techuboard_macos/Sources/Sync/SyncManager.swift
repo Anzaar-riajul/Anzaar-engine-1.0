@@ -277,6 +277,68 @@ final class SyncManager: NSObject {
 
     // MARK: - Public queries
 
+    struct SavedDeviceRecord: Codable {
+        let peerId: String
+        var displayName: String
+        var host: String
+        var port: UInt16
+        var lastSeen: TimeInterval
+    }
+
+    private static let savedDevicesKey = "techuboard_saved_devices_v1"
+
+    func loadSavedDevices() -> [SavedDeviceRecord] {
+        if let data = UserDefaults.standard.data(forKey: Self.savedDevicesKey),
+           let list = try? JSONDecoder().decode([SavedDeviceRecord].self, from: data) {
+            return list
+        }
+        let auth = Set(PreferencesManager.shared.authorizedPeerIds)
+        let cached = loadEndpointCacheEntries().filter { auth.contains($0.peerId) && $0.peerId != peerId }
+        return cached.map {
+            SavedDeviceRecord(peerId: $0.peerId, displayName: $0.name, host: $0.host, port: $0.port, lastSeen: $0.ts)
+        }
+    }
+
+    func savePairedDevice(peerId: String, name: String, host: String, port: UInt16) {
+        guard !peerId.isEmpty, peerId != self.peerId else { return }
+        var list = loadSavedDevices()
+        list.removeAll { $0.peerId == peerId }
+        list.append(SavedDeviceRecord(peerId: peerId, displayName: name, host: host, port: port, lastSeen: Date().timeIntervalSince1970))
+        if let data = try? JSONEncoder().encode(list) {
+            UserDefaults.standard.set(data, forKey: Self.savedDevicesKey)
+        }
+        var auth = Set(PreferencesManager.shared.authorizedPeerIds)
+        if !auth.contains(peerId) {
+            auth.insert(peerId)
+            PreferencesManager.shared.authorizedPeerIds = Array(auth).sorted()
+        }
+        notifyPeersChanged()
+    }
+
+    func removeSavedDevice(peerId: String) {
+        var list = loadSavedDevices()
+        list.removeAll { $0.peerId == peerId }
+        if let data = try? JSONEncoder().encode(list) {
+            UserDefaults.standard.set(data, forKey: Self.savedDevicesKey)
+        }
+        var auth = Set(PreferencesManager.shared.authorizedPeerIds)
+        auth.remove(peerId)
+        PreferencesManager.shared.authorizedPeerIds = Array(auth).sorted()
+        peersLock.lock()
+        discoveredPeers.removeValue(forKey: peerId)
+        peersLock.unlock()
+        syncQueue.async { [weak self] in
+            self?.closeSession(peerId: peerId, scheduleReconnect: false)
+        }
+        notifyPeersChanged()
+    }
+
+    func reconnectDevice(peerId: String) {
+        guard let saved = loadSavedDevices().first(where: { $0.peerId == peerId }) else { return }
+        dial(host: saved.host, port: saved.port, reason: "direct", peerId: saved.peerId)
+        scheduleDiscovery(immediate: true, scanFullSubnet: true)
+    }
+
     var availablePeers: [DiscoveredPeer] {
         peersLock.lock(); defer { peersLock.unlock() }
         return discoveredPeers.values.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
@@ -285,15 +347,33 @@ final class SyncManager: NSObject {
     var availableDeviceEntries: [DeviceEntry] {
         let peers = availablePeers
         let counts = peers.reduce(into: [String: Int]()) { $0[$1.displayName, default: 0] += 1 }
-        return peers.map {
+        var entries: [DeviceEntry] = peers.map {
             DeviceEntry(
                 displayName: (counts[$0.displayName] ?? 0) > 1 ? "\($0.displayName) (\($0.peerId.prefix(6)))" : $0.displayName,
                 peerId: $0.peerId,
                 originalName: $0.displayName,
                 host: $0.host,
-                port: $0.port
+                port: $0.port,
+                isOnline: true,
+                lastSeen: Date()
             )
         }
+        let onlineIds = Set(peers.map(\.peerId))
+        let savedList = loadSavedDevices()
+        for s in savedList where !onlineIds.contains(s.peerId) && s.peerId != peerId {
+            entries.append(
+                DeviceEntry(
+                    displayName: s.displayName,
+                    peerId: s.peerId,
+                    originalName: s.displayName,
+                    host: s.host,
+                    port: s.port,
+                    isOnline: false,
+                    lastSeen: Date(timeIntervalSince1970: s.lastSeen)
+                )
+            )
+        }
+        return entries
     }
     func enumerateLocalIPv4s() -> [String] { Self.localIPv4Addresses() }
 

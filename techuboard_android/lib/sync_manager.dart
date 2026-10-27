@@ -115,6 +115,38 @@ class _DigestCollector implements Sink<Digest> {
   void close() {}
 }
 
+class SavedDevice {
+  final String peerId;
+  final String displayName;
+  final String host;
+  final int port;
+  final DateTime lastSeen;
+
+  const SavedDevice({
+    required this.peerId,
+    required this.displayName,
+    required this.host,
+    required this.port,
+    required this.lastSeen,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'peerId': peerId,
+    'displayName': displayName,
+    'host': host,
+    'port': port,
+    'lastSeen': lastSeen.toIso8601String(),
+  };
+
+  factory SavedDevice.fromJson(Map<String, dynamic> json) => SavedDevice(
+    peerId: json['peerId'] as String? ?? '',
+    displayName: json['displayName'] as String? ?? 'Device',
+    host: json['host'] as String? ?? '',
+    port: (json['port'] as num?)?.toInt() ?? 5566,
+    lastSeen: DateTime.tryParse(json['lastSeen'] as String? ?? '') ?? DateTime.now(),
+  );
+}
+
 class DiscoveredPeer {
   final String peerId;
   final String displayName;
@@ -344,6 +376,132 @@ class SyncManager with WidgetsBindingObserver {
 
   List<String> get availableDeviceNames =>
       availablePeers.map((p) => p.displayName).toList();
+
+  static const String _savedDevicesKey = 'techuboard.saved_devices.v1';
+
+  bool hasSessionWith(String peerId) => _sessions.containsKey(peerId);
+
+  Future<List<SavedDevice>> getSavedDevices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_savedDevicesKey);
+    final list = <SavedDevice>[];
+    final seenIds = <String>{};
+
+    if (raw != null) {
+      try {
+        final decoded = jsonDecode(raw) as List<dynamic>;
+        for (final item in decoded) {
+          if (item is Map<String, dynamic>) {
+            final dev = SavedDevice.fromJson(item);
+            if (dev.peerId.isNotEmpty && !seenIds.contains(dev.peerId)) {
+              seenIds.add(dev.peerId);
+              list.add(dev);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Merge with any cached endpoints or trusted peers
+    try {
+      final cached = await _readEndpointCache();
+      for (final e in cached) {
+        final pid = e['peerId'] as String?;
+        final name = e['name'] as String? ?? 'Device';
+        final h = e['host'] as String? ?? '';
+        final p = (e['port'] as num?)?.toInt() ?? 5566;
+        final ts = (e['ts'] as num?)?.toDouble() ?? 0.0;
+        if (pid != null && pid.isNotEmpty && pid != peerId && !seenIds.contains(pid)) {
+          seenIds.add(pid);
+          list.add(
+            SavedDevice(
+              peerId: pid,
+              displayName: name,
+              host: h,
+              port: p,
+              lastSeen: DateTime.fromMillisecondsSinceEpoch((ts * 1000).toInt()),
+            ),
+          );
+        }
+      }
+    } catch (_) {}
+
+    return list;
+  }
+
+  Future<void> savePairedDevice({
+    required String peerId,
+    required String name,
+    required String host,
+    required int port,
+  }) async {
+    if (peerId.isEmpty || peerId == this.peerId) return;
+    final prefs = await SharedPreferences.getInstance();
+    final current = await getSavedDevices();
+    final updated = current.where((d) => d.peerId != peerId).toList();
+    updated.insert(
+      0,
+      SavedDevice(
+        peerId: peerId,
+        displayName: name,
+        host: host,
+        port: port,
+        lastSeen: DateTime.now(),
+      ),
+    );
+
+    await prefs.setString(
+      _savedDevicesKey,
+      jsonEncode(updated.map((d) => d.toJson()).toList()),
+    );
+
+    // Auto-authorize clipboard sync
+    final auth = prefs.getStringList('clipboardSyncPeerIds') ?? [];
+    if (!auth.contains(peerId)) {
+      auth.add(peerId);
+      await prefs.setStringList('clipboardSyncPeerIds', auth);
+      clipboardSyncPeerIds = auth;
+    }
+  }
+
+  Future<void> removeSavedDevice(String peerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = await getSavedDevices();
+    final updated = current.where((d) => d.peerId != peerId).toList();
+    await prefs.setString(
+      _savedDevicesKey,
+      jsonEncode(updated.map((d) => d.toJson()).toList()),
+    );
+
+    final rawTrusted = prefs.getString('techuboard.trusted_peers.v4');
+    if (rawTrusted != null) {
+      try {
+        final map = Map<String, dynamic>.from(jsonDecode(rawTrusted));
+        map.remove(peerId);
+        await prefs.setString('techuboard.trusted_peers.v4', jsonEncode(map));
+      } catch (_) {}
+    }
+
+    final auth = prefs.getStringList('clipboardSyncPeerIds') ?? [];
+    if (auth.contains(peerId)) {
+      auth.remove(peerId);
+      await prefs.setStringList('clipboardSyncPeerIds', auth);
+      clipboardSyncPeerIds = auth;
+    }
+
+    if (_sessions.containsKey(peerId)) {
+      await _closeSession(peerId, scheduleReconnect: false);
+    }
+  }
+
+  Future<bool> reconnectDevice(SavedDevice dev) async {
+    if (dev.host.isNotEmpty) {
+      await connectManualPeer(dev.host, dev.port);
+    }
+    triggerCrossBandDiscovery(scanFullSubnet: true);
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    return hasSessionWith(dev.peerId);
+  }
 
   /// Snapshot only; the iOS share extension owns its short-lived direct client.
   Future<Map<String, Object>> shareExtensionConfiguration() async {

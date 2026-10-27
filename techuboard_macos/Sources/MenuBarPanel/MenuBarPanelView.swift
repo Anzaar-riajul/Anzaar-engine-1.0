@@ -835,9 +835,21 @@ struct MenuBarPanelView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(model.devices, id: \.peerId) { device in
                                 HStack(spacing: 10) {
-                                    Image(systemName: "iphone.gen3").font(.system(size: 21)).foregroundStyle(.green)
+                                    Image(systemName: "iphone.gen3")
+                                        .font(.system(size: 21))
+                                        .foregroundStyle(device.isOnline ? Color.green : Color.secondary)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(device.displayName).lineLimit(2).font(.system(size: 13, weight: .semibold))
+                                        HStack(spacing: 6) {
+                                            Text(device.displayName)
+                                                .lineLimit(1)
+                                                .font(.system(size: 13, weight: .semibold))
+                                            Circle()
+                                                .fill(device.isOnline ? Color.green : Color.gray.opacity(0.8))
+                                                .frame(width: 6, height: 6)
+                                            Text(device.isOnline ? "Online" : "Disconnected")
+                                                .font(.system(size: 10.5, weight: .medium))
+                                                .foregroundStyle(device.isOnline ? Color.green : Color.secondary)
+                                        }
                                         Text(device.connectionDescription)
                                             .font(AppFont.caption)
                                             .foregroundStyle(.secondary)
@@ -845,10 +857,36 @@ struct MenuBarPanelView: View {
                                             .help(device.connectionDescription)
                                     }
                                     Spacer()
-                                    Button(L10n.t(.panelSendText)) { model.onAction?(.sendText(device.peerId)) }
-                                        .buttonStyle(.bordered).controlSize(.small).fixedSize()
-                                    Button(L10n.t(.panelSendFile)) { model.onAction?(.sendFile(device.peerId)) }
-                                        .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                                    if device.isOnline {
+                                        Button(L10n.t(.panelSendText)) { model.onAction?(.sendText(device.peerId)) }
+                                            .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                                        Button(L10n.t(.panelSendFile)) { model.onAction?(.sendFile(device.peerId)) }
+                                            .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                                    } else {
+                                        Button {
+                                            SyncManager.shared.reconnectDevice(peerId: device.peerId)
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "bolt.fill")
+                                                Text("Connect")
+                                            }
+                                            .font(.system(size: 11, weight: .semibold))
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .controlSize(.small)
+                                        .fixedSize()
+
+                                        Button {
+                                            SyncManager.shared.removeSavedDevice(peerId: device.peerId)
+                                            model.devices = SyncManager.shared.availableDeviceEntries
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Forget Device")
+                                    }
                                 }.padding(.vertical, 8)
                                 Divider()
                             }
@@ -1522,13 +1560,24 @@ struct MenuBarPanelView: View {
 
     private func deviceRow(dev: DeviceEntry) -> some View {
         HStack(spacing: 8) {
-            Circle().fill(Color.green).frame(width: 7, height: 7)
+            Circle().fill(dev.isOnline ? Color.green : Color.gray).frame(width: 7, height: 7)
             Text(dev.displayName)
                 .font(.system(size: 12, weight: .medium))
             Spacer()
             Text(dev.connectionDescription)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+            if !dev.isOnline {
+                Button {
+                    SyncManager.shared.reconnectDevice(peerId: dev.peerId)
+                } label: {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
+                .help("Reconnect")
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
@@ -2009,16 +2058,6 @@ private struct MenuBarPanelHistoryRow: View {
                     }
                     .buttonStyle(.plain)
                     .help("Save as Note")
-
-                    Button(action: copy) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(Color.primary.opacity(0.8))
-                            .frame(width: 22, height: 22)
-                            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Copy to Clipboard")
 
                     Button(action: { onDelete?() }) {
                         Image(systemName: "trash")

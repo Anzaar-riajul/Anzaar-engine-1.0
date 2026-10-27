@@ -12,14 +12,23 @@ struct DiscoveredPeer {
     var isOnline: Bool { true }
 }
 
-struct DeviceEntry {
+struct DeviceEntry: Identifiable, Codable {
+    var id: String { peerId }
     let displayName: String
     let peerId: String
     let originalName: String
     let host: String
     let port: UInt16
+    var isOnline: Bool = true
+    var lastSeen: Date? = nil
 
-    var connectionDescription: String { SyncEndpointDisplay.label(host: host, port: port) }
+    var connectionDescription: String {
+        let endpoint = SyncEndpointDisplay.label(host: host, port: port)
+        if !isOnline {
+            return "Disconnected · \(endpoint)"
+        }
+        return endpoint
+    }
 }
 
 /// Shared by settings and the menu-bar panel; relay IDs are not IP addresses.

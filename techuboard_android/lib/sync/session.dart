@@ -471,6 +471,12 @@ extension SyncSessionMethods on SyncManager {
     _recordPeer(env.peerId, name, host, peerPort);
     if (!host.startsWith('relay:')) {
       await _persistEndpoint(env.peerId, name, host, peerPort);
+      await savePairedDevice(
+        peerId: env.peerId,
+        name: name,
+        host: host,
+        port: peerPort,
+      );
     }
     // Auto-authorize connected peer on Android for seamless clipboard sync
     if (!clipboardSyncPeerIds.contains(env.peerId)) {

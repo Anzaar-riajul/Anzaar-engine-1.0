@@ -55,7 +55,17 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
   String? _inlineDownloadError;
 
   Future<void> _handleInlineUpdate(UpdateInfo info) async {
-    if (_isInlineDownloading || info.downloadUrl == null) return;
+    if (_isInlineDownloading) return;
+    if (info.isDownloaded && info.localApkPath != null) {
+      try {
+        await AppUpdaterService.instance.installLocalApk(info.localApkPath!);
+        return;
+      } catch (e) {
+        debugPrint('Failed to install local apk: $e');
+      }
+    }
+
+    if (info.downloadUrl == null) return;
     setState(() {
       _isInlineDownloading = true;
       _inlineDownloadProgress = 0.0;
@@ -64,10 +74,15 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
     try {
       await AppUpdaterService.instance.downloadAndInstall(
         downloadUrl: info.downloadUrl!,
+        remoteBuild: info.latestBuildNumber,
         onProgress: (p, received, total) {
           if (mounted) setState(() => _inlineDownloadProgress = p);
         },
       );
+      if (mounted) {
+        setState(() => _isInlineDownloading = false);
+      }
+      await AppUpdaterService.instance.checkForUpdate();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -85,14 +100,25 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
       final info = await AppUpdaterService.instance.checkForUpdate();
       if (!mounted) return;
       if (info.hasUpdate) {
-        _showUpdateDialog(info, isForced: false);
-      } else if (info.downloadUrl != null) {
-        _showUpdateDialog(info, isForced: true);
+        _showUpdateDialog(info);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You are using the latest version of Techuboard.'),
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline_rounded, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'আপনার অ্যাপটি ইতিমধ্যে সর্বশেষ সংস্করণে আছে (${info.currentVersion})',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E2638),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -106,7 +132,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
     }
   }
 
-  void _showUpdateDialog(UpdateInfo info, {bool isForced = false}) {
+  void _showUpdateDialog(UpdateInfo info) {
     double progress = 0.0;
     bool isDownloading = false;
 
@@ -116,17 +142,21 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final isReadyToInstall = info.isDownloaded && info.localApkPath != null;
+
             return AlertDialog(
               title: Row(
                 children: [
                   Icon(
-                    isForced ? Icons.check_circle_outline_rounded : Icons.system_update_rounded,
-                    color: isForced ? Colors.green : Colors.blueAccent,
+                    isReadyToInstall ? Icons.check_circle_rounded : Icons.system_update_rounded,
+                    color: isReadyToInstall ? Colors.greenAccent : Colors.blueAccent,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      isForced ? 'Techuboard is Up to Date' : 'Update Available: ${info.latestVersion}',
+                      isReadyToInstall
+                          ? 'আপডেট প্রস্তুত'
+                          : 'Update Available: ${info.latestVersion}',
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -137,9 +167,9 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isForced
-                        ? 'Current Version: ${info.currentVersion}\nLatest on GitHub: ${info.latestVersion}\n\nYou can reinstall the latest release APK if needed.'
-                        : 'A newer version of Techuboard (${info.latestVersion}) is ready to install.',
+                    isReadyToInstall
+                        ? 'নতুন সংস্করণ (${info.latestVersion}) ইতিমধ্যে ডাউনলোড করা আছে। আপনি যেকোনো সময় সরাসরি ইনস্টল করতে পারেন।'
+                        : 'Techuboard-এর একটি নতুন সংস্করণ (${info.latestVersion}) এসেছে।',
                   ),
                   if (info.releaseNotes.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -167,7 +197,7 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                 if (!isDownloading)
                   TextButton(
                     onPressed: () => Navigator.pop(dialogCtx),
-                    child: Text(isForced ? 'Close' : 'Later'),
+                    child: const Text('Later'),
                   ),
                 FilledButton.icon(
                   icon: isDownloading
@@ -176,24 +206,32 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                           height: 14,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.download),
+                      : Icon(isReadyToInstall ? Icons.install_mobile_rounded : Icons.download),
                   label: Text(
                     isDownloading
                         ? 'Downloading...'
-                        : (isForced ? 'Reinstall Latest APK' : 'Update Now'),
+                        : (isReadyToInstall ? 'এখনই ইনস্টল করুন (Install Now)' : 'Update Now'),
                   ),
-                  onPressed: isDownloading || info.downloadUrl == null
+                  onPressed: isDownloading
                       ? null
                       : () async {
+                          if (isReadyToInstall) {
+                            Navigator.pop(dialogCtx);
+                            await AppUpdaterService.instance.installLocalApk(info.localApkPath!);
+                            return;
+                          }
+                          if (info.downloadUrl == null) return;
                           setDialogState(() => isDownloading = true);
                           try {
                             await AppUpdaterService.instance.downloadAndInstall(
                               downloadUrl: info.downloadUrl!,
+                              remoteBuild: info.latestBuildNumber,
                               onProgress: (p, received, total) {
                                 setDialogState(() => progress = p);
                               },
                             );
                             if (mounted) Navigator.pop(dialogCtx);
+                            await AppUpdaterService.instance.checkForUpdate();
                           } catch (e) {
                             setDialogState(() => isDownloading = false);
                             if (mounted) {
@@ -638,28 +676,30 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                                 Container(
                                   width: 10,
                                   height: 10,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFFF3B30),
+                                  decoration: BoxDecoration(
+                                    color: updateInfo.isDownloaded ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'নতুন সংস্করণ উপলব্ধ: ${updateInfo.latestVersion}',
+                                    updateInfo.isDownloaded
+                                        ? 'আপডেট প্রস্তুত: ${updateInfo.latestVersion}'
+                                        : 'নতুন সংস্করণ উপলব্ধ: ${updateInfo.latestVersion}',
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                   ),
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFF3B30).withOpacity(0.15),
+                                    color: (updateInfo.isDownloaded ? const Color(0xFF34C759) : const Color(0xFFFF3B30)).withOpacity(0.15),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Text(
-                                    'UPDATE',
+                                  child: Text(
+                                    updateInfo.isDownloaded ? 'READY TO INSTALL' : 'UPDATE',
                                     style: TextStyle(
-                                      color: Color(0xFFFF3B30),
+                                      color: updateInfo.isDownloaded ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -701,8 +741,12 @@ class _MobileSettingsContentState extends State<MobileSettingsContent>
                                       height: 14,
                                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                     )
-                                  : const Icon(Icons.download, size: 18),
-                              label: Text(_isInlineDownloading ? 'ডাউনলোড হচ্ছে...' : 'এখনই সরাসরি আপডেট করুন'),
+                                  : Icon(updateInfo.isDownloaded ? Icons.install_mobile_rounded : Icons.download, size: 18),
+                              label: Text(
+                                _isInlineDownloading
+                                    ? 'ডাউনলোড হচ্ছে...'
+                                    : (updateInfo.isDownloaded ? 'এখনই ইনস্টল করুন (Install Now)' : 'এখনই ডাউনলোড ও আপডেট করুন'),
+                              ),
                             ),
                           ],
                         ),

@@ -94,9 +94,10 @@ cp "${MACOS_PROJECT_DIR}/Resources/token-prices-seed.json" \
 if [ -f "${MACOS_PROJECT_DIR}/Resources/MenuBarIcon.png" ]; then
   cp "${MACOS_PROJECT_DIR}/Resources"/MenuBarIcon*.png "${STAGED_APP}/Contents/Resources/"
 fi
-if [ -f "${REPO_ROOT}/Techuboard-Android-arm64-v8a-v1.0.32.apk" ]; then
-  cp "${REPO_ROOT}/Techuboard-Android-arm64-v8a-v1.0.32.apk" "${STAGED_APP}/Contents/Resources/Techuboard-Android.apk"
-  printf 'Bundled Techuboard-Android.apk into %s\n' "${STAGED_APP}/Contents/Resources/"
+LATEST_ARM64_APK="$(ls -t "${REPO_ROOT}/dist"/Techuboard-Android-arm64-v8a-*.apk "${REPO_ROOT}"/Techuboard-Android-arm64-v8a-*.apk "${REPO_ROOT}/techuboard_android/Techuboard.apk" 2>/dev/null | head -n 1 || true)"
+if [ -n "${LATEST_ARM64_APK}" ] && [ -f "${LATEST_ARM64_APK}" ]; then
+  cp "${LATEST_ARM64_APK}" "${STAGED_APP}/Contents/Resources/Techuboard-Android.apk"
+  printf 'Bundled %s as Techuboard-Android.apk into %s\n' "$(basename "${LATEST_ARM64_APK}")" "${STAGED_APP}/Contents/Resources/"
 fi
 
 # --------------------------------------------------------------------------

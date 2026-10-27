@@ -195,7 +195,10 @@ extension SyncManager {
             self.pendingReconnects.removeValue(forKey: peerId)?.cancel()
             self.noteSessionEstablished()
             self.recordPeer(peerId: peerId, name: name, host: host, port: port)
-            if !host.hasPrefix("relay:") { self.persistEndpoint(peerId: peerId, name: name, host: host, port: port) }
+            if !host.hasPrefix("relay:") {
+                self.persistEndpoint(peerId: peerId, name: name, host: host, port: port)
+                self.savePairedDevice(peerId: peerId, name: name, host: host, port: port)
+            }
             self.flushPending(for: peerId)
             if !self.clipboardAuthIds().contains(peerId) {
                 PreferencesManager.shared.setClipboardSync(peerId: peerId, enabled: true)
@@ -220,6 +223,7 @@ extension SyncManager {
         let peer = DiscoveredPeer(peerId: peerId, displayName: name, endpoint: endpoint, host: host, port: port)
         peersLock.lock(); discoveredPeers[peerId] = peer; let peers = Array(discoveredPeers.values); peersLock.unlock()
         PreferencesManager.shared.migrateAuthorizedPeerIds(from: peers)
+        savePairedDevice(peerId: peerId, name: name, host: host, port: port)
         notifyPeersChanged()
     }
 

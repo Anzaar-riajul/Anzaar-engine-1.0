@@ -14,6 +14,8 @@ class UpdateInfo {
   final String releaseNotes;
   final String? downloadUrl;
   final String? apkName;
+  final bool isDownloaded;
+  final String? localApkPath;
 
   const UpdateInfo({
     required this.hasUpdate,
@@ -24,6 +26,8 @@ class UpdateInfo {
     required this.releaseNotes,
     this.downloadUrl,
     this.apkName,
+    this.isDownloaded = false,
+    this.localApkPath,
   });
 }
 
@@ -67,13 +71,45 @@ class AppUpdaterService {
     };
   }
 
-  /// Extract build number from GitHub tag like "android-v1.0-85" -> 85
+  /// Extract build number from GitHub tag like "android-v1.0-12396" -> 12396
   int _extractBuildNumber(String tag) {
     final match = RegExp(r'[-v](\d+)$').firstMatch(tag.trim());
     if (match != null) {
       return int.tryParse(match.group(1)!) ?? 0;
     }
     return 0;
+  }
+
+  /// Get target update file location for a specific build
+  Future<File> getUpdateApkFile(int remoteBuild) async {
+    final tempDir = await getTemporaryDirectory();
+    final updatesDir = Directory('${tempDir.path}/updates');
+    if (!await updatesDir.exists()) {
+      await updatesDir.create(recursive: true);
+    }
+    return File('${updatesDir.path}/Techuboard_build_$remoteBuild.apk');
+  }
+
+  /// Returns existing downloaded APK file if it exists and has valid size (>15MB)
+  Future<File?> getExistingDownloadedApk(int remoteBuild) async {
+    if (remoteBuild <= 0) return null;
+    try {
+      final file = await getUpdateApkFile(remoteBuild);
+      if (await file.exists()) {
+        final length = await file.length();
+        if (length > 15 * 1024 * 1024) {
+          return file;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Directly launch the system package installer for an already downloaded APK
+  Future<void> installLocalApk(String filePath) async {
+    await _channel.invokeMethod('installApk', {
+      'filePath': filePath,
+    });
   }
 
   /// Check GitHub releases for a newer APK version.
@@ -165,7 +201,6 @@ class AppUpdaterService {
       final remoteBuild = _extractBuildNumber(rawTag);
       int normalizedCurrent = currentBuildNumber;
       if (normalizedCurrent > 10000 && remoteBuild < 1000) {
-        // Handle legacy pubspec 12284 offset: e.g. 12284 -> 84
         normalizedCurrent = normalizedCurrent % 1000;
       }
       int normalizedRemote = remoteBuild;
@@ -173,11 +208,27 @@ class AppUpdaterService {
         normalizedRemote = normalizedRemote % 1000;
       }
 
-      final isBuildNewer = normalizedRemote > 0 && normalizedRemote > normalizedCurrent;
-      final isVerNewer = _isVersionGreater(rawTag, currentVersionName);
-      final isNewer = isBuildNewer || isVerNewer;
+      // Strict dynamic check:
+      // If remote build number is available, remote build MUST be strictly greater than current build!
+      bool isNewer = false;
+      if (normalizedRemote > 0 && normalizedCurrent > 0) {
+        isNewer = normalizedRemote > normalizedCurrent;
+      } else {
+        isNewer = _isVersionGreater(rawTag, currentVersionName);
+      }
 
       final displayLatest = rawTag.isNotEmpty ? rawTag : 'v$currentVersionName';
+
+      // Check if this newer build has ALREADY been downloaded to local storage
+      bool isDownloaded = false;
+      String? localApkPath;
+      if (isNewer && remoteBuild > 0) {
+        final existingFile = await getExistingDownloadedApk(remoteBuild);
+        if (existingFile != null) {
+          isDownloaded = true;
+          localApkPath = existingFile.path;
+        }
+      }
 
       final info = UpdateInfo(
         hasUpdate: isNewer && apkUrl != null,
@@ -188,6 +239,8 @@ class AppUpdaterService {
         releaseNotes: releaseNotes,
         downloadUrl: apkUrl,
         apkName: apkName,
+        isDownloaded: isDownloaded,
+        localApkPath: localApkPath,
       );
 
       updateNotifier.value = info;
@@ -212,8 +265,18 @@ class AppUpdaterService {
   /// Downloads the APK directly and invokes native package installer.
   Future<void> downloadAndInstall({
     required String downloadUrl,
+    int? remoteBuild,
     required void Function(double progress, int receivedBytes, int totalBytes) onProgress,
   }) async {
+    final targetBuild = remoteBuild ?? _extractBuildNumber(downloadUrl);
+    if (targetBuild > 0) {
+      final existing = await getExistingDownloadedApk(targetBuild);
+      if (existing != null) {
+        await installLocalApk(existing.path);
+        return;
+      }
+    }
+
     final client = HttpClient();
     try {
       final uri = Uri.parse(downloadUrl);
@@ -243,14 +306,14 @@ class AppUpdaterService {
       }
 
       final contentLength = downloadResponse.contentLength;
-      final tempDir = await getTemporaryDirectory();
-      final apkFile = File('${tempDir.path}/techuboard_update.apk');
+      final targetFile = await getUpdateApkFile(targetBuild);
+      final partFile = File('${targetFile.path}.part');
 
-      if (await apkFile.exists()) {
-        await apkFile.delete();
+      if (await partFile.exists()) {
+        await partFile.delete();
       }
 
-      final sink = apkFile.openWrite();
+      final sink = partFile.openWrite();
       int receivedBytes = 0;
 
       await for (final chunk in downloadResponse) {
@@ -264,12 +327,16 @@ class AppUpdaterService {
       await sink.flush();
       await sink.close();
 
-      debugPrint('[AppUpdater] APK downloaded to ${apkFile.path}, launching installer...');
+      // Atomic rename once 100% complete so it persists on disk!
+      if (await targetFile.exists()) {
+        await targetFile.delete();
+      }
+      await partFile.rename(targetFile.path);
+
+      debugPrint('[AppUpdater] APK downloaded to ${targetFile.path}, launching installer...');
 
       // Launch native Android package installer directly
-      await _channel.invokeMethod('installApk', {
-        'filePath': apkFile.path,
-      });
+      await installLocalApk(targetFile.path);
     } finally {
       client.close();
     }
@@ -277,8 +344,12 @@ class AppUpdaterService {
 
   bool _isVersionGreater(String remote, String current) {
     if (remote.isEmpty) return false;
-    final rMatch = RegExp(r'(\d+)\.(\d+)(?:[-.](\d+))?').firstMatch(remote);
-    final cMatch = RegExp(r'(\d+)\.(\d+)(?:[-.](\d+))?').firstMatch(current);
+    // Strip trailing build number like -12396 or -85 so it doesn't inflate the patch version
+    final cleanRemote = remote.replaceAll(RegExp(r'-\d+$'), '');
+    final cleanCurrent = current.replaceAll(RegExp(r'\+\d+$'), '');
+
+    final rMatch = RegExp(r'(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(cleanRemote);
+    final cMatch = RegExp(r'(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(cleanCurrent);
     if (rMatch == null || cMatch == null) return false;
 
     final rMajor = int.tryParse(rMatch.group(1) ?? '0') ?? 0;

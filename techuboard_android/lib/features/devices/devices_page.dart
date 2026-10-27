@@ -30,6 +30,7 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
   String _peerDeviceName = '';
   String _selfDeviceId = '';
   List<Map<String, dynamic>> _members = [];
+  List<SavedDevice> _savedDevices = [];
   Timer? _watchTimer;
 
   @override
@@ -63,6 +64,7 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
 
   Future<void> _loadStatus() async {
     try {
+      final saved = await SyncManager.instance.getSavedDevices();
       final g = await TechuRelayGroups.load();
       final selfId = g.config['device'] as String? ?? SyncManager.instance.peerId;
       final entry = g.config['group_entry'] as Map<String, dynamic>?;
@@ -106,8 +108,25 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
         }
       }
 
+      // Also ensure any live peer in availablePeers is represented in saved list
+      final seenSavedIds = saved.map((d) => d.peerId).toSet();
+      for (final p in SyncManager.instance.availablePeers) {
+        if (!seenSavedIds.contains(p.peerId) && p.peerId != selfId) {
+          saved.add(
+            SavedDevice(
+              peerId: p.peerId,
+              displayName: p.displayName,
+              host: p.host,
+              port: p.port,
+              lastSeen: DateTime.now(),
+            ),
+          );
+        }
+      }
+
       if (mounted) {
         setState(() {
+          _savedDevices = saved;
           _selfDeviceId = selfId;
           _enrolled = isEnrolled;
           _groupName = gName;
@@ -195,6 +214,22 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
               for (final peer in manager.availablePeers) {
                 await manager.setSyncTarget(peer.peerId, enabled: true);
                 await manager.connectManualPeer(peer.host, peer.port);
+                await manager.savePairedDevice(
+                  peerId: peer.peerId,
+                  name: peer.displayName,
+                  host: peer.host,
+                  port: peer.port,
+                );
+              }
+
+              final primaryIp = ips.firstWhere((ip) => ip.isNotEmpty && ip != '127.0.0.1', orElse: () => '');
+              if (primaryIp.isNotEmpty) {
+                await manager.savePairedDevice(
+                  peerId: remotePeerId,
+                  name: remoteName,
+                  host: primaryIp,
+                  port: port,
+                );
               }
 
               // 4. If relay invitation was attached, join relay in background
@@ -472,20 +507,8 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 24),
 
-              if (isConnected) ...[
-                // Connected status card
-                _buildConnectedCard(theme),
-                const SizedBox(height: 24),
-                // Pair another device button
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _scanMacQR,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  icon: const Icon(Icons.qr_code_scanner_rounded),
-                  label: const Text('Pair Another Mac / Device'),
-                ),
+              if (_savedDevices.isNotEmpty || isConnected) ...[
+                _buildPairedDevicesSection(theme),
               ] else ...[
                 // Not paired card
                 _buildNotPairedCard(theme),
@@ -521,47 +544,108 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildConnectedCard(ThemeData theme) {
-    final devName = _peerDeviceName.isNotEmpty ? _peerDeviceName : 'Mac';
+  Widget _buildPairedDevicesSection(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Paired Devices (${_savedDevices.length})',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Refresh / Discover Devices',
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      setState(() => _busy = true);
+                      SyncManager.instance.triggerCrossBandDiscovery(scanFullSubnet: true);
+                      await Future.delayed(const Duration(milliseconds: 1000));
+                      await _loadStatus();
+                      if (mounted) setState(() => _busy = false);
+                    },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        for (final dev in _savedDevices)
+          _buildSavedDeviceCard(theme, dev),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _scanMacQR,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(50),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          icon: const Icon(Icons.qr_code_scanner_rounded),
+          label: const Text('Pair Another Mac / Device'),
+        ),
+        const SizedBox(height: 10),
+        Center(
+          child: TextButton.icon(
+            onPressed: _busy ? null : _enterCodeDialog,
+            icon: const Icon(Icons.pin_rounded, size: 18),
+            label: const Text('Enter 6-Digit Code'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSavedDeviceCard(ThemeData theme, SavedDevice dev) {
+    final isOnline = SyncManager.instance.hasSessionWith(dev.peerId) ||
+        SyncManager.instance.availablePeers.any((p) => p.peerId == dev.peerId);
 
     return Card(
       elevation: 0,
-      color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+      margin: const EdgeInsets.only(bottom: 14),
+      color: isOnline
+          ? theme.colorScheme.primaryContainer.withOpacity(0.3)
+          : theme.colorScheme.surfaceVariant.withOpacity(0.3),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         side: BorderSide(
-          color: theme.colorScheme.primary.withOpacity(0.3),
+          color: isOnline
+              ? theme.colorScheme.primary.withOpacity(0.3)
+              : theme.colorScheme.outline.withOpacity(0.2),
           width: 1.5,
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
                 Container(
-                  width: 52,
-                  height: 52,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2E7D32).withOpacity(0.15),
+                    color: isOnline
+                        ? const Color(0xFF2E7D32).withOpacity(0.15)
+                        : Colors.grey.withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.laptop_mac_rounded,
-                    color: Color(0xFF2E7D32),
-                    size: 28,
+                    color: isOnline ? const Color(0xFF2E7D32) : Colors.grey,
+                    size: 26,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        devName,
-                        style: theme.textTheme.titleLarge?.copyWith(
+                        dev.displayName,
+                        style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -571,18 +655,18 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
                           Container(
                             width: 8,
                             height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF2E7D32),
+                            decoration: BoxDecoration(
+                              color: isOnline ? const Color(0xFF2E7D32) : Colors.grey,
                               shape: BoxShape.circle,
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Text(
-                            'Connected · Live Synced',
+                          Text(
+                            isOnline ? 'Connected · Live Synced' : 'Disconnected · Offline',
                             style: TextStyle(
-                              color: Color(0xFF2E7D32),
+                              color: isOnline ? const Color(0xFF2E7D32) : Colors.grey,
                               fontWeight: FontWeight.w600,
-                              fontSize: 13,
+                              fontSize: 12.5,
                             ),
                           ),
                         ],
@@ -590,23 +674,35 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Forget Device',
+                  icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                  color: theme.colorScheme.error,
+                  onPressed: _busy ? null : () => _confirmForgetDevice(dev),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.flash_on_rounded, color: Colors.amber, size: 20),
-                  const SizedBox(width: 10),
+                  Icon(
+                    isOnline ? Icons.flash_on_rounded : Icons.info_outline_rounded,
+                    color: isOnline ? Colors.amber : Colors.grey,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Clipboard is syncing automatically in real-time.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      isOnline
+                          ? 'Real-time clipboard synchronization active.'
+                          : 'Endpoint: ${dev.host}:${dev.port}',
+                      style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -614,22 +710,136 @@ class _DevicesPageState extends State<DevicesPage> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-            FilledButton.tonalIcon(
-              onPressed: _busy ? null : _unpair,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                foregroundColor: theme.colorScheme.error,
-                backgroundColor: theme.colorScheme.errorContainer.withOpacity(0.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            const SizedBox(height: 14),
+            if (!isOnline)
+              FilledButton.icon(
+                onPressed: _busy ? null : () => _reconnectSavedDevice(dev),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44),
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.bolt_rounded, size: 20),
+                label: const Text(
+                  'Connect (পুনরায় কানেক্ট করুন)',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              )
+            else
+              FilledButton.tonalIcon(
+                onPressed: _busy ? null : () => _disconnectDevice(dev),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44),
+                  foregroundColor: theme.colorScheme.error,
+                  backgroundColor: theme.colorScheme.errorContainer.withOpacity(0.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.link_off_rounded, size: 20),
+                label: const Text('Disconnect'),
               ),
-              icon: const Icon(Icons.link_off_rounded),
-              label: const Text('Disconnect / Unpair'),
-            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _reconnectSavedDevice(SavedDevice dev) async {
+    setState(() {
+      _busy = true;
+      _busyMessage = '${dev.displayName} এর সাথে কানেক্ট করা হচ্ছে...';
+    });
+
+    try {
+      final success = await SyncManager.instance.reconnectDevice(dev);
+      await _loadStatus();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  success ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    success
+                        ? '${dev.displayName} এর সাথে সফলভাবে কানেক্ট হয়েছে!'
+                        : 'কানেক্ট করার চেষ্টা সম্পন্ন হয়েছে। একই Wi-Fi তে থাকলে স্বয়ংক্রিয়ভাবে সিঙ্ক শুরু হবে।',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: success ? const Color(0xFF2E7D32) : const Color(0xFF1E2638),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyMessage = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _confirmForgetDevice(SavedDevice dev) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Forget Device?'),
+        content: Text('Are you sure you want to forget ${dev.displayName}? You will need to pair again to sync.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Forget'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await SyncManager.instance.removeSavedDevice(dev.peerId);
+      await _loadStatus();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${dev.displayName} removed.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _disconnectDevice(SavedDevice dev) async {
+    setState(() {
+      _busy = true;
+      _busyMessage = 'Disconnecting...';
+    });
+    try {
+      await SyncManager.instance.setSyncTarget(dev.peerId, enabled: false);
+      await _loadStatus();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyMessage = '';
+        });
+      }
+    }
   }
 
   Widget _buildNotPairedCard(ThemeData theme) {

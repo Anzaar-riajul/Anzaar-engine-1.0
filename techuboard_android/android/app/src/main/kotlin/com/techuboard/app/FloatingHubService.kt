@@ -24,6 +24,9 @@ import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Log
 import android.view.*
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.*
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -174,9 +177,9 @@ class FloatingHubService : Service() {
         val pill = FrameLayout(this)
         val pillBg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            colors = intArrayOf(Color.parseColor("#1262F3"), Color.parseColor("#0A47B8"))
+            colors = intArrayOf(Color.parseColor("#475569"), Color.parseColor("#334155"))
             gradientType = GradientDrawable.LINEAR_GRADIENT
-            setStroke(dpToPx(1.5f.toInt().coerceAtLeast(1)), Color.parseColor("#80ABC7FF"))
+            setStroke(dpToPx(1.5f.toInt().coerceAtLeast(1)), Color.parseColor("#64748B"))
         }
         pill.background = pillBg
         pill.elevation = dpToPx(8).toFloat()
@@ -420,7 +423,37 @@ class FloatingHubService : Service() {
     private fun collapse() {
         if (!isExpanded) return
         isExpanded = false
-        removeExpandedView()
+
+        val view = expandedView
+        if (view != null) {
+            view.animate()
+                .scaleX(0.85f)
+                .scaleY(0.85f)
+                .alpha(0f)
+                .translationY(dpToPx(-16).toFloat())
+                .setDuration(180)
+                .setInterpolator(AccelerateInterpolator())
+                .withEndAction {
+                    removeExpandedView()
+                }
+                .start()
+        } else {
+            removeExpandedView()
+        }
+
+        pillView?.let { pill ->
+            pill.visibility = View.VISIBLE
+            pill.scaleX = 0.75f
+            pill.scaleY = 0.75f
+            pill.alpha = 0f
+            pill.animate()
+                .scaleX(1.0f)
+                .scaleY(1.0f)
+                .alpha(1.0f)
+                .setDuration(240)
+                .setInterpolator(OvershootInterpolator(1.2f))
+                .start()
+        }
         schedulePillDim()
     }
 
@@ -438,6 +471,19 @@ class FloatingHubService : Service() {
         isExpanded = true
         resetPillOpacity()
         vibrate(strong = false)
+
+        pillView?.let { pill ->
+            pill.animate()
+                .scaleX(0.82f)
+                .scaleY(0.82f)
+                .alpha(0f)
+                .setDuration(160)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction {
+                    pill.visibility = View.GONE
+                }
+                .start()
+        }
 
         // Custom root layout to intercept Android Back Button & Back Gestures
         val root = object : FrameLayout(this) {
@@ -461,70 +507,42 @@ class FloatingHubService : Service() {
 
         val mainContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14))
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(10))
         }
         root.addView(mainContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-
-        // 1. Header (Brand Logo + Title + Close Button)
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dpToPx(10))
-        }
-
-        val logoIcon = TextView(this).apply {
-            text = "⚡"
-            textSize = 15f
-            setPadding(0, 0, dpToPx(6), 0)
-        }
-
-        val brandTitle = TextView(this).apply {
-            text = "Techuboard"
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            paint.isFakeBoldText = true
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        }
-
-        val closeBtn = TextView(this).apply {
-            text = "✕"
-            setTextColor(Color.parseColor("#8E99A8"))
-            textSize = 16f
-            setPadding(dpToPx(8), dpToPx(4), dpToPx(4), dpToPx(4))
-            setOnClickListener { collapse() }
-        }
-
-        header.addView(logoIcon)
-        header.addView(brandTitle)
-        header.addView(closeBtn)
-        mainContainer.addView(header)
 
         // Dynamic Counts
         val allCount = getClipboardCount()
         val notesCount = getNotesCount()
         val devicesCount = getDevicesCount()
 
-        // 2. Mac-Style 3-Segment Tab Bar (All - Notes - Devices) directly under header
+        // 1. Top Bar: Tabs with narrow gap + compact close button
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dpToPx(6))
+        }
+
         val tabBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             val tbBg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpToPx(10).toFloat()
+                cornerRadius = dpToPx(8).toFloat()
                 setColor(Color.parseColor("#161C26"))
                 setStroke(dpToPx(1), Color.parseColor("#252E3E"))
             }
             background = tbBg
-            setPadding(dpToPx(3), dpToPx(3), dpToPx(3), dpToPx(3))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(34)).apply {
-                setMargins(0, 0, 0, dpToPx(8))
-            }
+            setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
+            layoutParams = LinearLayout.LayoutParams(0, dpToPx(32), 1f)
         }
 
         val btnTabAll = TextView(this)
         val btnTabNotes = TextView(this)
         val btnTabDevices = TextView(this)
 
-        val tabWeightParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        val tabWeightParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+            setMargins(dpToPx(1), 0, dpToPx(1), 0)
+        }
         btnTabAll.apply { layoutParams = tabWeightParams }
         btnTabNotes.apply { layoutParams = tabWeightParams }
         btnTabDevices.apply { layoutParams = tabWeightParams }
@@ -532,7 +550,26 @@ class FloatingHubService : Service() {
         tabBar.addView(btnTabAll)
         tabBar.addView(btnTabNotes)
         tabBar.addView(btnTabDevices)
-        mainContainer.addView(tabBar)
+        topBar.addView(tabBar)
+
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(Color.parseColor("#8E99A8"))
+            textSize = 13f
+            gravity = Gravity.CENTER
+            val cBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(6).toFloat()
+                setColor(Color.parseColor("#1B2230"))
+            }
+            background = cBg
+            layoutParams = LinearLayout.LayoutParams(dpToPx(28), dpToPx(28)).apply {
+                setMargins(dpToPx(6), 0, 0, 0)
+            }
+            setOnClickListener { collapse() }
+        }
+        topBar.addView(closeBtn)
+        mainContainer.addView(topBar)
 
         // 3. Expandable Filter Chips & Search Bar Row
         val filterAndSearchContainer = FrameLayout(this).apply {
@@ -662,6 +699,22 @@ class FloatingHubService : Service() {
         }
         mainContainer.addView(scrollView)
 
+        // Bottom Footer: Techuboard branding (no emojis, minimal sleek styling)
+        val footerLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dpToPx(6), 0, dpToPx(2))
+        }
+        val footerLabel = TextView(this).apply {
+            text = "Techuboard"
+            setTextColor(Color.parseColor("#475569"))
+            textSize = 10.5f
+            paint.isFakeBoldText = true
+            letterSpacing = 0.08f
+        }
+        footerLayout.addView(footerLabel)
+        mainContainer.addView(footerLayout)
+
         fun updateTabsUI() {
             val tabs = listOf(
                 Triple(btnTabAll, Tab.ALL, "📋 All ($allCount)"),
@@ -749,9 +802,9 @@ class FloatingHubService : Service() {
         val sw = resources.displayMetrics.widthPixels
         val sh = resources.displayMetrics.heightPixels
 
-        // Sleek & compact floating hub window dimensions
-        val panelWidth = (sw * 0.86).toInt().coerceAtMost(dpToPx(350))
-        val panelHeight = (sh * 0.52).toInt().coerceIn(dpToPx(360), dpToPx(430))
+        // Sleek & compact floating hub window dimensions (reduced width, increased height)
+        val panelWidth = (sw * 0.80).toInt().coerceAtMost(dpToPx(320))
+        val panelHeight = (sh * 0.58).toInt().coerceIn(dpToPx(430), dpToPx(490))
 
         val expParams = WindowManager.LayoutParams(
             panelWidth,
@@ -773,7 +826,19 @@ class FloatingHubService : Service() {
 
         expandedView = root
         try {
+            root.scaleX = 0.86f
+            root.scaleY = 0.86f
+            root.alpha = 0f
+            root.translationY = dpToPx(-14).toFloat()
             windowManager?.addView(root, expParams)
+            root.animate()
+                .scaleX(1.0f)
+                .scaleY(1.0f)
+                .alpha(1.0f)
+                .translationY(0f)
+                .setDuration(240)
+                .setInterpolator(OvershootInterpolator(1.08f))
+                .start()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add expandedView", e)
         }
@@ -885,6 +950,19 @@ class FloatingHubService : Service() {
                 }
             }
 
+            // macOS-Style Left Blue Accent Indicator Line
+            val leftIndicator = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dpToPx(3), dpToPx(24)).apply {
+                    setMargins(0, 0, dpToPx(6), 0)
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(2).toFloat()
+                    setColor(Color.parseColor("#38BDF8"))
+                }
+            }
+            row.addView(leftIndicator)
+
             // Left: Thumbnail for image or Pin icon
             if (isImage) {
                 val thumbView = ImageView(this).apply {
@@ -983,57 +1061,70 @@ class FloatingHubService : Service() {
                 }
             }
 
-            // Right: Compact action buttons (⚡ Paste, 📋 Copy, 📌 Pin, 🗑️ Delete)
+            // Right: macOS-Style Action Buttons (📌 Pin, 📄 Save Note, 🗑️ Delete) - No copy icon
             val actions = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
 
-            val btnPaste = TextView(this).apply {
-                text = "⚡"
-                textSize = 12.5f
-                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
-                setOnClickListener {
-                    if (isImage) {
-                        copyToClipboard(clip.value, isImage = true)
-                    } else {
-                        executePaste(clip.value)
-                    }
-                }
-            }
-
-            val btnCopy = TextView(this).apply {
-                text = "📋"
-                textSize = 12f
-                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
-                setOnClickListener {
-                    copyToClipboard(clip.value, isImage = isImage)
-                }
-            }
-
             val btnPin = TextView(this).apply {
-                text = if (clip.isPinned) "⭐" else "📌"
+                text = "📌"
                 textSize = 11.5f
-                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
+                val pBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(5).toFloat()
+                    setColor(if (clip.isPinned) Color.parseColor("#263548") else Color.parseColor("#1C2430"))
+                }
+                background = pBg
+                setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, dpToPx(4), 0)
+                }
+                layoutParams = lp
                 setOnClickListener {
                     togglePinClip(clip.hash)
                     expand()
                 }
             }
 
+            val btnNote = TextView(this).apply {
+                text = "📄"
+                textSize = 11.5f
+                val nBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(5).toFloat()
+                    setColor(Color.parseColor("#1C2430"))
+                }
+                background = nBg
+                setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, dpToPx(4), 0)
+                }
+                layoutParams = lp
+                setOnClickListener {
+                    saveClipToNotes(clip.value)
+                }
+            }
+
             val btnDelete = TextView(this).apply {
                 text = "🗑️"
                 textSize = 11.5f
-                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
+                val dBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(5).toFloat()
+                    setColor(Color.parseColor("#2A1C20"))
+                    setStroke(dpToPx(1), Color.parseColor("#5A2328"))
+                }
+                background = dBg
+                setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
                 setOnClickListener {
                     deleteClip(clip.id)
                     expand()
                 }
             }
 
-            actions.addView(btnPaste)
-            actions.addView(btnCopy)
             actions.addView(btnPin)
+            actions.addView(btnNote)
             actions.addView(btnDelete)
             row.addView(actions)
 
@@ -1149,11 +1240,23 @@ class FloatingHubService : Service() {
                 }
             }
 
-            // Top meta
+            // Top meta with macOS-Style Blue Accent Indicator
             val metaRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
+
+            val leftIndicator = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dpToPx(3), dpToPx(16)).apply {
+                    setMargins(0, 0, dpToPx(6), 0)
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(2).toFloat()
+                    setColor(Color.parseColor("#38BDF8"))
+                }
+            }
+            metaRow.addView(leftIndicator)
 
             val folderBadge = TextView(this).apply {
                 text = note.folderTitle.uppercase()
@@ -1187,53 +1290,61 @@ class FloatingHubService : Service() {
             }
             card.addView(bodyTv)
 
-            // Actions row
+            // Actions row: macOS-Style (✏️ Edit, 🗑️ Delete) - No copy icon
             val actionRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
 
-            val btnPaste = TextView(this).apply {
-                text = "⚡ Paste"
-                setTextColor(Color.WHITE)
+            val btnEdit = TextView(this).apply {
+                text = "✏️"
                 textSize = 11.5f
-                paint.isFakeBoldText = true
-                val btnBg = GradientDrawable().apply {
+                val eBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = dpToPx(6).toFloat()
-                    setColor(Color.parseColor("#0284C7"))
+                    cornerRadius = dpToPx(5).toFloat()
+                    setColor(Color.parseColor("#1C2430"))
                 }
-                background = btnBg
-                setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
-                setOnClickListener {
-                    executePaste(note.content)
+                background = eBg
+                setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, dpToPx(4), 0)
                 }
-            }
-
-            val btnCopy = TextView(this).apply {
-                text = "📋 Copy"
-                setTextColor(Color.parseColor("#CBD5E1"))
-                textSize = 11f
-                setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+                layoutParams = lp
                 setOnClickListener {
-                    copyToClipboard(note.content)
+                    val intent = Intent(this@FloatingHubService, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        putExtra("open_tab", "notes")
+                    }
+                    startActivity(intent)
+                    collapse()
                 }
             }
 
             val btnDelete = TextView(this).apply {
                 text = "🗑️"
-                textSize = 12f
-                setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+                textSize = 11.5f
+                val dBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(5).toFloat()
+                    setColor(Color.parseColor("#2A1C20"))
+                    setStroke(dpToPx(1), Color.parseColor("#5A2328"))
+                }
+                background = dBg
+                setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
                 setOnClickListener {
                     deleteNote(note.id)
                     expand() // Refresh
                 }
             }
 
-            actionRow.addView(btnPaste)
-            actionRow.addView(btnCopy)
+            actionRow.addView(btnEdit)
             actionRow.addView(btnDelete)
             card.addView(actionRow)
+
+            card.setOnClickListener {
+                copyToClipboard(note.content)
+                Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
 
             container.addView(card)
         }
@@ -1389,10 +1500,41 @@ class FloatingHubService : Service() {
                 nameCol.addView(nameTv)
                 nameCol.addView(statusTv)
 
+                val btnActions = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+
+                val btnConnect = TextView(this).apply {
+                    text = "⚡ Connect"
+                    setTextColor(Color.parseColor("#38BDF8"))
+                    textSize = 11f
+                    paint.isFakeBoldText = true
+                    val cBg = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dpToPx(6).toFloat()
+                        setColor(Color.parseColor("#15273B"))
+                        setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+                    }
+                    background = cBg
+                    setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(0, 0, dpToPx(6), 0)
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        val intent = Intent(this@FloatingHubService, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        }
+                        startActivity(intent)
+                        collapse()
+                    }
+                }
+
                 val btnUnpair = TextView(this).apply {
                     text = "Unpair"
                     setTextColor(Color.parseColor("#EF4444"))
-                    textSize = 11.5f
+                    textSize = 11f
                     paint.isFakeBoldText = true
                     val bBg = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
@@ -1401,16 +1543,19 @@ class FloatingHubService : Service() {
                         setStroke(dpToPx(1), Color.parseColor("#7F1D1D"))
                     }
                     background = bBg
-                    setPadding(dpToPx(10), dpToPx(5), dpToPx(10), dpToPx(5))
+                    setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
                     setOnClickListener {
                         unpairDevice(dev.id)
                         expand() // Refresh
                     }
                 }
 
+                btnActions.addView(btnConnect)
+                btnActions.addView(btnUnpair)
+
                 row.addView(devIcon)
                 row.addView(nameCol)
-                row.addView(btnUnpair)
+                row.addView(btnActions)
                 devCard.addView(row)
                 container.addView(devCard)
             }
@@ -1711,10 +1856,65 @@ class FloatingHubService : Service() {
         }
     }
 
+    private fun saveClipToNotes(clipValue: String) {
+        val db = getReadableDatabase() ?: return
+        try {
+            var folderId = ""
+            val cursor = db.rawQuery("SELECT id FROM snippet_folders WHERE is_enabled = 1 ORDER BY created_at ASC LIMIT 1", null)
+            if (cursor.moveToFirst()) {
+                folderId = cursor.getString(0)
+            }
+            cursor.close()
+
+            if (folderId.isEmpty()) {
+                folderId = UUID.randomUUID().toString()
+                db.execSQL(
+                    "INSERT OR IGNORE INTO snippet_folders (id, title, is_enabled, created_at, updated_at) VALUES (?, 'General', 1, ?, ?)",
+                    arrayOf(folderId, System.currentTimeMillis(), System.currentTimeMillis())
+                )
+            }
+
+            val snippetId = UUID.randomUUID().toString()
+            val title = if (clipValue.length > 30) clipValue.take(30).replace("\n", " ").trim() else clipValue.replace("\n", " ").trim()
+            val now = System.currentTimeMillis()
+            db.execSQL(
+                "INSERT INTO snippets (id, folder_id, title, content, created_at, updated_at, sort_order) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                arrayOf(snippetId, folderId, if (title.isEmpty()) "Note" else title, clipValue, now, now)
+            )
+            Toast.makeText(this, "Saved as Note", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving clip to notes: $e")
+        } finally {
+            try { db.close() } catch (_: Exception) {}
+        }
+    }
+
     private fun fetchPairedDevices(): List<DeviceItem> {
         val result = mutableListOf<DeviceItem>()
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         val seenIds = mutableSetOf<String>()
+
+        val savedRaw = prefs.getString("flutter.techuboard.saved_devices.v1", null)
+        if (savedRaw != null) {
+            try {
+                val arr = JSONArray(savedRaw)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val pid = obj.optString("peerId", "")
+                    if (pid.isNotEmpty() && !seenIds.contains(pid)) {
+                        seenIds.add(pid)
+                        val name = obj.optString("displayName", "Mac Device")
+                        val isMac = name.contains("Mac", ignoreCase = true) || name.contains("Apple", ignoreCase = true)
+                        val host = obj.optString("host", "")
+                        val port = obj.optInt("port", 5566)
+                        result.add(DeviceItem(pid, name, isMac, isConnected = true, pairedAt = if (host.isNotEmpty()) "$host:$port" else "Saved"))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error parsing saved devices: $e")
+            }
+        }
+
         val raw = prefs.getString("flutter.techuboard.trusted_peers.v4", null)
         if (raw != null) {
             try {
@@ -1722,12 +1922,14 @@ class FloatingHubService : Service() {
                 val keys = json.keys()
                 while (keys.hasNext()) {
                     val peerId = keys.next()
-                    seenIds.add(peerId)
-                    val obj = json.getJSONObject(peerId)
-                    val name = obj.optString("name", "Mac Device")
-                    val isMac = name.contains("Mac", ignoreCase = true) || name.contains("Apple", ignoreCase = true)
-                    val pairedAt = obj.optString("paired_at", "Recently")
-                    result.add(DeviceItem(peerId, name, isMac, isConnected = true, pairedAt = pairedAt))
+                    if (!seenIds.contains(peerId)) {
+                        seenIds.add(peerId)
+                        val obj = json.getJSONObject(peerId)
+                        val name = obj.optString("name", "Mac Device")
+                        val isMac = name.contains("Mac", ignoreCase = true) || name.contains("Apple", ignoreCase = true)
+                        val pairedAt = obj.optString("paired_at", "Recently")
+                        result.add(DeviceItem(peerId, name, isMac, isConnected = true, pairedAt = pairedAt))
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Error parsing trusted peers: $e")
@@ -1750,11 +1952,25 @@ class FloatingHubService : Service() {
 
     private fun unpairDevice(peerId: String) {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-        val raw = prefs.getString("flutter.techuboard.trusted_peers.v4", null) ?: return
         try {
-            val json = JSONObject(raw)
-            json.remove(peerId)
-            prefs.edit().putString("flutter.techuboard.trusted_peers.v4", json.toString()).apply()
+            val savedRaw = prefs.getString("flutter.techuboard.saved_devices.v1", null)
+            if (savedRaw != null) {
+                val arr = JSONArray(savedRaw)
+                val newArr = JSONArray()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    if (obj.optString("peerId") != peerId) {
+                        newArr.put(obj)
+                    }
+                }
+                prefs.edit().putString("flutter.techuboard.saved_devices.v1", newArr.toString()).apply()
+            }
+            val raw = prefs.getString("flutter.techuboard.trusted_peers.v4", null)
+            if (raw != null) {
+                val json = JSONObject(raw)
+                json.remove(peerId)
+                prefs.edit().putString("flutter.techuboard.trusted_peers.v4", json.toString()).apply()
+            }
             Toast.makeText(this, "Device unpaired", Toast.LENGTH_SHORT).show()
         } catch (_: Exception) {}
     }

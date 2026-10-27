@@ -574,8 +574,16 @@ class _SnippetsPageState extends State<SnippetsPage> {
                                 ListTile(
                                   dense: true,
                                   contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
+                                    horizontal: 16,
                                     vertical: 2,
+                                  ),
+                                  leading: Container(
+                                    width: 3.5,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.primary,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
                                   ),
                                   title: Text(
                                     snippet.title,
@@ -588,13 +596,43 @@ class _SnippetsPageState extends State<SnippetsPage> {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  trailing: IconButton(
-                                    icon: const Icon(
-                                      Icons.copy_rounded,
-                                      size: 18,
-                                    ),
-                                    tooltip: 'Copy',
-                                    onPressed: () => _copySnippet(snippet),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => _showCreateOrEditSnippetDialog(folder.id, snippet),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(5),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
+                                            borderRadius: BorderRadius.circular(5),
+                                          ),
+                                          child: Icon(
+                                            Icons.edit_rounded,
+                                            size: 16,
+                                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => SnippetRepository.instance.deleteSnippet(snippet.id),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.redAccent.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(5),
+                                          ),
+                                          child: const Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 16,
+                                            color: Colors.redAccent,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   onTap: () => _copySnippet(snippet),
                                   onLongPress: () {

@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../app_localizations.dart';
 import '../clipboard_manager.dart';
+import '../database/snippet_repository.dart';
 import '../features/history/history_feed_controller.dart';
 import '../models.dart';
 import '../sync_manager.dart';
@@ -50,10 +54,64 @@ class _PaginatedClipboardHistoryListState
   HistoryEntry? _copied;
   bool _isSelectMode = false;
   final Set<HistoryEntry> _selectedEntries = {};
+  Set<String> _pinnedHashes = {};
+
+  Future<void> _loadPinnedHashes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('techuboard.pinned_clips');
+      if (raw != null) {
+        final list = (jsonDecode(raw) as List).cast<String>();
+        if (mounted) setState(() => _pinnedHashes = list.toSet());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _togglePin(HistoryEntry entry) async {
+    final hash = entry.contentHash;
+    if (hash == null || hash.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      if (_pinnedHashes.contains(hash)) {
+        _pinnedHashes.remove(hash);
+      } else {
+        _pinnedHashes.add(hash);
+      }
+    });
+    await prefs.setString('techuboard.pinned_clips', jsonEncode(_pinnedHashes.toList()));
+  }
+
+  Future<void> _saveAsNote(HistoryEntry entry) async {
+    try {
+      final folders = await SnippetRepository.instance.fetchAllFolders();
+      final folderId = folders.isNotEmpty ? folders.first.id : 'default';
+      final text = entry.item.value.toString();
+      final title = text.length > 30 ? text.substring(0, 30).replaceAll('\n', ' ').trim() : text.replaceAll('\n', ' ').trim();
+      await SnippetRepository.instance.saveSnippet(
+        SnippetItem(
+          id: const Uuid().v4(),
+          folderId: folderId,
+          title: title.isEmpty ? 'Note' : title,
+          content: text,
+          updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved as Note (নোটে সংরক্ষণ করা হয়েছে)'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (_) {}
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadPinnedHashes();
     _feed =
         widget.controller ??
         HistoryFeedController(ClipboardManager.instance.fetchPage);
@@ -871,6 +929,7 @@ class _PaginatedClipboardHistoryListState
                         _dateLabel(visibleEntries[index - 1].date) != label;
                     final title = entry.item.title;
                     final isSelected = _selectedEntries.contains(entry);
+                    final isPinned = entry.contentHash != null && _pinnedHashes.contains(entry.contentHash);
 
                     final badge = _getBadgeInfo(entry);
 
@@ -933,6 +992,15 @@ class _PaginatedClipboardHistoryListState
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 child: Row(
                                   children: [
+                                    Container(
+                                      width: 3.5,
+                                      height: 28,
+                                      margin: const EdgeInsets.only(right: 8),
+                                      decoration: BoxDecoration(
+                                        color: colors.primary,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
                                     if (_isSelectMode) ...[
                                       Icon(
                                         isSelected
@@ -1038,29 +1106,51 @@ class _PaginatedClipboardHistoryListState
                                     ),
                                     if (!_isSelectMode) ...[
                                       InkWell(
-                                        borderRadius: BorderRadius.circular(12),
-                                        onTap: () => _copy(entry),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                          child: AnimatedSwitcher(
-                                            duration: const Duration(milliseconds: 180),
-                                            child: Icon(
-                                              _copied == entry ? Icons.check_rounded : Icons.copy_rounded,
-                                              key: ValueKey(_copied == entry),
-                                              size: 17,
-                                              color: colors.primary,
-                                            ),
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => _togglePin(entry),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4.5),
+                                          decoration: BoxDecoration(
+                                            color: isPinned ? colors.primary.withOpacity(0.15) : colors.onSurface.withOpacity(0.06),
+                                            borderRadius: BorderRadius.circular(5),
+                                          ),
+                                          child: Icon(
+                                            isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                                            size: 16,
+                                            color: isPinned ? colors.primary : colors.onSurfaceVariant,
                                           ),
                                         ),
                                       ),
+                                      const SizedBox(width: 4),
                                       InkWell(
-                                        borderRadius: BorderRadius.circular(12),
-                                        onTap: () => _confirmDeleteSingle(entry),
-                                        child: const Padding(
-                                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => _saveAsNote(entry),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4.5),
+                                          decoration: BoxDecoration(
+                                            color: colors.onSurface.withOpacity(0.06),
+                                            borderRadius: BorderRadius.circular(5),
+                                          ),
                                           child: Icon(
+                                            Icons.note_add_outlined,
+                                            size: 16,
+                                            color: colors.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => _confirmDeleteSingle(entry),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4.5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.redAccent.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(5),
+                                          ),
+                                          child: const Icon(
                                             Icons.delete_outline_rounded,
-                                            size: 17,
+                                            size: 16,
                                             color: Colors.redAccent,
                                           ),
                                         ),
