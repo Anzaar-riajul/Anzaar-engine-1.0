@@ -194,6 +194,12 @@ extension SyncDiscoveryMethods on SyncManager {
       if (!userInitiated && !auth.contains(id)) continue;
       add(host, peerPort, id, userInitiated ? 'scan' : 'cache');
     }
+    // Saved paired devices: always dial to ensure immediate reconnect
+    for (final dev in await getSavedDevices()) {
+      if (!_isRunCurrent(epoch)) return;
+      if (dev.peerId == peerId || dev.host.isEmpty || dev.port <= 0) continue;
+      add(dev.host, dev.port, dev.peerId, userInitiated ? 'scan' : 'saved_device');
+    }
     final prefs = await SharedPreferences.getInstance();
     if (!_isRunCurrent(epoch)) return;
     for (final entry in prefs.getStringList('manualSyncPeers') ?? <String>[]) {

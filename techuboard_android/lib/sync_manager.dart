@@ -503,6 +503,32 @@ class SyncManager with WidgetsBindingObserver {
     return hasSessionWith(dev.peerId);
   }
 
+  /// Proactively dials all saved devices on startup or after network re-bind.
+  /// If any saved device is disconnected, triggers an active subnet scan to re-locate it.
+  Future<void> autoReconnectSavedDevices() async {
+    final epoch = _runLifecycle.epoch;
+    if (!_isRunCurrent(epoch)) return;
+    final saved = await getSavedDevices();
+    final connected = _sessions.keys.toSet();
+    bool hasMissing = false;
+
+    for (final dev in saved) {
+      if (!_isRunCurrent(epoch)) return;
+      if (dev.peerId == peerId || connected.contains(dev.peerId)) continue;
+      hasMissing = true;
+      if (dev.host.isNotEmpty && dev.port > 0) {
+        appLog(
+          'Auto-reconnecting saved device ${dev.displayName} (${dev.peerId.substring(0, dev.peerId.length.clamp(0, 8))}) @ ${dev.host}:${dev.port}',
+        );
+        unawaited(_dial(dev.host, dev.port, reason: 'saved_device', peerId: dev.peerId, runEpoch: epoch));
+      }
+    }
+
+    if (hasMissing && _isRunCurrent(epoch)) {
+      triggerCrossBandDiscovery(scanFullSubnet: true);
+    }
+  }
+
   /// Snapshot only; the iOS share extension owns its short-lived direct client.
   Future<Map<String, Object>> shareExtensionConfiguration() async {
     final cached = await _readEndpointCache();
@@ -543,7 +569,20 @@ class SyncManager with WidgetsBindingObserver {
     }
     isEnabled = prefs.getBool('syncEnabled') ?? false;
     port = prefs.getInt('syncPort') ?? 5566;
-    peerId = await SecureStorageManager.read('peerId') ?? '';
+    try {
+      peerId = await SecureStorageManager.read('peerId') ?? '';
+    } catch (_) {
+      peerId = '';
+    }
+    if (peerId.isEmpty || !_isValidUuid(peerId)) {
+      final prefPeerId = prefs.getString('peerId');
+      if (prefPeerId != null && _isValidUuid(prefPeerId)) {
+        peerId = prefPeerId;
+        try {
+          await SecureStorageManager.write('peerId', peerId);
+        } catch (_) {}
+      }
+    }
     _installNativeCryptoHook();
     // Regenerate if empty OR not a canonical UUID. Protocol-v1 stored peerId as
     // "Android-<8hex>" / "iOS-<8hex>"; those legacy values revive verbatim and
@@ -557,8 +596,11 @@ class SyncManager with WidgetsBindingObserver {
         await _pruneLegacyAuthorizedPeerIds(prefs, oldPeerId: peerId);
       }
       peerId = const Uuid().v4();
-      await SecureStorageManager.write('peerId', peerId);
+      try {
+        await SecureStorageManager.write('peerId', peerId);
+      } catch (_) {}
     }
+    await prefs.setString('peerId', peerId);
     displayName =
         prefs.getString('deviceName') ??
         (Platform.isAndroid
@@ -898,6 +940,8 @@ class SyncManager with WidgetsBindingObserver {
     _startPingTimer();
     await _loadEndpointCache();
     if (!_isRunCurrent(epoch)) return;
+    await autoReconnectSavedDevices();
+    if (!_isRunCurrent(epoch)) return;
     triggerCrossBandDiscovery();
   }
 
@@ -925,6 +969,8 @@ class SyncManager with WidgetsBindingObserver {
     if (_relay == null) await _startRelay(epoch);
     _startPingTimer();
     await _loadEndpointCache();
+    if (!_isRunCurrent(epoch)) return;
+    await autoReconnectSavedDevices();
     if (!_isRunCurrent(epoch)) return;
     triggerCrossBandDiscovery();
   }

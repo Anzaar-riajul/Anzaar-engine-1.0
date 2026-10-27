@@ -119,7 +119,7 @@ extension SyncSessionMethods on SyncManager {
   }
 
   bool _allowsProactiveDial(String reason, String? peerId) {
-    if (reason == 'scan' || reason == 'direct') return true;
+    if (reason == 'scan' || reason == 'direct' || reason == 'saved_device') return true;
     if (peerId == null || peerId.isEmpty) return false;
     return authorizedPeerIds.contains(peerId);
   }
@@ -182,6 +182,7 @@ extension SyncSessionMethods on SyncManager {
         // direct dials have no stable peer identity to count against.
         if (resolved != null && authorizedPeerIds.contains(resolved)) {
           noteAuthorizedDialFailure();
+          _scheduleReconnect(resolved);
         }
         if (resolved != null) {
           diagnostics.noteError(resolved, 'connect($label)', host: host);

@@ -70,7 +70,7 @@ extension SyncManager {
     /// Non-`scan`/`direct` dials require an authorized peerId (clipboard ∪ notification).
     /// `direct` = device-list one-shot send (text/file); no mutual auth.
     func allowsProactiveDial(reason: String, peerId: String?) -> Bool {
-        if reason == "scan" || reason == "direct" { return true }
+        if reason == "scan" || reason == "direct" || reason == "saved_device" { return true }
         guard let peerId, !peerId.isEmpty else { return false }
         return Set(PreferencesManager.shared.authorizedPeerIds).contains(peerId)
     }
@@ -113,6 +113,9 @@ extension SyncManager {
                 if let resolvedPeerId {
                     noteAuthorizedDialFailure(peerId: resolvedPeerId)
                     diagnostics.noteError(peerId: resolvedPeerId, host: host, "connect(\(failure?.label ?? "unknown"))")
+                    if Set(PreferencesManager.shared.authorizedPeerIds).contains(resolvedPeerId) {
+                        scheduleReconnect(peerId: resolvedPeerId)
+                    }
                 }
             }
             return

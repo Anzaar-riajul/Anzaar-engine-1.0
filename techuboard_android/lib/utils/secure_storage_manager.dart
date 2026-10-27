@@ -10,15 +10,23 @@ class SecureStorageManager {
   );
 
   static Future<void> write(String key, String value) async {
-    await _storage.write(key: key, value: value);
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (_) {}
   }
 
   static Future<String?> read(String key) async {
-    return await _storage.read(key: key);
+    try {
+      return await _storage.read(key: key);
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> delete(String key) async {
-    await _storage.delete(key: key);
+    try {
+      await _storage.delete(key: key);
+    } catch (_) {}
   }
 
   /// Migrates a sensitive key from plaintext SharedPreferences to encrypted SecureStorage.
@@ -28,7 +36,9 @@ class SecureStorageManager {
       final value = prefs.getString(key);
       if (value != null) {
         await write(key, value);
-        await prefs.remove(key);
+        if (key != 'peerId') {
+          await prefs.remove(key);
+        }
       }
     }
   }

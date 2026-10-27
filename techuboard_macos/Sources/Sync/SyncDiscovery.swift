@@ -46,6 +46,12 @@ extension SyncManager {
             dial(host: entry.host, port: entry.port, reason: "cache", peerId: entry.peerId)
         }
 
+        // Proactive saved devices dial: reconnect to all paired peers
+        for entry in loadSavedDevices() where entry.peerId != myPeerId {
+            guard auth.contains(entry.peerId) else { continue }
+            dial(host: entry.host, port: entry.port, reason: "saved_device", peerId: entry.peerId)
+        }
+
         // Manual IPs: only dial when host maps to an authorized peer (else wait for scan).
         let manual = PreferencesManager.shared.manualSyncPeers
         for entry in manual {

@@ -426,33 +426,44 @@ class FloatingHubService : Service() {
 
         val view = expandedView
         if (view != null) {
+            view.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             view.animate()
-                .scaleX(0.85f)
-                .scaleY(0.85f)
+                .scaleX(0.88f)
+                .scaleY(0.88f)
                 .alpha(0f)
-                .translationY(dpToPx(-16).toFloat())
-                .setDuration(180)
+                .translationY(dpToPx(-12).toFloat())
+                .setDuration(160)
                 .setInterpolator(AccelerateInterpolator())
                 .withEndAction {
+                    view.setLayerType(View.LAYER_TYPE_NONE, null)
                     removeExpandedView()
+                    pillView?.let { pill ->
+                        pill.visibility = View.VISIBLE
+                        pill.scaleX = 0.85f
+                        pill.scaleY = 0.85f
+                        pill.alpha = 0f
+                        pill.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                        pill.animate()
+                            .scaleX(1.0f)
+                            .scaleY(1.0f)
+                            .alpha(1.0f)
+                            .setDuration(180)
+                            .setInterpolator(DecelerateInterpolator())
+                            .withEndAction {
+                                pill.setLayerType(View.LAYER_TYPE_NONE, null)
+                            }
+                            .start()
+                    }
                 }
                 .start()
         } else {
             removeExpandedView()
-        }
-
-        pillView?.let { pill ->
-            pill.visibility = View.VISIBLE
-            pill.scaleX = 0.75f
-            pill.scaleY = 0.75f
-            pill.alpha = 0f
-            pill.animate()
-                .scaleX(1.0f)
-                .scaleY(1.0f)
-                .alpha(1.0f)
-                .setDuration(240)
-                .setInterpolator(OvershootInterpolator(1.2f))
-                .start()
+            pillView?.let { pill ->
+                pill.visibility = View.VISIBLE
+                pill.alpha = 1.0f
+                pill.scaleX = 1.0f
+                pill.scaleY = 1.0f
+            }
         }
         schedulePillDim()
     }
@@ -474,13 +485,15 @@ class FloatingHubService : Service() {
         captureActiveClipboardIfNew()
 
         pillView?.let { pill ->
+            pill.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             pill.animate()
                 .scaleX(0.82f)
                 .scaleY(0.82f)
                 .alpha(0f)
-                .setDuration(160)
-                .setInterpolator(DecelerateInterpolator())
+                .setDuration(140)
+                .setInterpolator(AccelerateInterpolator())
                 .withEndAction {
+                    pill.setLayerType(View.LAYER_TYPE_NONE, null)
                     pill.visibility = View.GONE
                 }
                 .start()
@@ -829,19 +842,27 @@ class FloatingHubService : Service() {
 
         expandedView = root
         try {
-            root.scaleX = 0.86f
-            root.scaleY = 0.86f
+            root.scaleX = 0.90f
+            root.scaleY = 0.90f
             root.alpha = 0f
-            root.translationY = dpToPx(-14).toFloat()
+            root.translationY = dpToPx(-10).toFloat()
             windowManager?.addView(root, expParams)
-            root.animate()
-                .scaleX(1.0f)
-                .scaleY(1.0f)
-                .alpha(1.0f)
-                .translationY(0f)
-                .setDuration(240)
-                .setInterpolator(OvershootInterpolator(1.08f))
-                .start()
+            root.post {
+                if (expandedView == root) {
+                    root.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                    root.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .alpha(1.0f)
+                        .translationY(0f)
+                        .setDuration(220)
+                        .setInterpolator(DecelerateInterpolator())
+                        .withEndAction {
+                            root.setLayerType(View.LAYER_TYPE_NONE, null)
+                        }
+                        .start()
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add expandedView", e)
         }
@@ -1463,6 +1484,7 @@ class FloatingHubService : Service() {
             setBackgroundColor(if (theme.isDark) Color.argb(195, 8, 11, 16) else Color.argb(160, 15, 23, 42))
             isClickable = true
             isFocusable = true
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
 
         val card = LinearLayout(this).apply {
@@ -1475,12 +1497,13 @@ class FloatingHubService : Service() {
             }
             background = bg
             elevation = dpToPx(24).toFloat()
-            setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14))
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
             val lp = FrameLayout.LayoutParams(
-                (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                FrameLayout.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.CENTER
+                setMargins(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
             }
             layoutParams = lp
         }
@@ -1605,9 +1628,9 @@ class FloatingHubService : Service() {
             val iv = ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dpToPx(200)
+                    dpToPx(130)
                 ).apply {
-                    setMargins(0, 0, 0, dpToPx(12))
+                    setMargins(0, 0, 0, dpToPx(10))
                 }
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 clipToOutline = true
@@ -1665,9 +1688,9 @@ class FloatingHubService : Service() {
             val scrollContainer = ScrollView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dpToPx(160)
+                    dpToPx(110)
                 ).apply {
-                    setMargins(0, 0, 0, dpToPx(12))
+                    setMargins(0, 0, 0, dpToPx(10))
                 }
                 val tBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
