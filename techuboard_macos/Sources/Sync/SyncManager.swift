@@ -430,7 +430,8 @@ final class SyncManager: NSObject {
     }
 
     private func prepareImageForSync(_ data: Data) -> Data {
-        if data.count <= 750_000 { return data }
+        // Unconditionally decode and convert to standard JPEG/PNG format.
+        // macOS pasteboards frequently contain raw TIFF data which Android cannot decode.
         guard let image = NSImage(data: data) else { return data }
         let maxDim: CGFloat = 1280
         let size = image.size
@@ -442,7 +443,7 @@ final class SyncManager: NSObject {
         image.draw(in: NSRect(origin: .zero, size: newSize), from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1.0)
         target.unlockFocus()
         
-        var quality: CGFloat = 0.80
+        var quality: CGFloat = 0.85
         while quality >= 0.40 {
             if let tiff = target.tiffRepresentation,
                let rep = NSBitmapImageRep(data: tiff),
@@ -452,6 +453,11 @@ final class SyncManager: NSObject {
                 }
             }
             quality -= 0.15
+        }
+        if let tiff = target.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return png
         }
         return data
     }

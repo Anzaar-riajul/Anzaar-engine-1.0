@@ -1066,6 +1066,79 @@ class FloatingHubService : Service() {
         for (clip in clips) {
             val isImage = clip.type == "image"
             val isFile = clip.type == "fileURL" || clip.type == "fileURLs"
+
+            val swipeContainer = FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, 0, dpToPx(5))
+                }
+            }
+
+            // Background actions layer revealed during swipe
+            val bgActionsLayer = FrameLayout(this).apply {
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            }
+
+            // Slide Right Background: DELETE (Vibrant Red)
+            val leftDeleteBg = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                val bg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(8).toFloat()
+                    setColor(Color.parseColor("#EF4444"))
+                }
+                background = bg
+                setPadding(dpToPx(14), 0, dpToPx(14), 0)
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                visibility = View.GONE
+
+                val delIcon = TextView(this@FloatingHubService).apply {
+                    text = "🗑️"
+                    textSize = 13.5f
+                    setPadding(0, 0, dpToPx(6), 0)
+                }
+                val delLabel = TextView(this@FloatingHubService).apply {
+                    text = "Delete"
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    paint.isFakeBoldText = true
+                }
+                addView(delIcon)
+                addView(delLabel)
+            }
+            bgActionsLayer.addView(leftDeleteBg)
+
+            // Slide Left Background: DETAILS (Vibrant Blue)
+            val rightDetailsBg = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                val bg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(8).toFloat()
+                    setColor(Color.parseColor("#3B82F6"))
+                }
+                background = bg
+                setPadding(dpToPx(14), 0, dpToPx(14), 0)
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                visibility = View.GONE
+
+                val detLabel = TextView(this@FloatingHubService).apply {
+                    text = "Details"
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    paint.isFakeBoldText = true
+                    setPadding(0, 0, dpToPx(6), 0)
+                }
+                val detIcon = TextView(this@FloatingHubService).apply {
+                    text = "👁️"
+                    textSize = 13.5f
+                }
+                addView(detLabel)
+                addView(detIcon)
+            }
+            bgActionsLayer.addView(rightDetailsBg)
+            swipeContainer.addView(bgActionsLayer)
+
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -1077,8 +1150,93 @@ class FloatingHubService : Service() {
                 }
                 background = bg
                 setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6))
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, 0, dpToPx(5))
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+
+            // Horizontal Swipe Touch Handling (Slide Left -> Details, Slide Right -> Delete)
+            var downX = 0f
+            var downY = 0f
+            var isSwiping = false
+            val swipeThreshold = dpToPx(55)
+
+            row.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
+                        downY = event.rawY
+                        isSwiping = false
+                        false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - downX
+                        val dy = event.rawY - downY
+                        if (!isSwiping) {
+                            if (Math.abs(dx) > dpToPx(8) && Math.abs(dx) > Math.abs(dy) * 1.3f) {
+                                isSwiping = true
+                                swipeContainer.parent?.requestDisallowInterceptTouchEvent(true)
+                            }
+                        }
+                        if (isSwiping) {
+                            row.translationX = dx * 0.85f
+                            if (dx > 0) {
+                                leftDeleteBg.visibility = View.VISIBLE
+                                rightDetailsBg.visibility = View.GONE
+                            } else {
+                                leftDeleteBg.visibility = View.GONE
+                                rightDetailsBg.visibility = View.VISIBLE
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (isSwiping) {
+                            swipeContainer.parent?.requestDisallowInterceptTouchEvent(false)
+                            val finalDx = row.translationX
+                            if (finalDx > swipeThreshold) {
+                                // Slide Right -> Instant Delete
+                                vibrate(strong = false)
+                                row.animate()
+                                    .translationX(swipeContainer.width.toFloat())
+                                    .alpha(0f)
+                                    .setDuration(180)
+                                    .setInterpolator(DecelerateInterpolator())
+                                    .withEndAction {
+                                        deleteClip(clip.id)
+                                        onRefresh()
+                                    }
+                                    .start()
+                            } else if (finalDx < -swipeThreshold) {
+                                // Slide Left -> Dynamic Details View
+                                vibrate(strong = false)
+                                row.animate()
+                                    .translationX(0f)
+                                    .setDuration(180)
+                                    .setInterpolator(DecelerateInterpolator())
+                                    .withEndAction {
+                                        leftDeleteBg.visibility = View.GONE
+                                        rightDetailsBg.visibility = View.GONE
+                                        showClipDetailsDialog(clip, root, theme, onRefresh)
+                                    }
+                                    .start()
+                            } else {
+                                row.animate()
+                                    .translationX(0f)
+                                    .setDuration(180)
+                                    .setInterpolator(DecelerateInterpolator())
+                                    .withEndAction {
+                                        leftDeleteBg.visibility = View.GONE
+                                        rightDetailsBg.visibility = View.GONE
+                                    }
+                                    .start()
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    else -> false
                 }
             }
 
@@ -1290,8 +1448,341 @@ class FloatingHubService : Service() {
             actions.addView(btnDelete)
             row.addView(actions)
 
-            container.addView(row)
+            swipeContainer.addView(row)
+            container.addView(swipeContainer)
         }
+    }
+
+    private fun showClipDetailsDialog(
+        clip: ClipItem,
+        root: FrameLayout,
+        theme: HubTheme,
+        onRefresh: () -> Unit
+    ) {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(if (theme.isDark) Color.argb(195, 8, 11, 16) else Color.argb(160, 15, 23, 42))
+            isClickable = true
+            isFocusable = true
+        }
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(14).toFloat()
+                setColor(theme.panelBg)
+                setStroke(dpToPx(1), theme.panelBorder)
+            }
+            background = bg
+            elevation = dpToPx(24).toFloat()
+            setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14))
+            val lp = FrameLayout.LayoutParams(
+                (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            layoutParams = lp
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dpToPx(10))
+        }
+
+        val isImage = clip.type == "image"
+        val isFile = clip.type == "fileURL" || clip.type == "fileURLs"
+
+        val headerIcon = TextView(this).apply {
+            text = if (isImage) "🖼️" else if (isFile) "📄" else "📋"
+            textSize = 16f
+            setPadding(0, 0, dpToPx(8), 0)
+        }
+        header.addView(headerIcon)
+
+        val titleTv = TextView(this).apply {
+            text = "Clip Details"
+            setTextColor(theme.textPrimary)
+            textSize = 15f
+            paint.isFakeBoldText = true
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(titleTv)
+
+        val badgePair = getBadgeInfo(clip.value, clip.type)
+        if (badgePair != null) {
+            val (bText, bColorHex) = badgePair
+            val badgeTv = TextView(this).apply {
+                text = bText
+                setTextColor(Color.parseColor(bColorHex))
+                textSize = 9.5f
+                paint.isFakeBoldText = true
+                val bBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(4).toFloat()
+                    val parsed = Color.parseColor(bColorHex)
+                    setColor(Color.argb(35, Color.red(parsed), Color.green(parsed), Color.blue(parsed)))
+                }
+                background = bBg
+                setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
+                val blp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, dpToPx(8), 0)
+                }
+                layoutParams = blp
+            }
+            header.addView(badgeTv)
+        }
+
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(theme.textMuted)
+            textSize = 14f
+            setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+            setOnClickListener {
+                root.removeView(overlay)
+            }
+        }
+        header.addView(closeBtn)
+        card.addView(header)
+
+        val metaRow = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val mBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(6).toFloat()
+                setColor(theme.inputBg)
+            }
+            background = mBg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val mlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(10))
+            }
+            layoutParams = mlp
+        }
+
+        val timeLine = TextView(this).apply {
+            val sdf = java.text.SimpleDateFormat("MMM dd, yyyy · hh:mm a", java.util.Locale.getDefault())
+            val dateStr = sdf.format(java.util.Date(clip.createdAt))
+            text = "🕒 $dateStr" + (if (clip.sourceApp.isNotEmpty()) " · 📱 ${clip.sourceApp}" else "")
+            setTextColor(theme.textMuted)
+            textSize = 11f
+        }
+        metaRow.addView(timeLine)
+
+        var statsStr = ""
+        if (isImage) {
+            val f = File(clip.value)
+            if (f.exists()) {
+                val kb = f.length() / 1024
+                statsStr = if (kb >= 1024) "${(kb / 1024f).toInt()} MB" else "$kb KB"
+            }
+        } else if (isFile) {
+            val f = File(clip.value)
+            if (f.exists()) {
+                val kb = f.length() / 1024
+                statsStr = if (kb >= 1024) "${(kb / 1024f).toInt()} MB" else "$kb KB"
+            }
+        } else {
+            val chars = clip.value.length
+            val words = clip.value.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size
+            val lines = clip.value.lines().size
+            statsStr = "$chars characters · $words words · $lines lines"
+        }
+
+        if (statsStr.isNotEmpty()) {
+            val statsTv = TextView(this).apply {
+                text = "📊 $statsStr"
+                setTextColor(theme.accentBlue)
+                textSize = 11f
+                setPadding(0, dpToPx(3), 0, 0)
+            }
+            metaRow.addView(statsTv)
+        }
+        card.addView(metaRow)
+
+        if (isImage) {
+            val iv = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dpToPx(200)
+                ).apply {
+                    setMargins(0, 0, 0, dpToPx(12))
+                }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                clipToOutline = true
+                val iBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(8).toFloat()
+                    setColor(if (theme.isDark) Color.parseColor("#0F172A") else Color.parseColor("#F1F5F9"))
+                    setStroke(dpToPx(1), theme.cardBorder)
+                }
+                background = iBg
+                try {
+                    val file = File(clip.value)
+                    if (file.exists()) {
+                        val bmp = BitmapFactory.decodeFile(file.absolutePath)
+                        if (bmp != null) setImageBitmap(bmp)
+                    }
+                } catch (_: Exception) {}
+            }
+            card.addView(iv)
+        } else if (isFile) {
+            val fileBox = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val fBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(8).toFloat()
+                    setColor(theme.inputBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
+                }
+                background = fBg
+                setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
+                val flp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, 0, dpToPx(12))
+                }
+                layoutParams = flp
+            }
+
+            val f = File(clip.value)
+            val nameTv = TextView(this).apply {
+                text = f.name
+                setTextColor(theme.textPrimary)
+                textSize = 13f
+                paint.isFakeBoldText = true
+            }
+            val pathTv = TextView(this).apply {
+                text = clip.value
+                setTextColor(theme.textMuted)
+                textSize = 10f
+                setTextIsSelectable(true)
+                setPadding(0, dpToPx(4), 0, 0)
+            }
+            fileBox.addView(nameTv)
+            fileBox.addView(pathTv)
+            card.addView(fileBox)
+        } else {
+            val scrollContainer = ScrollView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dpToPx(160)
+                ).apply {
+                    setMargins(0, 0, 0, dpToPx(12))
+                }
+                val tBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(8).toFloat()
+                    setColor(theme.inputBg)
+                    setStroke(dpToPx(1), theme.cardBorder)
+                }
+                background = tBg
+                setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            }
+
+            val contentTv = TextView(this).apply {
+                text = clip.value
+                setTextColor(theme.textPrimary)
+                textSize = 12.5f
+                setTextIsSelectable(true)
+            }
+            scrollContainer.addView(contentTv)
+            card.addView(scrollContainer)
+        }
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val btnCopy = TextView(this).apply {
+            text = "📋 Copy"
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            paint.isFakeBoldText = true
+            gravity = Gravity.CENTER
+            val cBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.accentBlue)
+            }
+            background = cBg
+            setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+            val clp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(0, 0, dpToPx(6), 0)
+            }
+            layoutParams = clp
+            setOnClickListener {
+                if (isImage) {
+                    copyToClipboard(clip.value, isImage = true)
+                } else if (isFile) {
+                    copyFileToClipboard(clip.value)
+                } else {
+                    copyToClipboard(clip.value, isImage = false)
+                }
+                vibrate(strong = false)
+                root.removeView(overlay)
+                Toast.makeText(this@FloatingHubService, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+        }
+        actionRow.addView(btnCopy)
+
+        val btnSaveNote = TextView(this).apply {
+            text = "📄 Save Note"
+            setTextColor(theme.textPrimary)
+            textSize = 12f
+            paint.isFakeBoldText = true
+            gravity = Gravity.CENTER
+            val nBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.actionBtnBg)
+                setStroke(dpToPx(1), theme.cardBorder)
+            }
+            background = nBg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            val nlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dpToPx(6), 0)
+            }
+            layoutParams = nlp
+            setOnClickListener {
+                root.removeView(overlay)
+                showSaveNoteDialog(clip.value, root, theme, onRefresh)
+            }
+        }
+        actionRow.addView(btnSaveNote)
+
+        val btnDel = TextView(this).apply {
+            text = "🗑️"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            val dBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(theme.deleteBg)
+                setStroke(dpToPx(1), theme.deleteBorder)
+            }
+            background = dBg
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            setOnClickListener {
+                vibrate(strong = false)
+                deleteClip(clip.id)
+                root.removeView(overlay)
+                onRefresh()
+            }
+        }
+        actionRow.addView(btnDel)
+        card.addView(actionRow)
+
+        overlay.addView(card)
+        overlay.setOnClickListener { root.removeView(overlay) }
+        card.setOnClickListener { /* prevent dismissal when clicking inside card */ }
+
+        root.addView(overlay)
+
+        card.scaleX = 0.92f
+        card.scaleY = 0.92f
+        card.alpha = 0f
+        card.animate().scaleX(1.0f).scaleY(1.0f).alpha(1.0f).setDuration(160).setInterpolator(DecelerateInterpolator()).start()
     }
 
     // =========================================================================
@@ -2823,6 +3314,7 @@ class FloatingHubService : Service() {
                             file.writeBytes(bytes)
                         }
                         insertClipDirectly(hash, "image", file.absolutePath)
+                        notifyFlutterClipboardChanged("image", bytes, null)
                     }
                 } catch (_: Exception) {}
             } else if (uri != null) {
@@ -2836,6 +3328,7 @@ class FloatingHubService : Service() {
                     val md = java.security.MessageDigest.getInstance("SHA-256")
                     val hash = md.digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
                     insertClipDirectly(hash, "text", text)
+                    notifyFlutterClipboardChanged("text", null, text)
                 }
             }
         } catch (_: Exception) {}
@@ -3072,6 +3565,29 @@ class FloatingHubService : Service() {
                             engine.dartExecutor.binaryMessenger,
                             TechuboardApplication.CLIPBOARD_CHANNEL
                         ).invokeMethod("reloadSnippets", null)
+                    } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun notifyFlutterClipboardChanged(type: String, bytes: ByteArray?, text: String?) {
+        try {
+            val engine = io.flutter.embedding.engine.FlutterEngineCache.getInstance().get(TechuboardApplication.ENGINE_ID)
+            if (engine != null) {
+                mainHandler.post {
+                    try {
+                        val map = mutableMapOf<String, Any?>(
+                            "type" to type,
+                            "isBaseline" to false,
+                            "sourcePackage" to "Floating Hub"
+                        )
+                        if (bytes != null) map["bytes"] = bytes
+                        if (text != null) map["text"] = text
+                        io.flutter.plugin.common.MethodChannel(
+                            engine.dartExecutor.binaryMessenger,
+                            TechuboardApplication.CLIPBOARD_CHANNEL
+                        ).invokeMethod("onClipboardChanged", map)
                     } catch (_: Exception) {}
                 }
             }

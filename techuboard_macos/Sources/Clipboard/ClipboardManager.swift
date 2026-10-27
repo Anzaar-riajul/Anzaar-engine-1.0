@@ -482,6 +482,11 @@ class ClipboardManager {
         if let fileURLs = readFileURLsFromPasteboard(), !fileURLs.isEmpty {
             return .files(fileURLs)
         }
+        // Prioritize images over plain text strings because browsers and apps often
+        // attach auxiliary strings (like alt-text, image URL, or whitespace) alongside the image data.
+        if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
+            return .image(imageData)
+        }
         // Prefer plain text when the pasteboard also carries HTML/RTF (common for browsers and editors).
         if let newString = pasteboard.string(forType: .string), !newString.isEmpty {
             return .text(newString)
@@ -494,9 +499,6 @@ class ClipboardManager {
         }
         if let pdfData = pasteboard.data(forType: .pdf) {
             return .pdf(pdfData)
-        }
-        if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
-            return .image(imageData)
         }
         return nil
     }
@@ -647,15 +649,11 @@ class ClipboardManager {
         // Broadcast unless this content was just delivered by a remote peer
         // (loopback). Both the single-slot lastKnownSyncHash and the time-windowed
         // set are checked: either match means we keep it local.
-        if let sync = plainTextForLANSync(from: item, pasteboardPlainText: pasteboardPlainText),
-           sync.hash != lastKnownSyncHash,
-           !recentRemoteHashes.contains(sync.hash) {
-            SyncManager.shared.broadcastSync(content: sync.text, hash: sync.hash)
-        } else if case .image(let path) = item,
-                  let hash = hash,
-                  hash != lastKnownSyncHash,
-                  !recentRemoteHashes.contains(hash),
-                  let data = HistoryMediaStore.shared.data(at: path) {
+        if case .image(let path) = item,
+           let hash = hash,
+           hash != lastKnownSyncHash,
+           !recentRemoteHashes.contains(hash),
+           let data = HistoryMediaStore.shared.data(at: path) {
             SyncManager.shared.broadcastImageSync(data: data, hash: hash)
         } else if case .files(let urls) = item,
                   !urls.isEmpty,
@@ -669,6 +667,10 @@ class ClipboardManager {
                   !recentRemoteHashes.contains(hash) {
             let fileUrl = URL(fileURLWithPath: path)
             SyncManager.shared.broadcastFileSync(urls: [fileUrl], hash: hash)
+        } else if let sync = plainTextForLANSync(from: item, pasteboardPlainText: pasteboardPlainText),
+                  sync.hash != lastKnownSyncHash,
+                  !recentRemoteHashes.contains(sync.hash) {
+            SyncManager.shared.broadcastSync(content: sync.text, hash: sync.hash)
         }
 
         let searchIndex = HistorySearchIndexBuilder.buildIndex(for: item)
@@ -1209,6 +1211,13 @@ class ClipboardManager {
         from item: HistoryItem,
         pasteboardPlainText: String?
     ) -> (text: String, hash: String)? {
+        switch item {
+        case .image, .files, .pdf:
+            return nil
+        default:
+            break
+        }
+
         if let pasted = pasteboardPlainText?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !pasted.isEmpty,

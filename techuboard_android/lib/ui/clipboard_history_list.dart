@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../app_localizations.dart';
@@ -872,6 +873,300 @@ class _PaginatedClipboardHistoryListState
     }
   }
 
+  String _formatDateFull(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final month = months[date.month - 1];
+    final hour = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
+    final ampm = date.hour >= 12 ? 'PM' : 'AM';
+    final min = date.minute.toString().padLeft(2, '0');
+    return '$month ${date.day}, ${date.year} · $hour:$min $ampm';
+  }
+
+  Future<void> _showDynamicDetailsView(HistoryEntry entry) async {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isImage = entry.item.type == 'image';
+    final isFile = entry.item.type == 'fileURL' || entry.item.type == 'fileURLs';
+    final isText = entry.item.type == 'text';
+    final badge = _getBadgeInfo(entry) ?? (label: isImage ? 'IMAGE' : isFile ? 'FILE' : 'TEXT', color: const Color(0xFF3B82F6));
+
+    String detailStats = '';
+    if (isText) {
+      final text = entry.item.value.toString();
+      final charCount = text.length;
+      final wordCount = text.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      final lineCount = text.split('\n').length;
+      detailStats = '$charCount chars · $wordCount words · $lineCount lines';
+    } else if (isImage) {
+      final file = File(entry.item.value.toString());
+      if (file.existsSync()) {
+        final kb = file.lengthSync() / 1024;
+        detailStats = kb >= 1024 ? '${(kb / 1024).toStringAsFixed(1)} MB' : '${kb.toInt()} KB';
+      }
+    } else if (isFile) {
+      final path = entry.item.value.toString();
+      final file = File(path);
+      if (file.existsSync()) {
+        final kb = file.lengthSync() / 1024;
+        detailStats = kb >= 1024 ? '${(kb / 1024).toStringAsFixed(1)} MB' : '${kb.toInt()} KB';
+      }
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        height: MediaQuery.of(sheetContext).size.height * 0.78,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 10, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: badge.color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isImage
+                            ? Icons.image_rounded
+                            : isFile
+                            ? Icons.insert_drive_file_rounded
+                            : Icons.text_snippet_rounded,
+                        color: badge.color,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Clip Details',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.onSurface,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: badge.color.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  badge.label,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: badge.color,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '${_formatDateFull(entry.date)}${entry.sourceApp != null && entry.sourceApp!.isNotEmpty ? ' · ${entry.sourceApp}' : ''}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+              ),
+              if (detailStats.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.analytics_outlined, size: 13, color: colors.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Text(
+                          detailStats,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const Divider(height: 16),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.black12,
+                      ),
+                    ),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: isImage
+                          ? Center(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  File(entry.item.value.toString()),
+                                  errorBuilder: (_, __, ___) => const Text('Image file not found'),
+                                ),
+                              ),
+                            )
+                          : isFile
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.description_rounded, size: 36, color: Color(0xFF3B82F6)),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            p.basename(entry.item.value.toString()),
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                          Text(
+                                            detailStats,
+                                            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                SelectableText(
+                                  entry.item.value.toString(),
+                                  style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+                                ),
+                              ],
+                            )
+                          : SelectableText(
+                              entry.item.value.toString(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.45,
+                                fontFamily: badge.label == 'CODE' || badge.label == 'JSON' ? 'monospace' : null,
+                                color: colors.onSurface,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _copy(entry);
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Copy'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _saveAsNote(entry);
+                      },
+                      icon: const Icon(Icons.note_add_outlined, size: 16),
+                      label: const Text('Save Note'),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.redAccent.withOpacity(0.12),
+                        foregroundColor: Colors.redAccent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _confirmDeleteSingle(entry);
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _preview(HistoryEntry entry) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -1163,7 +1458,75 @@ class _PaginatedClipboardHistoryListState
                           ),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
-                          child: Card(
+                          child: Dismissible(
+                            key: ValueKey(entry.contentHash ?? '$index-${entry.date.millisecondsSinceEpoch}'),
+                            direction: DismissDirection.horizontal,
+                            background: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.shade400,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 24),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Delete',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            secondaryBackground: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              alignment: Alignment.centerRight,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Text(
+                                    'Details',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.visibility_rounded, color: Colors.white, size: 24),
+                                ],
+                              ),
+                            ),
+                            confirmDismiss: (direction) async {
+                              if (direction == DismissDirection.startToEnd) {
+                                // Slide Right -> Instant Delete
+                                HapticFeedback.mediumImpact();
+                                await ClipboardManager.instance.deleteEntry(entry);
+                                setState(() => _selectedEntries.remove(entry));
+                                if (mounted) showTechuMessage(context, 'Item deleted');
+                                _feed.refresh();
+                                return true;
+                              } else if (direction == DismissDirection.endToStart) {
+                                // Slide Left -> Dynamic Details View
+                                HapticFeedback.lightImpact();
+                                _showDynamicDetailsView(entry);
+                                return false;
+                              }
+                              return false;
+                            },
+                            child: Card(
                             elevation: 0.5,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -1378,7 +1741,8 @@ class _PaginatedClipboardHistoryListState
                             ),
                           ),
                         ),
-                      ],
+                      ),
+                    ],
                     );
                   },
                 ),

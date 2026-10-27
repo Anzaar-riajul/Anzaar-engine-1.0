@@ -53,12 +53,29 @@ class ClipboardChangeListener(
                     val input = context.contentResolver.openInputStream(uri)
                     val bytes = input?.readBytes()
                     input?.close()
-                    if (bytes != null && bytes.isNotEmpty() && bytes.size <= 2000000) {
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val finalBytes = if (bytes.size > 1_500_000) {
+                            try {
+                                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                if (bmp != null) {
+                                    val out = java.io.ByteArrayOutputStream()
+                                    val maxDim = 1280f
+                                    val scale = Math.min(maxDim / bmp.width, Math.min(maxDim / bmp.height, 1.0f))
+                                    val scaled = if (scale < 1.0f) {
+                                        android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
+                                    } else bmp
+                                    scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+                                    out.toByteArray()
+                                } else bytes
+                            } catch (_: Exception) { bytes }
+                        } else {
+                            bytes
+                        }
                         channel.invokeMethod(
                             "onClipboardChanged",
                             mapOf(
                                 "type" to "image",
-                                "bytes" to bytes,
+                                "bytes" to finalBytes,
                                 "isBaseline" to isBaseline,
                                 "sourcePackage" to resolveSourcePackage(),
                             ),
