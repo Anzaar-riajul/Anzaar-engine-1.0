@@ -657,6 +657,18 @@ class ClipboardManager {
                   !recentRemoteHashes.contains(hash),
                   let data = HistoryMediaStore.shared.data(at: path) {
             SyncManager.shared.broadcastImageSync(data: data, hash: hash)
+        } else if case .files(let urls) = item,
+                  !urls.isEmpty,
+                  let hash = hash,
+                  hash != lastKnownSyncHash,
+                  !recentRemoteHashes.contains(hash) {
+            SyncManager.shared.broadcastFileSync(urls: urls, hash: hash)
+        } else if case .pdf(let path) = item,
+                  let hash = hash,
+                  hash != lastKnownSyncHash,
+                  !recentRemoteHashes.contains(hash) {
+            let fileUrl = URL(fileURLWithPath: path)
+            SyncManager.shared.broadcastFileSync(urls: [fileUrl], hash: hash)
         }
 
         let searchIndex = HistorySearchIndexBuilder.buildIndex(for: item)

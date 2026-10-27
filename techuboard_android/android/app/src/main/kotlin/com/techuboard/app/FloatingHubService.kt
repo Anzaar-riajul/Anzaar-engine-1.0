@@ -471,6 +471,7 @@ class FloatingHubService : Service() {
         isExpanded = true
         resetPillOpacity()
         vibrate(strong = false)
+        captureActiveClipboardIfNew()
 
         pillView?.let { pill ->
             pill.animate()
@@ -854,6 +855,7 @@ class FloatingHubService : Service() {
             "pinned" to "📌 Pinned",
             "links" to "🔗 Links",
             "images" to "🖼️ Images",
+            "files" to "📁 Files",
             "text" to "📄 Text"
         )
         for ((key, label) in filters) {
@@ -888,8 +890,22 @@ class FloatingHubService : Service() {
         }
     }
 
-    private fun getBadgeInfo(value: String, isImage: Boolean): Pair<String, String>? {
-        if (isImage) return Pair("IMAGE", "#38BDF8")
+    private fun getBadgeInfo(value: String, itemType: String): Pair<String, String>? {
+        if (itemType == "image") return Pair("IMAGE", "#38BDF8")
+        if (itemType == "fileURL" || itemType == "fileURLs") {
+            val lower = value.lowercase()
+            return when {
+                lower.endsWith(".pdf") -> Pair("PDF", "#EF4444")
+                lower.endsWith(".doc") || lower.endsWith(".docx") -> Pair("DOC", "#3B82F6")
+                lower.endsWith(".xls") || lower.endsWith(".xlsx") || lower.endsWith(".csv") -> Pair("SHEET", "#10B981")
+                lower.endsWith(".ppt") || lower.endsWith(".pptx") -> Pair("SLIDE", "#F97316")
+                lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".7z") || lower.endsWith(".tar") || lower.endsWith(".gz") -> Pair("ZIP", "#8B5CF6")
+                lower.endsWith(".apk") -> Pair("APK", "#22C55E")
+                lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".m4a") -> Pair("AUDIO", "#EC4899")
+                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".mov") -> Pair("VIDEO", "#EAB308")
+                else -> Pair("FILE", "#F59E0B")
+            }
+        }
         for (ch in value) {
             val code = ch.code
             if (code in 0x0980..0x09FF) {
@@ -934,6 +950,7 @@ class FloatingHubService : Service() {
 
         for (clip in clips) {
             val isImage = clip.type == "image"
+            val isFile = clip.type == "fileURL" || clip.type == "fileURLs"
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -963,7 +980,7 @@ class FloatingHubService : Service() {
             }
             row.addView(leftIndicator)
 
-            // Left: Thumbnail for image or Pin icon
+            // Left: Thumbnail for image, icon for file, or Pin icon
             if (isImage) {
                 val thumbView = ImageView(this).apply {
                     layoutParams = LinearLayout.LayoutParams(dpToPx(38), dpToPx(28)).apply {
@@ -985,6 +1002,23 @@ class FloatingHubService : Service() {
                     } catch (_: Exception) {}
                 }
                 row.addView(thumbView)
+            } else if (isFile) {
+                val fileIconView = TextView(this).apply {
+                    text = "📄"
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    val fBg = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dpToPx(6).toFloat()
+                        setColor(Color.parseColor("#1E293B"))
+                        setStroke(dpToPx(1), Color.parseColor("#334155"))
+                    }
+                    background = fBg
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(30), dpToPx(28)).apply {
+                        setMargins(0, 0, dpToPx(8), 0)
+                    }
+                }
+                row.addView(fileIconView)
             } else if (clip.isPinned) {
                 val pinIcon = TextView(this).apply {
                     text = "📌"
@@ -1007,7 +1041,7 @@ class FloatingHubService : Service() {
                 gravity = Gravity.CENTER_VERTICAL
             }
 
-            val badgePair = getBadgeInfo(clip.value, isImage)
+            val badgePair = getBadgeInfo(clip.value, clip.type)
             if (badgePair != null) {
                 val (bText, bColorHex) = badgePair
                 val badgeTv = TextView(this).apply {
@@ -1030,8 +1064,9 @@ class FloatingHubService : Service() {
                 titleLine.addView(badgeTv)
             }
 
+            val fileName = if (isFile) File(clip.value).name else ""
             val bodyTv = TextView(this).apply {
-                text = if (isImage) "[Image]" else clip.value.replace("\n", " ").trim()
+                text = if (isImage) "[Image]" else if (isFile) (if (fileName.isNotEmpty()) fileName else "[File]") else clip.value.replace("\n", " ").trim()
                 setTextColor(Color.parseColor("#F1F5F9"))
                 textSize = 12.5f
                 paint.isFakeBoldText = true
@@ -1042,8 +1077,16 @@ class FloatingHubService : Service() {
             titleLine.addView(bodyTv)
             textCol.addView(titleLine)
 
+            var fileDetails = ""
+            if (isFile) {
+                val f = File(clip.value)
+                if (f.exists()) {
+                    val kb = f.length() / 1024
+                    fileDetails = if (kb >= 1024) " · ${(kb / 1024f).toInt()} MB" else " · $kb KB"
+                }
+            }
             val subTv = TextView(this).apply {
-                text = formatTimeAgo(clip.createdAt) + if (clip.sourceApp.isNotEmpty()) " · ${clip.sourceApp}" else ""
+                text = formatTimeAgo(clip.createdAt) + if (clip.sourceApp.isNotEmpty()) " · ${clip.sourceApp}" else "" + fileDetails
                 setTextColor(Color.parseColor("#64748B"))
                 textSize = 9.5f
                 setPadding(0, dpToPx(1), 0, 0)
@@ -1056,6 +1099,8 @@ class FloatingHubService : Service() {
             row.setOnClickListener {
                 if (isImage) {
                     copyToClipboard(clip.value, isImage = true)
+                } else if (isFile) {
+                    copyFileToClipboard(clip.value)
                 } else {
                     executePaste(clip.value)
                 }
@@ -1649,6 +1694,27 @@ class FloatingHubService : Service() {
         }
     }
 
+    private fun copyFileToClipboard(filePath: String) {
+        try {
+            val file = File(filePath)
+            if (!file.exists()) {
+                Toast.makeText(this, "File does not exist", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val cm = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val clip = android.content.ClipData.newUri(contentResolver, file.name, uri)
+            cm?.setPrimaryClip(clip)
+            Toast.makeText(this, "File copied: ${file.name}", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.w(TAG, "File copy error: $e")
+        }
+    }
+
     private fun vibrate(strong: Boolean = false) {
         try {
             val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
@@ -1726,6 +1792,69 @@ class FloatingHubService : Service() {
         prefs.edit().putString("flutter.techuboard.pinned_clips", arr.toString()).apply()
     }
 
+    private fun captureActiveClipboardIfNew() {
+        try {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return
+            val clip = cm.primaryClip ?: return
+            if (clip.itemCount == 0) return
+            val item = clip.getItemAt(0)
+            val uri = item.uri
+            val isImageMime = clip.description?.let { desc ->
+                (0 until desc.mimeTypeCount).any { desc.getMimeType(it).startsWith("image/") }
+            } ?: false
+
+            if (uri != null && (isImageMime || uri.toString().contains("image"))) {
+                try {
+                    val input = contentResolver.openInputStream(uri)
+                    val bytes = input?.readBytes()
+                    input?.close()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val md = java.security.MessageDigest.getInstance("SHA-256")
+                        val hash = md.digest(bytes).joinToString("") { "%02x".format(it) }
+                        val file = File(filesDir, "clipboard-images/$hash.png")
+                        file.parentFile?.mkdirs()
+                        if (!file.exists()) {
+                            file.writeBytes(bytes)
+                        }
+                        insertClipDirectly(hash, "image", file.absolutePath)
+                    }
+                } catch (_: Exception) {}
+            } else if (uri != null) {
+                val path = uri.path ?: uri.toString()
+                val md = java.security.MessageDigest.getInstance("SHA-256")
+                val hash = md.digest(path.toByteArray()).joinToString("") { "%02x".format(it) }
+                insertClipDirectly(hash, "fileURL", path)
+            } else {
+                val text = item.coerceToText(this)?.toString()?.trim() ?: ""
+                if (text.isNotEmpty() && text.length <= 100_000) {
+                    val md = java.security.MessageDigest.getInstance("SHA-256")
+                    val hash = md.digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+                    insertClipDirectly(hash, "text", text)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun insertClipDirectly(hash: String, type: String, value: String) {
+        val db = getReadableDatabase() ?: return
+        try {
+            val cursor = db.rawQuery("SELECT content_hash FROM clipboard_history ORDER BY created_at DESC LIMIT 1", null)
+            val latestHash = cursor.use { if (it.moveToFirst()) it.getString(0) else null }
+            if (latestHash == hash) return
+
+            val cv = android.content.ContentValues().apply {
+                put("content_hash", hash)
+                put("item_type", type)
+                put("item_value", value)
+                put("source_app", "Local Copy")
+                put("created_at", System.currentTimeMillis())
+            }
+            db.insertWithOnConflict("clipboard_history", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+        } catch (_: Exception) {} finally {
+            try { db.close() } catch (_: Exception) {}
+        }
+    }
+
     private fun fetchClipboardItems(query: String, filter: String): List<ClipItem> {
         val result = mutableListOf<ClipItem>()
         val db = getReadableDatabase() ?: return result
@@ -1746,11 +1875,14 @@ class FloatingHubService : Service() {
                 "images" -> {
                     sql += " AND item_type = 'image'"
                 }
+                "files" -> {
+                    sql += " AND item_type IN ('fileURL', 'fileURLs')"
+                }
                 "text" -> {
                     sql += " AND item_type = 'text'"
                 }
                 else -> {
-                    sql += " AND item_type IN ('text', 'image')"
+                    sql += " AND item_type IN ('text', 'image', 'fileURL', 'fileURLs')"
                 }
             }
 

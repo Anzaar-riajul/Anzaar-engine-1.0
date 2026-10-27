@@ -18,7 +18,7 @@ final class SyncManager: NSObject {
     /// sync was disabled entirely.
     var receiveScratch = Data()
 
-    static let maxFrameLength = 2 * 1024 * 1024
+    static let maxFrameLength = 4 * 1024 * 1024
     static let maxHandshakeFrameLength = 64 * 1024
     static let defaultPort: UInt16 = 5566
     static let discoveryDebounce: TimeInterval = 0.6
@@ -397,22 +397,61 @@ final class SyncManager: NSObject {
         fanoutReliable(env, requireAuth: true)
     }
 
+    func broadcastFileSync(urls: [URL], hash: String) {
+        guard PreferencesManager.shared.isSyncEnabled else { return }
+        guard let first = urls.first else { return }
+        let fileName = first.lastPathComponent
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: first.path),
+              let size = attrs[.size] as? Int64 else { return }
+
+        // If file is <= 1.2MB, embed directly into reliable history.file frame
+        if size <= 1_200_000, let data = try? Data(contentsOf: first) {
+            let meta: [String: Any] = [
+                "fileName": fileName,
+                "fileSize": Int(size),
+                "sha256": hash,
+                "base64": data.base64EncodedString()
+            ]
+            if let json = try? JSONSerialization.data(withJSONObject: meta),
+               let jsonStr = String(data: json, encoding: .utf8),
+               let payload = encrypt(jsonStr) {
+                let env = SyncEnvelope.make(type: SyncType.historyFile, peerId: peerId, name: displayName, hash: hash, payload: payload)
+                appLog("broadcastFileSync: small document/file \(fileName) (\(size / 1024)KB) to \(clipboardAuthIds()) peers")
+                fanoutReliable(env, requireAuth: true)
+                return
+            }
+        }
+
+        // For larger files, trigger chunked transfer to authenticated peers
+        for peer in availablePeers where clipboardAuthIds().contains(peer.peerId) {
+            appLog("broadcastFileSync: chunked transfer of \(fileName) (\(size / 1024)KB) to \(peer.displayName)")
+            sendFileToPeer(at: first, peerId: peer.peerId)
+        }
+    }
+
     private func prepareImageForSync(_ data: Data) -> Data {
-        if data.count <= 1_200_000 { return data }
+        if data.count <= 750_000 { return data }
         guard let image = NSImage(data: data) else { return data }
-        let maxDim: CGFloat = 1600
+        let maxDim: CGFloat = 1280
         let size = image.size
         guard size.width > 0, size.height > 0 else { return data }
         let scale = min(maxDim / size.width, maxDim / size.height, 1.0)
-        let newSize = NSSize(width: size.width * scale, height: size.height * scale)
+        let newSize = NSSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
         let target = NSImage(size: newSize)
         target.lockFocus()
         image.draw(in: NSRect(origin: .zero, size: newSize), from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1.0)
         target.unlockFocus()
-        if let tiff = target.tiffRepresentation,
-           let rep = NSBitmapImageRep(data: tiff),
-           let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) {
-            return jpg
+        
+        var quality: CGFloat = 0.80
+        while quality >= 0.40 {
+            if let tiff = target.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff),
+               let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: quality]) {
+                if jpg.count <= 750_000 || quality <= 0.45 {
+                    return jpg
+                }
+            }
+            quality -= 0.15
         }
         return data
     }
@@ -488,6 +527,20 @@ final class SyncManager: NSObject {
                   let data = Data(base64Encoded: base64) else { return }
             DispatchQueue.main.async { [weak self] in
                 ClipboardManager.shared.handleRemoteImageSync(data: data, hash: env.hash ?? "")
+                self?.syncQueue.async { self?.replyAck(to: remotePeerId, hash: env.hash) }
+            }
+        case SyncType.historyFile:
+            guard let jsonStr = decryptPayload(env, from: remotePeerId),
+                  let jsonData = jsonStr.data(using: .utf8),
+                  let map = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                  let fileName = map["fileName"] as? String,
+                  let b64 = map["base64"] as? String,
+                  let fileData = Data(base64Encoded: b64) else { return }
+            DispatchQueue.main.async { [weak self] in
+                let destDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+                let fileUrl = destDir.appendingPathComponent(fileName)
+                try? fileData.write(to: fileUrl)
+                ClipboardManager.shared.handleRemoteFileSync(url: fileUrl, senderName: env.name ?? "Remote Device")
                 self?.syncQueue.async { self?.replyAck(to: remotePeerId, hash: env.hash) }
             }
         case SyncType.historyFetch:
@@ -605,12 +658,26 @@ final class SyncManager: NSObject {
         while !session.historyReplayRows.isEmpty {
             let rowid = session.historyReplayRows.removeFirst()
             sessions[peerId]?.historyReplayRows = session.historyReplayRows
-            guard let entry = HistoryRepository.shared.fetchByRowid(rowid),
-                  let text = entry.resolvedText, let payload = encrypt(text),
-                  let frame = encodeFrame(SyncEnvelope.make(type: SyncType.history,
-                      peerId: self.peerId, name: displayName, port: Int(syncPort),
-                      hash: entry.contentHash ?? "", payload: payload)) else { continue }
-            if !writer.enqueue(frame) {
+            guard let entry = HistoryRepository.shared.fetchByRowid(rowid) else { continue }
+            let frame: Data?
+            if case .image(let path) = entry.item,
+               let data = HistoryMediaStore.shared.data(at: path) {
+                let prepared = prepareImageForSync(data)
+                let base64 = prepared.base64EncodedString()
+                if let payload = encrypt(base64) {
+                    frame = encodeFrame(SyncEnvelope.make(type: SyncType.historyImage,
+                        peerId: self.peerId, name: displayName, port: Int(syncPort),
+                        hash: entry.contentHash ?? "", payload: payload))
+                } else { frame = nil }
+            } else if let text = entry.resolvedText, let payload = encrypt(text) {
+                frame = encodeFrame(SyncEnvelope.make(type: SyncType.history,
+                    peerId: self.peerId, name: displayName, port: Int(syncPort),
+                    hash: entry.contentHash ?? "", payload: payload))
+            } else {
+                continue
+            }
+            guard let validFrame = frame else { continue }
+            if !writer.enqueue(validFrame) {
                 sessions[peerId]?.historyReplayRows.insert(rowid, at: 0)
             }
             return

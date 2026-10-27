@@ -94,6 +94,7 @@ class SyncType {
   static const welcome = 'welcome';
   static const history = 'history';
   static const historyImage = 'history.image';
+  static const historyFile = 'history.file';
 
   /// Snippets full synchronization and delta push
   static const snippetsSync = 'snippets.sync';
@@ -126,7 +127,7 @@ class SyncType {
 }
 
 /// Max JSON body size (excluding 4-byte length prefix).
-const int syncMaxFrameLength = 2 * 1024 * 1024;
+const int syncMaxFrameLength = 4 * 1024 * 1024;
 
 /// Returns a compact `Uint8List`. Spreading into `[...]` produced a growable
 /// `List<int>` where every byte occupies an 8-byte VM slot — an 8x blowup on

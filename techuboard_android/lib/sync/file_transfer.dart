@@ -493,6 +493,19 @@ extension SyncFileTransferMethods on SyncManager {
         fileSize: incoming.fileSize,
         senderName: incoming.senderName,
       );
+      try {
+        final item = HistoryItem(type: 'fileURL', value: target.path);
+        final entry = HistoryEntry(
+          item: item,
+          date: DateTime.now(),
+          sourceApp: incoming.senderName,
+          contentHash: incoming.sha256Hex,
+        );
+        await ClipboardRepository.instance.insert(entry);
+        ClipboardManager.instance.onHistoryChanged?.call();
+      } catch (e) {
+        appLog('Error inserting received file into history: $e', level: 'warning');
+      }
       _sendFileAck(incoming.peerId, fileId: incoming.fileId, ok: true);
       _fileProgressController.add(
         FileProgress(

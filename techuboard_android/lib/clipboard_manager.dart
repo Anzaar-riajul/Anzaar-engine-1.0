@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:crypto/crypto.dart';
@@ -426,16 +427,43 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
             final filePath = normalizedEntry.item.value as String;
             final file = File(filePath);
             if (await file.exists()) {
-              final bytes = await file.readAsBytes();
-              if (bytes.length <= 1500000) {
-                await SyncManager.instance.broadcastImageSync(
-                  bytes,
-                  normalizedEntry.contentHash!,
-                );
+              var bytes = await file.readAsBytes();
+              if (bytes.length > 800000) {
+                bytes = await prepareImageForSync(bytes);
               }
+              await SyncManager.instance.broadcastImageSync(
+                bytes,
+                normalizedEntry.contentHash!,
+              );
             }
           } catch (e) {
             appLog('Broadcast image error: $e', level: 'warning');
+          }
+        }());
+      } else if (normalizedEntry.item.type == 'fileURL') {
+        unawaited(() async {
+          try {
+            final filePath = normalizedEntry.item.value as String;
+            final file = File(filePath);
+            if (await file.exists()) {
+              final size = await file.length();
+              final fileName = p.basename(filePath);
+              final hash = normalizedEntry.contentHash ?? sha256.convert(utf8.encode(filePath)).toString();
+              if (size <= 1200000) {
+                final bytes = await file.readAsBytes();
+                await SyncManager.instance.broadcastFileSync(
+                  fileName: fileName,
+                  bytes: bytes,
+                  hash: hash,
+                );
+              } else {
+                for (final peer in SyncManager.instance.availablePeers) {
+                  await SyncManager.instance.sendFileToPeer(file, peerId: peer.peerId);
+                }
+              }
+            }
+          } catch (e) {
+            appLog('Broadcast file error: $e', level: 'warning');
           }
         }());
       }
@@ -445,6 +473,20 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
     await ClipboardRepository.instance.trimToLimit(_historyLimit);
     onHistoryChanged?.call();
     notifyListeners();
+  }
+
+  Future<Uint8List> prepareImageForSync(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 1280);
+      final frame = await codec.getNextFrame();
+      final byteData = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        return byteData.buffer.asUint8List();
+      }
+    } catch (e) {
+      appLog('Failed to downscale image for sync: $e', level: 'warning');
+    }
+    return bytes;
   }
 
   Future<void> copyToClipboard(HistoryItem item) async {

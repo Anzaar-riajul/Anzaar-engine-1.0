@@ -118,6 +118,28 @@ class ClipboardRepository {
     return out;
   }
 
+  /// Recent clips (text and images) for comprehensive history sync replay.
+  Future<List<({String type, String value, String hash})>> fetchRecentClipsForSync({
+    int limit = 100,
+  }) async {
+    final rows = await (await _db).query(
+      'clipboard_history',
+      columns: ['item_type', 'item_value', 'content_hash'],
+      where: "item_type IN ('text', 'image')",
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+    final out = <({String type, String value, String hash})>[];
+    for (final row in rows) {
+      final type = row['item_type'] as String? ?? 'text';
+      final value = row['item_value'] as String? ?? '';
+      final hash = row['content_hash'] as String? ?? '';
+      if (value.isEmpty || hash.isEmpty) continue;
+      out.add((type: type, value: value, hash: hash));
+    }
+    return out;
+  }
+
   Future<void> insert(HistoryEntry entry) async {
     final db = await _db;
     // Delete and reinsert atomically: a failed write preserves the old row.

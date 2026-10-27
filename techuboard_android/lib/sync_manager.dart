@@ -1234,6 +1234,48 @@ class SyncManager with WidgetsBindingObserver {
           }
         }());
         break;
+      case SyncType.historyFile:
+        final payload = env.payload;
+        if (payload == null) return;
+        final jsonStr = _decryptFrom(payload, from, env.type);
+        if (jsonStr == null || jsonStr.isEmpty) return;
+        final hash = env.hash ?? '';
+        unawaited(() async {
+          try {
+            final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+            final fileName = map['fileName'] as String? ?? 'received_file';
+            final base64Data = map['base64'] as String? ?? '';
+            final effectiveHash = (map['sha256'] as String?) ?? hash;
+            if (base64Data.isNotEmpty) {
+              final bytes = base64.decode(base64Data);
+              final dir = await StoragePaths.receiveRootDirectory();
+              final file = File('${dir.path}/$fileName');
+              await file.writeAsBytes(bytes, flush: true);
+
+              final item = HistoryItem(type: 'fileURL', value: file.path);
+              final entry = HistoryEntry(
+                item: item,
+                date: DateTime.now(),
+                sourceApp: env.name ?? 'Remote Sync',
+                contentHash: effectiveHash.isNotEmpty
+                    ? effectiveHash
+                    : sha256.convert(bytes).toString(),
+              );
+              await ClipboardRepository.instance.insert(entry);
+              await FileTransferRepository.instance.insert(
+                fileName: fileName,
+                filePath: file.path,
+                fileSize: bytes.length,
+                senderName: env.name ?? 'Remote Sync',
+              );
+              ClipboardManager.instance.onHistoryChanged?.call();
+              _replyAck(from, hash.isEmpty ? null : hash);
+            }
+          } catch (e) {
+            appLog('Failed to decode/handle remote history.file: $e', level: 'warning');
+          }
+        }());
+        break;
       case SyncType.notifPost:
         final payload = env.payload;
         if (payload == null) return;
@@ -1376,38 +1418,64 @@ class SyncManager with WidgetsBindingObserver {
     _lastHistoryFetchResponse[remotePeerId] = now;
     final session = _sessions[remotePeerId];
     if (session == null) return;
-    final recent = await ClipboardRepository.instance.fetchRecentTexts(
+    final recent = await ClipboardRepository.instance.fetchRecentClipsForSync(
       limit: _historyFetchRespondLimit,
     );
     appLog(
-      'sync.ack history.fetch from ${remotePeerId.substring(0, remotePeerId.length.clamp(0, 8))}: pushing ${recent.length} text entries',
+      'sync.ack history.fetch from ${remotePeerId.substring(0, remotePeerId.length.clamp(0, 8))}: pushing ${recent.length} history entries',
     );
     // Oldest first so the peer's list ends with the newest on top after ingest.
     var batchCount = 0;
     for (final entry in recent.reversed) {
-      final payload = _encrypt(entry.text);
-      if (payload == null) continue;
-      final env = SyncEnvelope.make(
-        type: SyncType.history,
-        peerId: peerId,
-        name: displayName,
-        hash: entry.hash,
-        payload: payload,
-      );
-      final data = syncEncodeFrame(env);
-      if (data == null) continue;
-      try {
-        session.socket.add(data);
-        // Drain as we go: queueing all 200 encoded frames before one flush
-        // used to spike memory by the entire response size.
-        if (++batchCount % 25 == 0) {
-          try {
-            await session.socket.flush();
-          } catch (_) {}
+      if (entry.type == 'image') {
+        try {
+          final file = File(entry.value);
+          if (await file.exists()) {
+            var bytes = await file.readAsBytes();
+            if (bytes.length > 800000) {
+              bytes = await ClipboardManager.instance.prepareImageForSync(bytes);
+            }
+            final base64Str = base64.encode(bytes);
+            final payload = _encrypt(base64Str);
+            if (payload == null) continue;
+            final env = SyncEnvelope.make(
+              type: SyncType.historyImage,
+              peerId: peerId,
+              name: displayName,
+              hash: entry.hash,
+              payload: payload,
+            );
+            final data = syncEncodeFrame(env);
+            if (data == null) continue;
+            session.socket.add(data);
+            if (++batchCount % 15 == 0) {
+              try { await session.socket.flush(); } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      } else {
+        final payload = _encrypt(entry.value);
+        if (payload == null) continue;
+        final env = SyncEnvelope.make(
+          type: SyncType.history,
+          peerId: peerId,
+          name: displayName,
+          hash: entry.hash,
+          payload: payload,
+        );
+        final data = syncEncodeFrame(env);
+        if (data == null) continue;
+        try {
+          session.socket.add(data);
+          if (++batchCount % 25 == 0) {
+            try {
+              await session.socket.flush();
+            } catch (_) {}
+          }
+        } catch (e) {
+          appLog('history.fetch push failed: $e', level: 'warning');
+          return;
         }
-      } catch (e) {
-        appLog('history.fetch push failed: $e', level: 'warning');
-        return;
       }
     }
     try {
@@ -1556,6 +1624,31 @@ class SyncManager with WidgetsBindingObserver {
     if (payload == null) return;
     final env = SyncEnvelope.make(
       type: SyncType.historyImage,
+      peerId: peerId,
+      name: displayName,
+      hash: hash,
+      payload: payload,
+    );
+    await _fanout(env, requireAuth: true);
+  }
+
+  Future<void> broadcastFileSync({
+    required String fileName,
+    required Uint8List bytes,
+    required String hash,
+  }) async {
+    if (!isEnabled) return;
+    final meta = {
+      'fileName': fileName,
+      'fileSize': bytes.length,
+      'sha256': hash,
+      'base64': base64.encode(bytes),
+    };
+    final jsonStr = jsonEncode(meta);
+    final payload = _encrypt(jsonStr);
+    if (payload == null) return;
+    final env = SyncEnvelope.make(
+      type: SyncType.historyFile,
       peerId: peerId,
       name: displayName,
       hash: hash,

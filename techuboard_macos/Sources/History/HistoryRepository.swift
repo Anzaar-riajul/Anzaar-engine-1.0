@@ -131,7 +131,7 @@ final class HistoryRepository {
         queue.sync {
             guard let db else { return [] }
             var stmt: OpaquePointer?
-            guard sqlite3_prepare_v2(db, "SELECT rowid FROM history_entries WHERE item_type = 'text' ORDER BY date DESC, rowid DESC LIMIT ?", -1, &stmt, nil) == SQLITE_OK else { return [] }
+            guard sqlite3_prepare_v2(db, "SELECT rowid FROM history_entries WHERE item_type IN ('text', 'image') ORDER BY date DESC, rowid DESC LIMIT ?", -1, &stmt, nil) == SQLITE_OK else { return [] }
             defer { sqlite3_finalize(stmt) }
             sqlite3_bind_int(stmt, 1, Int32(clamping: limit))
             var ids: [Int64] = []
