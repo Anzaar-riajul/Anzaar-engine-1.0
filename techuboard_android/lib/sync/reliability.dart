@@ -21,6 +21,9 @@ extension SyncReliabilityMethods on SyncManager {
   List<String> _authIdsForType(String type) {
     switch (type) {
       case SyncType.history:
+      case SyncType.historyImage:
+      case SyncType.historyFile:
+      case SyncType.historyDirect:
         return clipboardSyncPeerIds;
       case SyncType.notifPost:
       case SyncType.notifDismiss:
@@ -35,6 +38,8 @@ extension SyncReliabilityMethods on SyncManager {
   bool _isQueueable(String type) =>
       type == SyncType.history ||
       type == SyncType.historyDirect ||
+      type == SyncType.historyImage ||
+      type == SyncType.historyFile ||
       type == SyncType.notifPost;
 
   Future<void> _fanout(SyncEnvelope env, {required bool requireAuth}) async {

@@ -6,14 +6,17 @@ extension SyncManager {
 
     func authIds(for env: SyncEnvelope) -> Set<String> {
         switch env.type {
-        case SyncType.history: return clipboardAuthIds()
-        case SyncType.notifPost, SyncType.notifDismiss, SyncType.notifClear, SyncType.notifConfig: return notificationAuthIds()
-        default: return Set(PreferencesManager.shared.authorizedPeerIds)
+        case SyncType.history, SyncType.historyImage, SyncType.historyFile, SyncType.historyDirect:
+            return clipboardAuthIds()
+        case SyncType.notifPost, SyncType.notifDismiss, SyncType.notifClear, SyncType.notifConfig:
+            return notificationAuthIds()
+        default:
+            return Set(PreferencesManager.shared.authorizedPeerIds)
         }
     }
 
     func isQueueableSyncType(_ type: String) -> Bool {
-        type == SyncType.history || type == SyncType.historyDirect || type == SyncType.notifPost
+        type == SyncType.history || type == SyncType.historyDirect || type == SyncType.historyImage || type == SyncType.historyFile || type == SyncType.notifPost
     }
 
     func fanoutReliable(_ env: SyncEnvelope, requireAuth: Bool, allowWithoutClipboardSync: Bool = false) {
