@@ -19,6 +19,11 @@ class ClipboardChangeListener(
     private var attached = false
 
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
+        // Suppress loopback if the clipboard change was triggered by our own app's remote sync
+        val diff = System.currentTimeMillis() - TechuboardApplication.lastSelfWriteTimestamp
+        if (diff < 800L) {
+            return@OnPrimaryClipChangedListener
+        }
         handler.post { emitCurrentClipboard(isBaseline = false) }
     }
 

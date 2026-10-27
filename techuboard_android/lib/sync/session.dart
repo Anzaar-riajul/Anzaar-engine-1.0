@@ -488,9 +488,6 @@ extension SyncSessionMethods on SyncManager {
       _drainBuffer(env.peerId);
     }
     await _flushPending(env.peerId);
-    if (clipboardSyncPeerIds.contains(env.peerId)) {
-      unawaited(_requestHistoryFromPeer(env.peerId));
-    }
     diagnostics.noteSessionUp(env.peerId, name: name, host: host);
     appLog(
       'Session up with $name (${env.peerId.substring(0, env.peerId.length.clamp(0, 8))}) @ $host:$peerPort',

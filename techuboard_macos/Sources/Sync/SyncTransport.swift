@@ -205,14 +205,6 @@ extension SyncManager {
                 PreferencesManager.shared.setNotificationSync(peerId: peerId, enabled: true)
                 appLog("Auto-authorized connected peer \(name) (\(peerId.prefix(8))) for clipboard & notifications")
             }
-            if self.clipboardAuthIds().contains(peerId) {
-                let rows = HistoryRepository.shared.recentTextRowids(limit: 50)
-                if !rows.isEmpty {
-                    self.sessions[peerId]?.historyReplayRows = rows
-                    self.pumpHistoryReplay(for: peerId)
-                    appLog("Catch-up auto-push: queued \(rows.count) recent text entries for \(peerId.prefix(8))")
-                }
-            }
             self.diagnostics.noteSessionUp(peerId: peerId, name: name, host: host)
             appLog("Session up with \(name) (\(peerId.prefix(8))) @ \(host):\(port)")
         }

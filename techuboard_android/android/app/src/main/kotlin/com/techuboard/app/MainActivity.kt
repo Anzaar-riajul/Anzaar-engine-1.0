@@ -249,6 +249,11 @@ class MainActivity: FlutterActivity() {
                     val ok = (application as? TechuboardApplication)?.setClipboardText(text) == true
                     result.success(ok)
                 }
+                "setImage" -> {
+                    val path = call.argument<String>("path") ?: ""
+                    val ok = (application as? TechuboardApplication)?.setClipboardImage(path) == true
+                    result.success(ok)
+                }
                 else -> result.notImplemented()
             }
         }

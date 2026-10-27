@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -38,6 +40,8 @@ class TechuboardApplication : Application() {
         private const val KEY_SYNC_ENABLED = "flutter.syncEnabled"
         /** Cap for the inter-retry backoff when engine creation keeps failing. */
         private const val ENGINE_RETRY_MAX_BACKOFF_MS = 60_000L
+        @Volatile
+        var lastSelfWriteTimestamp: Long = 0L
     }
 
     val engineReady: Boolean
@@ -200,11 +204,37 @@ class TechuboardApplication : Application() {
 
     fun setClipboardText(text: String): Boolean {
         return try {
+            lastSelfWriteTimestamp = System.currentTimeMillis()
             val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText("Techuboard", text))
             true
         } catch (e: Exception) {
             Log.w(TAG, "setClipboardText failed", e)
+            false
+        }
+    }
+
+    fun setClipboardImage(filePath: String): Boolean {
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.w(TAG, "setClipboardImage: file not found at $filePath")
+                return false
+            }
+            lastSelfWriteTimestamp = System.currentTimeMillis()
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newUri(contentResolver, "Techuboard Image", uri)
+            grantUriPermission("com.android.systemui", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            cm.setPrimaryClip(clip)
+            Log.i(TAG, "setClipboardImage: applied image from $filePath")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "setClipboardImage failed", e)
             false
         }
     }

@@ -603,9 +603,8 @@ final class SyncManager: NSObject {
                 return
             }
             self.lastHistoryFetchResponse[remotePeerId] = Date()
-            self.sessions[remotePeerId]?.historyReplayRows = HistoryRepository.shared.recentTextRowids(limit: 200)
-            self.pumpHistoryReplay(for: remotePeerId)
-            // Also push snippets upon history fetch
+            // Do not blast hundreds of old individual clipboard frames over the socket.
+            // Push snippets upon fetch
             self.respondToSnippetsFetch(from: remotePeerId)
         }
     }

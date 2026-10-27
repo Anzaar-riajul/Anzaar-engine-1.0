@@ -508,12 +508,21 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
         await Clipboard.setData(ClipboardData(text: item.value as String));
       }
       _lastText = item.value as String;
-    } else if (Platform.isWindows && item.type == 'image') {
-      final bytes = await File(item.value as String).readAsBytes();
-      final ok = await _clipboardChannel.invokeMethod<bool>('setImage', {
-        'bytes': bytes,
-      });
-      if (ok != true) throw StateError('Windows image clipboard write failed');
+    } else if (item.type == 'image') {
+      final filePath = item.value as String;
+      if (Platform.isWindows) {
+        final bytes = await File(filePath).readAsBytes();
+        final ok = await _clipboardChannel.invokeMethod<bool>('setImage', {
+          'bytes': bytes,
+        });
+        if (ok != true) throw StateError('Windows image clipboard write failed');
+      } else if (Platform.isAndroid) {
+        final ok = await _clipboardChannel.invokeMethod<bool>('setImage', {
+          'path': filePath,
+        });
+        if (ok != true) throw StateError('Android image clipboard write failed');
+      }
+      _lastText = null;
     } else if (Platform.isWindows &&
         (item.type == 'fileURL' || item.type == 'fileURLs')) {
       final paths = item.type == 'fileURL'
@@ -611,6 +620,7 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
       );
 
       await _addToHistory(entry, broadcast: false);
+      unawaited(_writeSystemClipboardImage(file.path));
       appLog(
         'handleRemoteImageSync: stored image hash=${effectiveHash.substring(0, effectiveHash.length.clamp(0, 8))}',
       );
@@ -618,6 +628,23 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
     } catch (e) {
       appLog('handleRemoteImageSync failed: $e', level: 'error');
       return false;
+    }
+  }
+
+  Future<void> _writeSystemClipboardImage(String filePath) async {
+    if (Platform.isAndroid) {
+      try {
+        await _clipboardChannel.invokeMethod<bool>('setImage', {'path': filePath});
+      } catch (e) {
+        appLog('Android image clipboard write failed: $e', level: 'warning');
+      }
+    } else if (Platform.isWindows) {
+      try {
+        final bytes = await File(filePath).readAsBytes();
+        await _clipboardChannel.invokeMethod<bool>('setImage', {'bytes': bytes});
+      } catch (e) {
+        appLog('Windows image clipboard write failed: $e', level: 'warning');
+      }
     }
   }
 
