@@ -93,6 +93,7 @@ class SyncType {
   static const hello = 'hello';
   static const welcome = 'welcome';
   static const history = 'history';
+  static const historyImage = 'history.image';
 
   /// Snippets full synchronization and delta push
   static const snippetsSync = 'snippets.sync';

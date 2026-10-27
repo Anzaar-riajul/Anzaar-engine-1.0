@@ -307,6 +307,36 @@ final class SyncManager: NSObject {
         fanoutReliable(env, requireAuth: true)
     }
 
+    func broadcastImageSync(data: Data, hash: String) {
+        guard PreferencesManager.shared.isSyncEnabled else { appLog("broadcastImageSync skipped: sync disabled", level: .warning); return }
+        let prepared = prepareImageForSync(data)
+        let base64 = prepared.base64EncodedString()
+        guard let payload = encrypt(base64) else { appLog("broadcastImageSync skipped: encryption failed", level: .warning); return }
+        let env = SyncEnvelope.make(type: SyncType.historyImage, peerId: peerId, name: displayName, hash: hash, payload: payload)
+        appLog("broadcastImageSync: image hash \(hash.prefix(8)) (\(prepared.count / 1024)KB) to \(clipboardAuthIds()) auth peer(s)")
+        fanoutReliable(env, requireAuth: true)
+    }
+
+    private func prepareImageForSync(_ data: Data) -> Data {
+        if data.count <= 1_200_000 { return data }
+        guard let image = NSImage(data: data) else { return data }
+        let maxDim: CGFloat = 1600
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return data }
+        let scale = min(maxDim / size.width, maxDim / size.height, 1.0)
+        let newSize = NSSize(width: size.width * scale, height: size.height * scale)
+        let target = NSImage(size: newSize)
+        target.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: newSize), from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1.0)
+        target.unlockFocus()
+        if let tiff = target.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) {
+            return jpg
+        }
+        return data
+    }
+
     func broadcastNotificationMessage(type: String, content: String, hash: String) {
         let mapped = mapNotificationType(type)
         guard mapped != nil || type.hasPrefix("notif.") else { appLog("Unknown notification type: \(type)", level: .warning); return }
@@ -371,6 +401,13 @@ final class SyncManager: NSObject {
             guard let text = decryptPayload(env, from: remotePeerId) else { return }
             DispatchQueue.main.async { [weak self] in
                 ClipboardManager.shared.handleRemoteSync(content: text, hash: env.hash ?? "")
+                self?.syncQueue.async { self?.replyAck(to: remotePeerId, hash: env.hash) }
+            }
+        case SyncType.historyImage:
+            guard let base64 = decryptPayload(env, from: remotePeerId),
+                  let data = Data(base64Encoded: base64) else { return }
+            DispatchQueue.main.async { [weak self] in
+                ClipboardManager.shared.handleRemoteImageSync(data: data, hash: env.hash ?? "")
                 self?.syncQueue.async { self?.replyAck(to: remotePeerId, hash: env.hash) }
             }
         case SyncType.historyFetch:

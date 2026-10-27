@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.database.sqlite.SQLiteDatabase
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -491,61 +492,12 @@ class FloatingHubService : Service() {
         header.addView(closeBtn)
         mainContainer.addView(header)
 
-        // 2. Global Search Bar
-        val searchBox = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            val sBg = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpToPx(10).toFloat()
-                setColor(Color.parseColor("#1B2230"))
-                setStroke(dpToPx(1), Color.parseColor("#29354A"))
-            }
-            background = sBg
-            setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, dpToPx(10))
-            }
-        }
-
-        val searchIcon = TextView(this).apply {
-            text = "🔍"
-            textSize = 12f
-            setPadding(0, 0, dpToPx(6), 0)
-        }
-
-        val searchInput = EditText(this).apply {
-            hint = "Search clips, notes, devices..."
-            setHintTextColor(Color.parseColor("#788494"))
-            setTextColor(Color.WHITE)
-            textSize = 13.5f
-            background = null
-            maxLines = 1
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        }
-
-        val clearQueryBtn = TextView(this).apply {
-            text = "✕"
-            setTextColor(Color.parseColor("#788494"))
-            textSize = 12f
-            visibility = View.GONE
-            setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
-            setOnClickListener {
-                searchInput.setText("")
-            }
-        }
-
-        searchBox.addView(searchIcon)
-        searchBox.addView(searchInput)
-        searchBox.addView(clearQueryBtn)
-        mainContainer.addView(searchBox)
-
         // Dynamic Counts
         val allCount = getClipboardCount()
         val notesCount = getNotesCount()
         val devicesCount = getDevicesCount()
 
-        // 3. Mac-Style 3-Segment Tab Bar (All - Notes - Devices)
+        // 2. Mac-Style 3-Segment Tab Bar (All - Notes - Devices) directly under header
         val tabBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             val tbBg = GradientDrawable().apply {
@@ -556,8 +508,8 @@ class FloatingHubService : Service() {
             }
             background = tbBg
             setPadding(dpToPx(3), dpToPx(3), dpToPx(3), dpToPx(3))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(36)).apply {
-                setMargins(0, 0, 0, dpToPx(10))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(34)).apply {
+                setMargins(0, 0, 0, dpToPx(8))
             }
         }
 
@@ -565,14 +517,132 @@ class FloatingHubService : Service() {
         val btnTabNotes = TextView(this)
         val btnTabDevices = TextView(this)
 
-        // Sub-filter row (All, Pinned, Links, Text)
-        val subFilterRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        val tabWeightParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        btnTabAll.apply { layoutParams = tabWeightParams }
+        btnTabNotes.apply { layoutParams = tabWeightParams }
+        btnTabDevices.apply { layoutParams = tabWeightParams }
+
+        tabBar.addView(btnTabAll)
+        tabBar.addView(btnTabNotes)
+        tabBar.addView(btnTabDevices)
+        mainContainer.addView(tabBar)
+
+        // 3. Expandable Filter Chips & Search Bar Row
+        val filterAndSearchContainer = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(32)).apply {
                 setMargins(0, 0, 0, dpToPx(8))
             }
         }
-        mainContainer.addView(subFilterRow)
+
+        val filterRowLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+
+        val chipsScroll = HorizontalScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+
+        val subFilterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        chipsScroll.addView(subFilterRow)
+        filterRowLayout.addView(chipsScroll)
+
+        val searchToggleBtn = TextView(this).apply {
+            text = "🔍"
+            textSize = 12.5f
+            gravity = Gravity.CENTER
+            val sBtnBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#1B2230"))
+                setStroke(dpToPx(1), Color.parseColor("#29354A"))
+            }
+            background = sBtnBg
+            layoutParams = LinearLayout.LayoutParams(dpToPx(32), dpToPx(28)).apply {
+                setMargins(dpToPx(4), 0, 0, 0)
+            }
+        }
+        filterRowLayout.addView(searchToggleBtn)
+        filterAndSearchContainer.addView(filterRowLayout)
+
+        // Expanded Search Box (smoothly overlays filter chips)
+        val searchBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = if (currentQuery.isNotEmpty()) View.VISIBLE else View.GONE
+            val sBg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#1B2230"))
+                setStroke(dpToPx(1), Color.parseColor("#38BDF8"))
+            }
+            background = sBg
+            setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+
+        val searchIcon = TextView(this).apply {
+            text = "🔍"
+            textSize = 12f
+            setPadding(0, 0, dpToPx(6), 0)
+        }
+
+        val searchInput = EditText(this).apply {
+            hint = "Search clips, notes..."
+            setHintTextColor(Color.parseColor("#788494"))
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            background = null
+            maxLines = 1
+            if (currentQuery.isNotEmpty()) setText(currentQuery)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val dismissSearchBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 13.5f
+            setPadding(dpToPx(6), dpToPx(4), dpToPx(4), dpToPx(4))
+        }
+
+        searchBox.addView(searchIcon)
+        searchBox.addView(searchInput)
+        searchBox.addView(dismissSearchBtn)
+        filterAndSearchContainer.addView(searchBox)
+
+        if (currentQuery.isNotEmpty()) {
+            filterRowLayout.visibility = View.GONE
+            searchBox.visibility = View.VISIBLE
+        } else {
+            filterRowLayout.visibility = View.VISIBLE
+            searchBox.visibility = View.GONE
+        }
+
+        searchToggleBtn.setOnClickListener {
+            filterRowLayout.visibility = View.GONE
+            searchBox.visibility = View.VISIBLE
+            searchInput.requestFocus()
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.showSoftInput(searchInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+        }
+
+        dismissSearchBtn.setOnClickListener {
+            searchInput.setText("")
+            currentQuery = ""
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(searchInput.windowToken, 0)
+            searchBox.visibility = View.GONE
+            filterRowLayout.visibility = View.VISIBLE
+        }
+
+        mainContainer.addView(filterAndSearchContainer)
 
         // Scrollable content area
         val contentLayout = LinearLayout(this).apply {
@@ -618,52 +688,37 @@ class FloatingHubService : Service() {
 
             when (activeTab) {
                 Tab.ALL -> {
-                    subFilterRow.visibility = View.VISIBLE
+                    filterAndSearchContainer.visibility = View.VISIBLE
                     renderSubFilters(subFilterRow) { renderActiveTab() }
                     renderAllTab(contentLayout, currentQuery)
                 }
                 Tab.NOTES -> {
-                    subFilterRow.visibility = View.VISIBLE
+                    filterAndSearchContainer.visibility = View.VISIBLE
                     renderNotesFolderFilters(subFilterRow) { renderActiveTab() }
                     renderNotesTab(contentLayout, currentQuery)
                 }
                 Tab.DEVICES -> {
-                    subFilterRow.visibility = View.GONE
+                    filterAndSearchContainer.visibility = View.GONE
                     renderDevicesTab(contentLayout, currentQuery)
                 }
             }
         }
 
-        val tabWeightParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-        btnTabAll.apply {
-            layoutParams = tabWeightParams
-            setOnClickListener {
-                activeTab = Tab.ALL
-                updateTabsUI()
-                renderActiveTab()
-            }
+        btnTabAll.setOnClickListener {
+            activeTab = Tab.ALL
+            updateTabsUI()
+            renderActiveTab()
         }
-        btnTabNotes.apply {
-            layoutParams = tabWeightParams
-            setOnClickListener {
-                activeTab = Tab.NOTES
-                updateTabsUI()
-                renderActiveTab()
-            }
+        btnTabNotes.setOnClickListener {
+            activeTab = Tab.NOTES
+            updateTabsUI()
+            renderActiveTab()
         }
-        btnTabDevices.apply {
-            layoutParams = tabWeightParams
-            setOnClickListener {
-                activeTab = Tab.DEVICES
-                updateTabsUI()
-                renderActiveTab()
-            }
+        btnTabDevices.setOnClickListener {
+            activeTab = Tab.DEVICES
+            updateTabsUI()
+            renderActiveTab()
         }
-
-        tabBar.addView(btnTabAll)
-        tabBar.addView(btnTabNotes)
-        tabBar.addView(btnTabDevices)
-        mainContainer.addView(tabBar, 2)
 
         updateTabsUI()
         renderActiveTab()
@@ -672,7 +727,6 @@ class FloatingHubService : Service() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 currentQuery = s?.toString()?.trim() ?: ""
-                clearQueryBtn.visibility = if (currentQuery.isNotEmpty()) View.VISIBLE else View.GONE
                 renderActiveTab()
             }
             override fun afterTextChanged(s: Editable?) {}
@@ -688,8 +742,9 @@ class FloatingHubService : Service() {
         val sw = resources.displayMetrics.widthPixels
         val sh = resources.displayMetrics.heightPixels
 
-        val panelWidth = (sw * 0.92).toInt().coerceAtMost(dpToPx(420))
-        val panelHeight = (sh * 0.72).toInt().coerceAtMost(dpToPx(580))
+        // Sleek & compact floating hub window dimensions
+        val panelWidth = (sw * 0.86).toInt().coerceAtMost(dpToPx(350))
+        val panelHeight = (sh * 0.52).toInt().coerceIn(dpToPx(360), dpToPx(430))
 
         val expParams = WindowManager.LayoutParams(
             panelWidth,
@@ -726,6 +781,7 @@ class FloatingHubService : Service() {
             "all" to "All",
             "pinned" to "📌 Pinned",
             "links" to "🔗 Links",
+            "images" to "🖼️ Images",
             "text" to "📄 Text"
         )
         for ((key, label) in filters) {
@@ -749,7 +805,7 @@ class FloatingHubService : Service() {
                 background = bg
                 setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, dpToPx(6), 0)
+                    setMargins(0, 0, dpToPx(5), 0)
                 }
                 setOnClickListener {
                     activeSubFilter = key
@@ -758,6 +814,25 @@ class FloatingHubService : Service() {
             }
             container.addView(pill)
         }
+    }
+
+    private fun getBadgeInfo(value: String, isImage: Boolean): Pair<String, String>? {
+        if (isImage) return Pair("IMAGE", "#38BDF8")
+        for (ch in value) {
+            val code = ch.code
+            if (code in 0x0980..0x09FF) {
+                return Pair("TechuAvro", "#22C55E")
+            }
+        }
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            return Pair("URL", "#A855F7")
+        }
+        if (value.contains("=") || value.contains("function ") || value.contains("var ") ||
+            value.contains("let ") || value.contains("const ") || value.contains("{") ||
+            value.contains("def ") || value.contains("class ")) {
+            return Pair("Code", "#F97316")
+        }
+        return null
     }
 
     private data class ClipItem(
@@ -786,117 +861,176 @@ class FloatingHubService : Service() {
         }
 
         for (clip in clips) {
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
+            val isImage = clip.type == "image"
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = dpToPx(10).toFloat()
-                    setColor(Color.parseColor("#18202C"))
-                    setStroke(dpToPx(1), Color.parseColor("#263346"))
+                    cornerRadius = dpToPx(8).toFloat()
+                    setColor(Color.parseColor("#161C26"))
+                    setStroke(dpToPx(1), Color.parseColor("#232C3C"))
                 }
                 background = bg
-                setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
+                setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6))
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, 0, dpToPx(8))
+                    setMargins(0, 0, 0, dpToPx(5))
                 }
             }
 
-            // Top meta row
-            val metaRow = LinearLayout(this).apply {
+            // Left: Thumbnail for image or Pin icon
+            if (isImage) {
+                val thumbView = ImageView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(38), dpToPx(28)).apply {
+                        setMargins(0, 0, dpToPx(8), 0)
+                    }
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    clipToOutline = true
+                    background = GradientDrawable().apply {
+                        cornerRadius = dpToPx(4).toFloat()
+                        setColor(Color.parseColor("#1F2937"))
+                    }
+                    try {
+                        val file = File(clip.value)
+                        if (file.exists()) {
+                            val opt = BitmapFactory.Options().apply { inSampleSize = 4 }
+                            val bmp = BitmapFactory.decodeFile(file.absolutePath, opt)
+                            if (bmp != null) setImageBitmap(bmp)
+                        }
+                    } catch (_: Exception) {}
+                }
+                row.addView(thumbView)
+            } else if (clip.isPinned) {
+                val pinIcon = TextView(this).apply {
+                    text = "📌"
+                    textSize = 11f
+                    setPadding(0, 0, dpToPx(5), 0)
+                }
+                row.addView(pinIcon)
+            }
+
+            // Middle: Badges + Text + Time
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(0, 0, dpToPx(6), 0)
+                }
+            }
+
+            val titleLine = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
 
-            val typeBadge = TextView(this).apply {
-                text = if (clip.isPinned) "📌 PINNED" else if (clip.value.startsWith("http://") || clip.value.startsWith("https://")) "🔗 LINK" else "📄 TEXT"
-                setTextColor(if (clip.isPinned) Color.parseColor("#F59E0B") else Color.parseColor("#788494"))
-                textSize = 10.5f
+            val badgePair = getBadgeInfo(clip.value, isImage)
+            if (badgePair != null) {
+                val (bText, bColorHex) = badgePair
+                val badgeTv = TextView(this).apply {
+                    text = bText
+                    setTextColor(Color.parseColor(bColorHex))
+                    textSize = 9f
+                    paint.isFakeBoldText = true
+                    val bBg = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dpToPx(3).toFloat()
+                        val parsed = Color.parseColor(bColorHex)
+                        setColor(Color.argb(35, Color.red(parsed), Color.green(parsed), Color.blue(parsed)))
+                    }
+                    background = bBg
+                    setPadding(dpToPx(4), dpToPx(1), dpToPx(4), dpToPx(1))
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(0, 0, dpToPx(5), 0)
+                    }
+                }
+                titleLine.addView(badgeTv)
+            }
+
+            val bodyTv = TextView(this).apply {
+                text = if (isImage) "[Image]" else clip.value.replace("\n", " ").trim()
+                setTextColor(Color.parseColor("#F1F5F9"))
+                textSize = 12.5f
                 paint.isFakeBoldText = true
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
+            titleLine.addView(bodyTv)
+            textCol.addView(titleLine)
 
-            val timeAgoTv = TextView(this).apply {
-                text = formatTimeAgo(clip.createdAt)
+            val subTv = TextView(this).apply {
+                text = formatTimeAgo(clip.createdAt) + if (clip.sourceApp.isNotEmpty()) " · ${clip.sourceApp}" else ""
                 setTextColor(Color.parseColor("#64748B"))
-                textSize = 11f
+                textSize = 9.5f
+                setPadding(0, dpToPx(1), 0, 0)
+            }
+            textCol.addView(subTv)
+
+            row.addView(textCol)
+
+            // Direct tap-to-paste
+            row.setOnClickListener {
+                if (isImage) {
+                    copyToClipboard(clip.value, isImage = true)
+                } else {
+                    executePaste(clip.value)
+                }
             }
 
-            metaRow.addView(typeBadge)
-            metaRow.addView(timeAgoTv)
-            card.addView(metaRow)
-
-            // Content preview
-            val bodyTv = TextView(this).apply {
-                text = clip.value
-                setTextColor(Color.WHITE)
-                textSize = 13f
-                maxLines = 3
-                ellipsize = TextUtils.TruncateAt.END
-                setPadding(0, dpToPx(6), 0, dpToPx(8))
-            }
-            card.addView(bodyTv)
-
-            // Action buttons row (Tap to Paste, Copy, Pin, Delete)
-            val actionRow = LinearLayout(this).apply {
+            // Right: Compact action buttons (⚡ Paste, 📋 Copy, 📌 Pin, 🗑️ Delete)
+            val actions = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
 
             val btnPaste = TextView(this).apply {
-                text = "⚡ Paste"
-                setTextColor(Color.WHITE)
-                textSize = 11.5f
-                paint.isFakeBoldText = true
-                val btnBg = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    cornerRadius = dpToPx(6).toFloat()
-                    setColor(Color.parseColor("#0284C7"))
-                }
-                background = btnBg
-                setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+                text = "⚡"
+                textSize = 12.5f
+                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
                 setOnClickListener {
-                    executePaste(clip.value)
+                    if (isImage) {
+                        copyToClipboard(clip.value, isImage = true)
+                    } else {
+                        executePaste(clip.value)
+                    }
                 }
             }
 
             val btnCopy = TextView(this).apply {
-                text = "📋 Copy"
-                setTextColor(Color.parseColor("#CBD5E1"))
-                textSize = 11f
-                setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+                text = "📋"
+                textSize = 12f
+                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
                 setOnClickListener {
-                    copyToClipboard(clip.value)
+                    copyToClipboard(clip.value, isImage = isImage)
                 }
             }
 
             val btnPin = TextView(this).apply {
-                text = if (clip.isPinned) "Unpin" else "Pin"
-                setTextColor(Color.parseColor("#CBD5E1"))
-                textSize = 11f
-                setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+                text = if (clip.isPinned) "⭐" else "📌"
+                textSize = 11.5f
+                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
                 setOnClickListener {
                     togglePinClip(clip.hash)
-                    expand() // Refresh
+                    expand()
                 }
             }
 
             val btnDelete = TextView(this).apply {
                 text = "🗑️"
-                textSize = 12f
-                setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+                textSize = 11.5f
+                setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4))
                 setOnClickListener {
                     deleteClip(clip.id)
-                    expand() // Refresh
+                    expand()
                 }
             }
 
-            actionRow.addView(btnPaste)
-            actionRow.addView(btnCopy)
-            actionRow.addView(btnPin)
-            actionRow.addView(btnDelete)
-            card.addView(actionRow)
+            actions.addView(btnPaste)
+            actions.addView(btnCopy)
+            actions.addView(btnPin)
+            actions.addView(btnDelete)
+            row.addView(actions)
 
-            container.addView(card)
+            container.addView(row)
         }
     }
 
@@ -1335,9 +1469,25 @@ class FloatingHubService : Service() {
         }, 120)
     }
 
-    private fun copyToClipboard(text: String, notify: Boolean = true) {
+    private fun copyToClipboard(text: String, isImage: Boolean = false, notify: Boolean = true) {
         try {
             val cm = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            if (isImage) {
+                val file = File(text)
+                if (file.exists()) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        this,
+                        "${packageName}.fileprovider",
+                        file
+                    )
+                    val clip = android.content.ClipData.newUri(contentResolver, "Techuboard Image", uri)
+                    cm?.setPrimaryClip(clip)
+                    if (notify && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        Toast.makeText(this, "Image copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+            }
             cm?.setPrimaryClip(android.content.ClipData.newPlainText("Techuboard", text))
             if (notify && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
                 Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -1430,18 +1580,29 @@ class FloatingHubService : Service() {
         val pinnedSet = getPinnedHashes()
 
         try {
-            var sql = "SELECT id, content_hash, item_type, item_value, source_app, created_at FROM clipboard_history WHERE item_type = 'text'"
+            var sql = "SELECT id, content_hash, item_type, item_value, source_app, created_at FROM clipboard_history WHERE 1=1"
             val args = mutableListOf<String>()
 
             if (query.isNotEmpty()) {
                 sql += " AND item_value LIKE ?"
                 args.add("%$query%")
             }
-            if (filter == "links") {
-                sql += " AND (item_value LIKE 'http://%' OR item_value LIKE 'https://%')"
+            when (filter) {
+                "links" -> {
+                    sql += " AND item_type = 'text' AND (item_value LIKE 'http://%' OR item_value LIKE 'https://%')"
+                }
+                "images" -> {
+                    sql += " AND item_type = 'image'"
+                }
+                "text" -> {
+                    sql += " AND item_type = 'text'"
+                }
+                else -> {
+                    sql += " AND item_type IN ('text', 'image')"
+                }
             }
 
-            sql += " ORDER BY created_at DESC LIMIT 30"
+            sql += " ORDER BY created_at DESC LIMIT 50"
 
             val cursor = db.rawQuery(sql, if (args.isEmpty()) null else args.toTypedArray())
             cursor.use {

@@ -1055,6 +1055,27 @@ class SyncManager with WidgetsBindingObserver {
           }
         }());
         break;
+      case SyncType.historyImage:
+        final payload = env.payload;
+        if (payload == null) return;
+        final base64Data = _decryptFrom(payload, from, env.type);
+        if (base64Data == null || base64Data.isEmpty) return;
+        final hash = env.hash ?? '';
+        unawaited(() async {
+          try {
+            final bytes = base64.decode(base64Data);
+            final ok = await ClipboardManager.instance.handleRemoteImageSync(
+              bytes,
+              hash,
+            );
+            if (ok) {
+              _replyAck(from, hash.isEmpty ? null : hash);
+            }
+          } catch (e) {
+            appLog('Failed to decode/handle remote image: $e', level: 'warning');
+          }
+        }());
+        break;
       case SyncType.notifPost:
         final payload = env.payload;
         if (payload == null) return;
@@ -1362,6 +1383,21 @@ class SyncManager with WidgetsBindingObserver {
     if (payload == null) return;
     final env = SyncEnvelope.make(
       type: SyncType.history,
+      peerId: peerId,
+      name: displayName,
+      hash: hash,
+      payload: payload,
+    );
+    await _fanout(env, requireAuth: true);
+  }
+
+  Future<void> broadcastImageSync(Uint8List bytes, String hash) async {
+    if (!isEnabled) return;
+    final base64Str = base64.encode(bytes);
+    final payload = _encrypt(base64Str);
+    if (payload == null) return;
+    final env = SyncEnvelope.make(
+      type: SyncType.historyImage,
       peerId: peerId,
       name: displayName,
       hash: hash,

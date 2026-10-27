@@ -651,6 +651,12 @@ class ClipboardManager {
            sync.hash != lastKnownSyncHash,
            !recentRemoteHashes.contains(sync.hash) {
             SyncManager.shared.broadcastSync(content: sync.text, hash: sync.hash)
+        } else if case .image(let path) = item,
+                  let hash = hash,
+                  hash != lastKnownSyncHash,
+                  !recentRemoteHashes.contains(hash),
+                  let data = HistoryMediaStore.shared.data(at: path) {
+            SyncManager.shared.broadcastImageSync(data: data, hash: hash)
         }
 
         let searchIndex = HistorySearchIndexBuilder.buildIndex(for: item)
@@ -713,6 +719,22 @@ class ClipboardManager {
         changeCount = pasteboard.changeCount
 
         addToHistory(.text(content), sourceApp: "Remote Device")
+    }
+
+    func handleRemoteImageSync(data: Data, hash: String) {
+        guard !data.isEmpty, let image = NSImage(data: data) else { return }
+        let effectiveHash = hash.isEmpty ? (sha256Hex(data) ?? UUID().uuidString) : hash
+        appLog("Handling remote image sync: \(effectiveHash.prefix(8))")
+
+        lastSyncHash = effectiveHash
+        rememberRemoteHash(effectiveHash)
+
+        pasteboard.clearContents()
+        pasteboard.writeObjects([image])
+        changeCount = pasteboard.changeCount
+
+        let path = HistoryMediaStore.shared.store(data: data, kind: .image, preferredHash: effectiveHash)
+        addToHistory(.image(path), sourceApp: "Remote Device")
     }
 
     /// A file received over LAN sync, already moved to its final destination.

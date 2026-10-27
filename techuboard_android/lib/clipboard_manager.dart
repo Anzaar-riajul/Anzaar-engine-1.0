@@ -130,6 +130,14 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
       final sourceApp = (sourcePackage != null && sourcePackage.isNotEmpty)
           ? sourcePackage
           : (Platform.isIOS ? 'iOS' : 'Android');
+      if (args['type'] == 'image' && args['bytes'] != null) {
+        final rawBytes = args['bytes'];
+        final bytes = rawBytes is Uint8List
+            ? rawBytes
+            : Uint8List.fromList(List<int>.from(rawBytes as List));
+        await _storeImageBytes(bytes, sourceApp: sourceApp);
+        return null;
+      }
       if (text != null && text.isNotEmpty) {
         await _processClipboardText(
           text,
@@ -177,7 +185,7 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
       } else if (data['type'] == 'image') {
         final bytes = data['bytes'] as Uint8List?;
         if (bytes == null || bytes.isEmpty) return;
-        await _storeWindowsImage(bytes, sourceApp: sourceApp);
+        await _storeImageBytes(bytes, sourceApp: sourceApp);
       } else if (data['type'] == 'files') {
         final paths = (data['paths'] as List?)?.cast<String>() ?? [];
         if (paths.isEmpty) return;
@@ -198,7 +206,7 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
     }
   }
 
-  Future<void> _storeWindowsImage(
+  Future<void> _storeImageBytes(
     Uint8List bytes, {
     required String sourceApp,
   }) async {
@@ -412,6 +420,24 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
             normalizedEntry.contentHash!,
           ),
         );
+      } else if (normalizedEntry.item.type == 'image') {
+        unawaited(() async {
+          try {
+            final filePath = normalizedEntry.item.value as String;
+            final file = File(filePath);
+            if (await file.exists()) {
+              final bytes = await file.readAsBytes();
+              if (bytes.length <= 1500000) {
+                await SyncManager.instance.broadcastImageSync(
+                  bytes,
+                  normalizedEntry.contentHash!,
+                );
+              }
+            }
+          } catch (e) {
+            appLog('Broadcast image error: $e', level: 'warning');
+          }
+        }());
       }
     }
 
@@ -495,6 +521,52 @@ class ClipboardManager with WidgetsBindingObserver, ChangeNotifier {
       return true;
     } catch (e) {
       appLog('handleRemoteSync failed: $e', level: 'error');
+      return false;
+    }
+  }
+
+  Future<bool> handleRemoteImageSync(Uint8List bytes, String hash) async {
+    if (bytes.isEmpty) return false;
+    final effectiveHash = hash.isNotEmpty
+        ? hash
+        : sha256.convert(bytes).toString();
+
+    try {
+      final latest = await ClipboardRepository.instance.latestEntry();
+      if (latest != null && latest.contentHash == effectiveHash) {
+        _rememberRemoteHash(effectiveHash);
+        return true;
+      }
+
+      _rememberRemoteHash(effectiveHash);
+
+      final root = Directory(
+        p.join(
+          (await StoragePaths.appStorageDirectory()).path,
+          'clipboard-images',
+        ),
+      );
+      await root.create(recursive: true);
+      final file = File(p.join(root.path, '$effectiveHash.png'));
+      if (!await file.exists()) {
+        await file.writeAsBytes(bytes, flush: true);
+      }
+
+      final item = HistoryItem(type: 'image', value: file.path);
+      final entry = HistoryEntry(
+        item: item,
+        date: DateTime.now(),
+        sourceApp: 'Remote Sync',
+        contentHash: effectiveHash,
+      );
+
+      await _addToHistory(entry, broadcast: false);
+      appLog(
+        'handleRemoteImageSync: stored image hash=${effectiveHash.substring(0, effectiveHash.length.clamp(0, 8))}',
+      );
+      return true;
+    } catch (e) {
+      appLog('handleRemoteImageSync failed: $e', level: 'error');
       return false;
     }
   }

@@ -434,6 +434,32 @@ class _PaginatedClipboardHistoryListState
     );
   }
 
+  ({String label, Color color})? _getBadgeInfo(HistoryEntry entry) {
+    if (entry.item.type == 'image') {
+      return (label: 'Image', color: const Color(0xFF38BDF8));
+    }
+    final text = entry.item.title;
+    for (final unit in text.codeUnits) {
+      if (unit >= 0x0980 && unit <= 0x09FF) {
+        return (label: 'TechuAvro', color: const Color(0xFF22C55E));
+      }
+    }
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+      return (label: 'URL', color: const Color(0xFFA855F7));
+    }
+    if (text.contains('=') ||
+        text.contains('function ') ||
+        text.contains('var ') ||
+        text.contains('let ') ||
+        text.contains('const ') ||
+        text.contains('{') ||
+        text.contains('def ') ||
+        text.contains('class ')) {
+      return (label: 'Code', color: const Color(0xFFF97316));
+    }
+    return null;
+  }
+
   void _onScroll() {
     if (_scrollController.position.extentAfter < 240 && !_feed.failed) {
       unawaited(_feed.loadMore());
@@ -846,12 +872,14 @@ class _PaginatedClipboardHistoryListState
                     final title = entry.item.title;
                     final isSelected = _selectedEntries.contains(entry);
 
+                    final badge = _getBadgeInfo(entry);
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (showDate)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(4, 12, 4, 12),
+                            padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
                             child: Text(
                               label,
                               style: Theme.of(context).textTheme.titleSmall
@@ -859,10 +887,18 @@ class _PaginatedClipboardHistoryListState
                             ),
                           ),
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.only(bottom: 6),
                           child: Card(
+                            elevation: 0.5,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+                                width: 0.8,
+                              ),
+                            ),
                             child: InkWell(
-                              borderRadius: BorderRadius.circular(24),
+                              borderRadius: BorderRadius.circular(12),
                               onTap: () {
                                 if (_isSelectMode) {
                                   setState(() {
@@ -894,7 +930,7 @@ class _PaginatedClipboardHistoryListState
                                 }
                               },
                               child: Padding(
-                                padding: const EdgeInsets.all(18),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 child: Row(
                                   children: [
                                     if (_isSelectMode) ...[
@@ -902,131 +938,97 @@ class _PaginatedClipboardHistoryListState
                                         isSelected
                                             ? Icons.check_circle_rounded
                                             : Icons.circle_outlined,
-                                        size: 22,
+                                        size: 20,
                                         color: isSelected
                                             ? colors.primary
                                             : colors.onSurfaceVariant.withOpacity(0.4),
                                       ),
-                                      const SizedBox(width: 14),
+                                      const SizedBox(width: 10),
+                                    ],
+                                    if (entry.item.type == 'image') ...[
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: SizedBox(
+                                          width: 44,
+                                          height: 32,
+                                          child: Image.file(
+                                            File(entry.item.value.toString()),
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              color: colors.surfaceContainerHighest,
+                                              child: const Icon(Icons.image_outlined, size: 18),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                    ] else ...[
+                                      Icon(
+                                        icon,
+                                        size: 18,
+                                        color: isLink
+                                            ? Colors.purpleAccent
+                                            : colors.primary,
+                                      ),
+                                      const SizedBox(width: 10),
                                     ],
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Row(
                                             children: [
-                                              Icon(
-                                                icon,
-                                                size: 18,
-                                                color: colors.primary,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  entry.sourceApp ?? 'Techuboard',
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .labelMedium
-                                                      ?.copyWith(
-                                                        color:
-                                                            colors.onSurfaceVariant,
-                                                      ),
-                                                ),
-                                              ),
-                                              Text(
-                                                MaterialLocalizations.of(
-                                                  context,
-                                                ).formatTimeOfDay(
-                                                  TimeOfDay.fromDateTime(
-                                                    entry.date,
+                                              if (badge != null) ...[
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                  margin: const EdgeInsets.only(right: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: badge.color.withOpacity(0.14),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    badge.label,
+                                                    style: TextStyle(
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: badge.color,
+                                                    ),
                                                   ),
                                                 ),
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall
-                                                    ?.copyWith(
-                                                      color:
-                                                          colors.onSurfaceVariant,
-                                                    ),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  title,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                               ),
                                             ],
                                           ),
-                                          const SizedBox(height: 12),
-                                          Text(
-                                            title,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyLarge
-                                                ?.copyWith(height: 1.45),
-                                          ),
-                                          const SizedBox(height: 12),
+                                          const SizedBox(height: 3),
                                           Row(
                                             children: [
-                                              Expanded(
-                                                child: Text(
-                                                  isFile
-                                                      ? (entry.item.type ==
-                                                                'fileURLs'
-                                                            ? (entry.item.value
-                                                                      as List<
-                                                                        String
-                                                                      >)
-                                                                  .first
-                                                            : entry.item.value
-                                                                  .toString())
-                                                      : isText
-                                                      ? l10n.tapToCopy
-                                                      : l10n.preview,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .labelSmall
-                                                      ?.copyWith(
-                                                        color:
-                                                            colors.onSurfaceVariant,
-                                                      ),
+                                              Text(
+                                                entry.sourceApp ?? 'Techuboard',
+                                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                  color: colors.onSurfaceVariant,
+                                                  fontSize: 10,
                                                 ),
                                               ),
-                                              if (!_isSelectMode) ...[
-                                                InkWell(
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  onTap: () => _confirmDeleteSingle(entry),
-                                                  child: const Padding(
-                                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                    child: Icon(
-                                                      Icons.delete_outline_rounded,
-                                                      size: 18,
-                                                      color: Colors.redAccent,
-                                                    ),
-                                                  ),
+                                              const SizedBox(width: 5),
+                                              Text('·', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 10)),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                MaterialLocalizations.of(context).formatTimeOfDay(
+                                                  TimeOfDay.fromDateTime(entry.date),
                                                 ),
-                                                const SizedBox(width: 8),
-                                              ],
-                                              AnimatedSwitcher(
-                                                duration:
-                                                    MediaQuery.disableAnimationsOf(
-                                                      context,
-                                                    )
-                                                    ? Duration.zero
-                                                    : const Duration(
-                                                        milliseconds: 180,
-                                                      ),
-                                                child: Icon(
-                                                  _copied == entry
-                                                      ? Icons.check_rounded
-                                                      : isFile
-                                                      ? Icons.folder_open_rounded
-                                                      : isText
-                                                      ? Icons.copy_rounded
-                                                      : Icons.open_in_full_rounded,
-                                                  key: ValueKey(_copied == entry),
-                                                  size: 18,
-                                                  color: colors.primary,
+                                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                  color: colors.onSurfaceVariant,
+                                                  fontSize: 10,
                                                 ),
                                               ),
                                             ],
@@ -1034,6 +1036,36 @@ class _PaginatedClipboardHistoryListState
                                         ],
                                       ),
                                     ),
+                                    if (!_isSelectMode) ...[
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(12),
+                                        onTap: () => _copy(entry),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                          child: AnimatedSwitcher(
+                                            duration: const Duration(milliseconds: 180),
+                                            child: Icon(
+                                              _copied == entry ? Icons.check_rounded : Icons.copy_rounded,
+                                              key: ValueKey(_copied == entry),
+                                              size: 17,
+                                              color: colors.primary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(12),
+                                        onTap: () => _confirmDeleteSingle(entry),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                          child: Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 17,
+                                            color: Colors.redAccent,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

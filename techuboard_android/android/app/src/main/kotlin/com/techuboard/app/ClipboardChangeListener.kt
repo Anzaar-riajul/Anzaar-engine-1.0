@@ -42,12 +42,39 @@ class ClipboardChangeListener(
         try {
             val clip = clipboard.primaryClip ?: return
             if (clip.itemCount == 0) return
-            val text = clip.getItemAt(0).coerceToText(context)?.toString()?.trim().orEmpty()
+            val item = clip.getItemAt(0)
+            val uri = item.uri
+            val isImageMime = clip.description?.let { desc ->
+                (0 until desc.mimeTypeCount).any { desc.getMimeType(it).startsWith("image/") }
+            } ?: false
+
+            if (uri != null && (isImageMime || uri.toString().contains("image"))) {
+                try {
+                    val input = context.contentResolver.openInputStream(uri)
+                    val bytes = input?.readBytes()
+                    input?.close()
+                    if (bytes != null && bytes.isNotEmpty() && bytes.size <= 2000000) {
+                        channel.invokeMethod(
+                            "onClipboardChanged",
+                            mapOf(
+                                "type" to "image",
+                                "bytes" to bytes,
+                                "isBaseline" to isBaseline,
+                                "sourcePackage" to resolveSourcePackage(),
+                            ),
+                        )
+                        return
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val text = item.coerceToText(context)?.toString()?.trim().orEmpty()
             if (text.isEmpty()) return
             val sourcePackage = resolveSourcePackage()
             channel.invokeMethod(
                 "onClipboardChanged",
                 mapOf(
+                    "type" to "text",
                     "text" to text,
                     "isBaseline" to isBaseline,
                     "sourcePackage" to sourcePackage,
